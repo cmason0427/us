@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import type { Profile } from "@/lib/types";
 
-export type AddKind = "post" | "event" | "task" | "household" | "potty" | "kodo-note" | "activity";
+export type AddKind = "post" | "event" | "task" | "household" | "potty" | "dog-note" | "activity";
 
 interface AppCtx {
   meId: string;

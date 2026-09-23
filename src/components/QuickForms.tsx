@@ -6,6 +6,7 @@ import { refreshAll } from "@/lib/useLive";
 import { celebrate } from "@/lib/celebrate";
 import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
 import type { Activity, Energy, ListType, PottyKind, Urgency } from "@/lib/types";
+import { DOGS, type DogId } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
 
 const URGENCIES: Urgency[] = ["low", "medium", "high"];
@@ -85,10 +86,31 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
   );
 }
 
-/* ─── Kodo ──────────────────────────────────────────────────────────────── */
+/* ─── Dogs ──────────────────────────────────────────────────────────────── */
 
-export function PottyForm({ onDone }: { onDone: () => void }) {
+type DogTarget = DogId | "both";
+const dogsFor = (t: DogTarget): DogId[] => (t === "both" ? DOGS.map((d) => d.id) : [t]);
+
+/** Which dog(s) this is for. "Both" logs a row per dog (walked together). */
+function DogPicker({ value, onChange }: { value: DogTarget; onChange: (t: DogTarget) => void }) {
+  return (
+    <div className="seg" role="group" aria-label="Which dog">
+      {DOGS.map((d) => (
+        <button key={d.id} type="button" aria-pressed={value === d.id} onClick={() => onChange(d.id)}>
+          {d.name}
+        </button>
+      ))}
+      <button type="button" aria-pressed={value === "both"} onClick={() => onChange("both")}>
+        Both dogs
+      </button>
+    </div>
+  );
+}
+
+/** Pass `dog` to log for that dog; leave it out to ask which. */
+export function PottyForm({ dog, onDone }: { dog?: DogId; onDone: () => void }) {
   const { meId, toast } = useApp();
+  const [target, setTarget] = useState<DogTarget>(dog ?? DOGS[0].id);
   const [when, setWhen] = useState<"now" | "earlier">("now");
   const now = new Date();
   const [date, setDate] = useState(toDateInput(now));
@@ -98,7 +120,9 @@ export function PottyForm({ onDone }: { onDone: () => void }) {
   async function log(kind: PottyKind, el: HTMLElement) {
     setBusy(true);
     const occurred_at = when === "now" ? new Date().toISOString() : fromInputs(date, time).toISOString();
-    const { error } = await supabaseBrowser().from("kodo_logs").insert({ type: "potty", potty_kind: kind, occurred_at, created_by: meId });
+    const { error } = await supabaseBrowser()
+      .from("kodo_logs")
+      .insert(dogsFor(target).map((d) => ({ dog: d, type: "potty", potty_kind: kind, occurred_at, created_by: meId })));
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
@@ -109,6 +133,7 @@ export function PottyForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="stack">
+      {!dog && <DogPicker value={target} onChange={setTarget} />}
       <div className="seg" role="group" aria-label="When">
         <button type="button" aria-pressed={when === "now"} onClick={() => setWhen("now")}>
           Just now
@@ -138,8 +163,9 @@ export function PottyForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function KodoNoteForm({ onDone }: { onDone: () => void }) {
+export function DogNoteForm({ dog, onDone }: { dog?: DogId; onDone: () => void }) {
   const { meId, toast } = useApp();
+  const [target, setTarget] = useState<DogTarget>(dog ?? DOGS[0].id);
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -147,7 +173,9 @@ export function KodoNoteForm({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     if (!detail.trim()) return;
     setBusy(true);
-    const { error } = await supabaseBrowser().from("kodo_logs").insert({ type: "note", detail: detail.trim(), created_by: meId });
+    const { error } = await supabaseBrowser()
+      .from("kodo_logs")
+      .insert(dogsFor(target).map((d) => ({ dog: d, type: "note", detail: detail.trim(), created_by: meId })));
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
@@ -157,7 +185,8 @@ export function KodoNoteForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form className="stack" onSubmit={submit}>
-      <textarea className="textarea" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Upset tummy today, extra zoomies, ate grass again…" autoFocus rows={3} />
+      {!dog && <DogPicker value={target} onChange={setTarget} />}
+      <textarea className="textarea" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Upset tummy today, extra zoomies, ate grass again…" autoFocus={Boolean(dog)} rows={3} />
       <button className="btn btn-primary btn-block" disabled={busy || !detail.trim()}>
         Save note
       </button>

@@ -11,15 +11,19 @@ import { URGENCY_RANK, type KodoLog, type ListType, type PottyKind, type Task, t
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
-import { KodoNoteForm, PottyForm } from "@/components/QuickForms";
+import { DogNoteForm, PottyForm } from "@/components/QuickForms";
+import { DOGS, dogName, type DogId } from "@/lib/dogs";
 import { IconTrash, Paw, Sprig, Teapot, Wavy } from "@/components/Art";
 
-type Tab = "todo" | "kodo" | "household";
+type Tab = "todo" | "dogs" | "household";
 const NEXT_URGENCY: Record<Urgency, Urgency> = { low: "medium", medium: "high", high: "low" };
 
 export default function ListsPage() {
-  const initialTab = useSearchParams().get("tab");
-  const [tab, setTab] = useState<Tab>(initialTab === "kodo" || initialTab === "household" ? initialTab : "todo");
+  const params = useSearchParams();
+  const initialTab = params.get("tab");
+  // "kodo" is the old name of the dogs tab; old links still land there.
+  const [tab, setTab] = useState<Tab>(initialTab === "dogs" || initialTab === "kodo" ? "dogs" : initialTab === "household" ? "household" : "todo");
+  const initialDog = DOGS.find((d) => d.id === params.get("dog"))?.id ?? DOGS[0].id;
   const pick = (t: Tab) => {
     setTab(t);
     window.history.replaceState(null, "", t === "todo" ? "/lists" : `/lists?tab=${t}`);
@@ -33,15 +37,15 @@ export default function ListsPage() {
         <button aria-pressed={tab === "todo"} onClick={() => pick("todo")}>
           To-dos
         </button>
-        <button aria-pressed={tab === "kodo"} onClick={() => pick("kodo")}>
-          🐾 Kodo
+        <button aria-pressed={tab === "dogs"} onClick={() => pick("dogs")}>
+          🐾 Dogs
         </button>
         <button aria-pressed={tab === "household"} onClick={() => pick("household")}>
           Household
         </button>
       </div>
       {tab === "todo" && <Todos />}
-      {tab === "kodo" && <Kodo />}
+      {tab === "dogs" && <Dogs initialDog={initialDog} />}
       {tab === "household" && <TaskList listType="household" title="Around the house" hint="Needs doing at some point. No rush unless it's marked." />}
     </main>
   );
@@ -222,11 +226,32 @@ function TaskRow({
   );
 }
 
-/* ─── Kodo ──────────────────────────────────────────────────────────────── */
+/* ─── Dogs ──────────────────────────────────────────────────────────────── */
 
 const POTTY_EMOJI: Record<PottyKind, string> = { pee: "💧", poop: "💩", both: "🐾" };
 
-function Kodo() {
+function Dogs({ initialDog }: { initialDog: DogId }) {
+  const [dog, setDog] = useState<DogId>(initialDog);
+  const pickDog = (d: DogId) => {
+    setDog(d);
+    window.history.replaceState(null, "", `/lists?tab=dogs&dog=${d}`);
+  };
+  return (
+    <>
+      <div className="seg" role="group" aria-label="Which dog" style={{ marginBottom: 14 }}>
+        {DOGS.map((d) => (
+          <button key={d.id} aria-pressed={dog === d.id} onClick={() => pickDog(d.id)}>
+            {d.name}
+          </button>
+        ))}
+      </div>
+      <DogLog key={dog} dog={dog} />
+    </>
+  );
+}
+
+function DogLog({ dog }: { dog: DogId }) {
+  const name = dogName(dog);
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [sheet, setSheet] = useState<"potty" | "note" | null>(null);
@@ -239,9 +264,9 @@ function Kodo() {
   }, []);
 
   const { data: logs = [] } = useLive<KodoLog[]>(
-    "kodo",
+    `dog:${dog}`,
     async () => {
-      const { data, error } = await supabase.from("kodo_logs").select("*").order("occurred_at", { ascending: false }).limit(150);
+      const { data, error } = await supabase.from("kodo_logs").select("*").eq("dog", dog).order("occurred_at", { ascending: false }).limit(150);
       if (error) throw error;
       return data as KodoLog[];
     },
@@ -254,7 +279,7 @@ function Kodo() {
   const lastPoop = potties.find((l) => l.potty_kind === "poop" || l.potty_kind === "both");
 
   async function quick(kind: PottyKind, el: HTMLElement) {
-    const { error } = await supabase.from("kodo_logs").insert({ type: "potty", potty_kind: kind, created_by: meId });
+    const { error } = await supabase.from("kodo_logs").insert({ dog, type: "potty", potty_kind: kind, created_by: meId });
     if (error) return toast(error.message);
     celebrate(el, ["🐾", "🦴", "🌼"]);
     refreshAll();
@@ -317,7 +342,7 @@ function Kodo() {
         <Paw width={20} height={20} style={{ color: "var(--rose)" }} /> Timeline
       </div>
       {logs.length === 0 ? (
-        <p className="muted">Kodo&apos;s story starts with the first log.</p>
+        <p className="muted">{name}&apos;s story starts with the first log.</p>
       ) : (
         <div className="timeline">
           {groups.map((g) => (
@@ -348,13 +373,13 @@ function Kodo() {
       )}
 
       {sheet === "potty" && (
-        <Sheet title="Kodo went!" onClose={() => setSheet(null)}>
-          <PottyForm onDone={() => setSheet(null)} />
+        <Sheet title={`${name} went!`} onClose={() => setSheet(null)}>
+          <PottyForm dog={dog} onDone={() => setSheet(null)} />
         </Sheet>
       )}
       {sheet === "note" && (
-        <Sheet title="Kodo note" onClose={() => setSheet(null)}>
-          <KodoNoteForm onDone={() => setSheet(null)} />
+        <Sheet title={`${name} note`} onClose={() => setSheet(null)}>
+          <DogNoteForm dog={dog} onDone={() => setSheet(null)} />
         </Sheet>
       )}
     </>

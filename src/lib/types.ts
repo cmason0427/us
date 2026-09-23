@@ -87,6 +87,7 @@ export interface Task {
 
 export interface KodoLog {
   id: string;
+  dog: string;
   type: "potty" | "note";
   potty_kind: PottyKind | null;
   detail: string | null;
