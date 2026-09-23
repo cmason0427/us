@@ -13,6 +13,21 @@ const DAY_MAX_FAILS = 20;
 
 /** Sign in with a PIN. Sets the Supabase session cookie on success. */
 export async function POST(req: Request) {
+  // Say which setup piece is missing instead of crashing into a bare 500.
+  const missing = ["SUPABASE_SERVICE_ROLE_KEY", "PIN_PEPPER"].filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error("PIN sign-in is missing env vars:", missing.join(", "));
+    return NextResponse.json({ error: `The site is missing ${missing.join(" and ")}.` }, { status: 500 });
+  }
+  try {
+    return await signIn(req);
+  } catch (err) {
+    console.error("PIN sign-in failed", err);
+    return NextResponse.json({ error: "Something broke on our end. Try again in a sec." }, { status: 500 });
+  }
+}
+
+async function signIn(req: Request) {
   const admin = supabaseAdmin();
   const now = Date.now();
 
