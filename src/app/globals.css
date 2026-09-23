@@ -494,6 +494,17 @@ p { margin: 0; }
 .login-card { width: 100%; max-width: 380px; padding: 28px 22px; text-align: center; }
 .login-card h1 { font-size: 3rem; margin: 8px 0 2px; color: var(--terracotta); }
 
+/* ─── PIN pad ───────────────────────────────────────────────────────────── */
+.pin { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; }
+.pin-dots { display: flex; gap: 16px; padding: 6px 0; }
+.pin-dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--plum); background: transparent; transition: background 0.1s ease; }
+.pin-dots span.on { background: var(--terracotta); }
+.pin-shake { animation: pin-shake 0.35s ease; }
+@keyframes pin-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.pin-msg { min-height: 1.3em; margin: 0; }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+.pin-key { width: 72px; height: 60px; padding: 0; font-size: 1.5rem; font-weight: 800; justify-content: center; }
+
 /* ─── Toast ─────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-b) + 24px); z-index: 60;

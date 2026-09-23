@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { disablePush, enablePush, isStandalone, pushState, type PushState } from "@/lib/pushClient";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
+import { PinPad } from "@/components/PinPad";
 import { Flower, Wavy } from "@/components/Art";
 
 export default function SettingsPage() {
@@ -47,9 +48,33 @@ export default function SettingsPage() {
     setBusy(false);
   }
 
-  async function setPostNudge(on: boolean) {
-    await supabase.from("profiles").update({ notify_partner_posts: on }).eq("id", meId);
+  type Pref = "notify_reminders" | "notify_asks" | "notify_energy" | "notify_partner_posts";
+  async function setPref(key: Pref, on: boolean) {
+    await supabase.from("profiles").update({ [key]: on }).eq("id", meId);
     refreshAll();
+  }
+  const partnerName = partner?.display_name ?? "your person";
+  const prefs: { key: Pref; label: string; hint: string }[] = [
+    { key: "notify_reminders", label: "Reminders", hint: "Before things on the calendar that have a reminder set." },
+    { key: "notify_asks", label: "\u201cCan you make it?\u201d asks", hint: `When ${partnerName} asks you to something, or answers your ask.` },
+    { key: "notify_energy", label: "Energy check requests", hint: `When ${partnerName} wants to know your energy level.` },
+    { key: "notify_partner_posts", label: `Gentle nudge when ${partnerName} posts`, hint: "Off by default. One quiet ping, no pressure to reply." },
+  ];
+
+  const [changingPin, setChangingPin] = useState(false);
+  async function changePin(pin: string) {
+    const res = await fetch("/api/auth/pin/change", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin }),
+    }).catch(() => null);
+    if (res?.ok) {
+      setChangingPin(false);
+      toast("New PIN saved 🔑");
+      return null;
+    }
+    const body = (await res?.json().catch(() => null)) as { error?: string } | null;
+    return body?.error ?? "Couldn't reach the server. Try again?";
   }
 
   async function signOut() {
@@ -89,7 +114,7 @@ export default function SettingsPage() {
               <span>
                 <strong>On this device</strong>
                 <br />
-                <span className="small muted">Reminders and &ldquo;can you make it?&rdquo; asks.</span>
+                <span className="small muted">Lets Us ping this phone at all.</span>
               </span>
               <label className="switch">
                 <input type="checkbox" checked={push === "on"} disabled={busy} onChange={togglePush} />
@@ -110,17 +135,41 @@ export default function SettingsPage() {
             )}
           </>
         )}
-        <div className="toggle-row" style={{ borderTop: "1.5px dashed var(--line)", paddingTop: 12 }}>
-          <span>
-            <strong>Gentle nudge when {partner?.display_name ?? "they"} post{partner ? "s" : ""}</strong>
-            <br />
-            <span className="small muted">Off by default. One quiet ping, no pressure to reply.</span>
-          </span>
-          <label className="switch">
-            <input type="checkbox" checked={me?.notify_partner_posts ?? false} onChange={(e) => setPostNudge(e.target.checked)} />
-            <span />
-          </label>
+        <div className="stack" style={{ borderTop: "1.5px dashed var(--line)", paddingTop: 12, gap: 10 }}>
+          <span className="small muted">What gets to ping you:</span>
+          {prefs.map((p) => (
+            <div key={p.key} className="toggle-row">
+              <span>
+                <strong>{p.label}</strong>
+                <br />
+                <span className="small muted">{p.hint}</span>
+              </span>
+              <label className="switch">
+                <input type="checkbox" checked={me?.[p.key] ?? false} onChange={(e) => setPref(p.key, e.target.checked)} />
+                <span />
+              </label>
+            </div>
+          ))}
         </div>
+      </section>
+
+      <section className="card stack" style={{ marginTop: 16 }}>
+        <h2>Your PIN</h2>
+        {changingPin ? (
+          <>
+            <p className="muted" style={{ textAlign: "center" }}>
+              Tap a new 4-digit PIN.
+            </p>
+            <PinPad onComplete={changePin} />
+            <button className="btn btn-ghost btn-sm" onClick={() => setChangingPin(false)}>
+              Never mind
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setChangingPin(true)}>
+            Change PIN
+          </button>
+        )}
       </section>
 
       {!installed && push !== "needs-install" && (

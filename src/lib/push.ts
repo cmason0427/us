@@ -51,10 +51,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
 }
 
 /** The other account. There are exactly two. */
-export async function partnerOf(userId: string): Promise<{ id: string; display_name: string; timezone: string } | null> {
+export async function partnerOf(
+  userId: string,
+): Promise<{ id: string; display_name: string; timezone: string; notify_asks: boolean; notify_energy: boolean; notify_partner_posts: boolean } | null> {
   const { data } = await supabaseAdmin()
     .from("profiles")
-    .select("id, display_name, timezone")
+    .select("id, display_name, timezone, notify_asks, notify_energy, notify_partner_posts")
     .neq("id", userId)
     .limit(1)
     .maybeSingle();

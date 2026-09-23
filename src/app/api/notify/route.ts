@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     if (!ev || ev.created_by !== me.id || ev.type !== "ask" || ev.response_status !== "pending") {
       return NextResponse.json({ error: "not an open ask" }, { status: 400 });
     }
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
     const sent = await sendPushToUser(partner.id, {
       title: `${myName} is asking 💌`,
       body: `${ev.title} — ${formatWhen(ev.start_time, ev.all_day, partner.timezone)}. Can you make it?`,
@@ -51,6 +52,8 @@ export async function POST(req: Request) {
     if (!ev || ev.created_by === me.id || ev.type !== "ask" || ev.response_status === "pending") {
       return NextResponse.json({ error: "not an answered ask" }, { status: 400 });
     }
+    // Answers only ever go back to the asker, who is the partner here.
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
     const yes = ev.response_status === "accepted";
     const sent = await sendPushToUser(ev.created_by, {
       title: yes ? `${myName} is in 🎉` : `${myName} can't make it`,
@@ -64,9 +67,8 @@ export async function POST(req: Request) {
   if (body.kind === "post") {
     const { data: post } = await supabase.from("posts").select("id, author").eq("id", body.id).single();
     if (!post || post.author !== me.id) return NextResponse.json({ error: "not your post" }, { status: 400 });
-    // Read the partner's preference directly: this nudge is opt-in, off by default.
-    const { data: pref } = await supabase.from("profiles").select("notify_partner_posts").eq("id", partner.id).single();
-    if (!pref?.notify_partner_posts) return NextResponse.json({ sent: 0 });
+    // This nudge is opt-in, off by default.
+    if (!partner.notify_partner_posts) return NextResponse.json({ sent: 0 });
     const sent = await sendPushToUser(partner.id, {
       title: "🌼 A little update",
       body: `${myName} shared something. Whenever you get a sec.`,
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
   }
 
   if (body.kind === "energy_request") {
+    if (!partner.notify_energy) return NextResponse.json({ sent: 0 });
     const sent = await sendPushToUser(partner.id, {
       title: "🔋 Quick energy check?",
       body: `${myName} is looking for something to do. Tap to share your energy level.`,

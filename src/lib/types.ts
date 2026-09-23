@@ -10,6 +10,9 @@ export interface Profile {
   display_name: string;
   timezone: string;
   notify_partner_posts: boolean;
+  notify_reminders: boolean;
+  notify_asks: boolean;
+  notify_energy: boolean;
 }
 
 export interface CalEvent {

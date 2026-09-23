@@ -31,9 +31,10 @@ export async function GET(req: Request) {
     .lte("start_time", new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString());
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const { data: profiles } = await admin.from("profiles").select("id, timezone");
+  const { data: profiles } = await admin.from("profiles").select("id, timezone, notify_reminders");
   const tzOf = new Map((profiles ?? []).map((p) => [p.id, p.timezone as string]));
   const everyone = (profiles ?? []).map((p) => p.id as string);
+  const wantsReminders = new Set((profiles ?? []).filter((p) => p.notify_reminders).map((p) => p.id as string));
 
   let sent = 0;
   for (const ev of candidates ?? []) {
@@ -55,6 +56,7 @@ export async function GET(req: Request) {
     const type = effectiveType(ev);
     const recipients = type === "solo" ? [ev.created_by] : everyone;
     for (const uid of recipients) {
+      if (!wantsReminders.has(uid)) continue;
       sent += await sendPushToUser(uid, {
         title: `⏰ ${ev.title}`,
         body: formatWhen(ev.start_time, ev.all_day, tzOf.get(uid) ?? "UTC") + (ev.location ? ` · ${ev.location}` : ""),
