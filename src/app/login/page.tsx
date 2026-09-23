@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"password" | "link">("password");
+  const [mode, setMode] = useState<"password" | "reset">("password");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,10 +28,10 @@ export default function LoginPage() {
       router.replace("/");
       router.refresh();
     } else {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        // Never create accounts from the login screen — there are exactly two.
-        options: { shouldCreateUser: false, emailRedirectTo: `${window.location.origin}/auth/callback` },
+      // Sends a link to /welcome, where you pick a new password. (Passwords,
+      // not magic links: a link opens Safari, not the home-screen app.)
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/welcome`,
       });
       setMsg(error ? error.message : "Check your email for the link 💌");
       setBusy(false);
@@ -62,10 +62,10 @@ export default function LoginPage() {
           )}
           {msg && <p className={msg.startsWith("Check") ? "muted" : "error"}>{msg}</p>}
           <button className="btn btn-primary btn-block" disabled={busy}>
-            {mode === "password" ? "Come on in" : "Email me a link"}
+            {mode === "password" ? "Come on in" : "Email me a reset link"}
           </button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMode(mode === "password" ? "link" : "password")}>
-            {mode === "password" ? "Use a magic link instead" : "Use a password instead"}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMode(mode === "password" ? "reset" : "password")}>
+            {mode === "password" ? "Forgot your password?" : "Back to sign in"}
           </button>
         </form>
       </div>

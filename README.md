@@ -2,7 +2,7 @@
 
 A private two-person app for Charlie and Parker: a shared calendar, a no-pressure
 update feed, a mood → activity matcher, to-dos, and Kodo's log. It's a
-Next.js PWA on Vercel, with Supabase for the database, auth, realtime updates
+Next.js PWA hosted on Netlify (https://us-little-corner.netlify.app), with Supabase for the database, auth, realtime updates
 and photo storage, and Web Push for notifications.
 
 ## What's where
@@ -16,7 +16,8 @@ and photo storage, and Web Push for notifications.
 | `src/app/(app)/settings` | Display name, push on/off, the post-nudge toggle, sign out |
 | `src/components/AddSheet.tsx` | The fast-entry sheet behind the + button |
 | `src/app/api/notify` | Event-triggered pushes (asks, answers, posts, energy pings) |
-| `src/app/api/cron/reminders` | Scheduled reminder sweep |
+| `src/app/api/cron/reminders` | Scheduled reminder sweep (called by `netlify/functions/reminders.mts`) |
+| `src/app/welcome` | Invite / password-reset landing: pick a password |
 | `src/lib/useLive.ts` | Fetch + Supabase Realtime + refetch on foreground |
 | `public/sw.js` | Service worker: push + notification taps |
 | `supabase/migrations/0001_init.sql` | The full schema: tables, RLS, realtime, storage bucket |
@@ -24,33 +25,19 @@ and photo storage, and Web Push for notifications.
 
 Names are never hardcoded. Each person's display name lives in `profiles` and can be edited in Settings.
 
-## Setup (about 20 minutes, one time)
+## Deployment
 
-### 1. Supabase
-1. Create a project at supabase.com.
-2. **SQL Editor** → paste all of `supabase/migrations/0001_init.sql` → Run.
-3. **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up". This is what keeps the app to two people.
-4. **Authentication → Users → Add user** (twice): enter each person's email and a password, and tick "Auto confirm". Each profile's display name defaults to the capitalized part of the email before the `@`, and you can change it in Settings.
-5. **Authentication → URL Configuration**: set Site URL to your Vercel URL and add `https://YOUR-APP.vercel.app/auth/callback` to the redirect URLs. Magic links need this.
+- **Hosting:** Netlify site `us-little-corner`. The VAPID keys, `CRON_SECRET` and `VAPID_SUBJECT` are already set as site env vars.
+  The Supabase vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) get added once the Supabase project exists.
+- **Reminders:** `netlify/functions/reminders.mts` is a Netlify scheduled function. Every 5 minutes it calls `/api/cron/reminders` with `CRON_SECRET`.
+  (`supabase/optional/reminder_cron.sql` is an alternative if the app ever moves to a host without cron.)
+- **Supabase:** run `supabase/migrations/0001_init.sql`, turn off sign-ups, and set the Site URL to the Netlify URL.
+  Add `https://us-little-corner.netlify.app/welcome` to the allowed redirect URLs.
+- **Accounts:** invite each person by email (Auth → Users → Invite, redirect to `/welcome`). The link lets them pick a password.
+  Passwords are used instead of magic links because on iPhone a link opens Safari, not the home-screen app.
 
-### 2. Keys
-```bash
-npx web-push generate-vapid-keys   # gives the public + private VAPID keys
-openssl rand -hex 32               # CRON_SECRET
-```
-Copy `.env.example` to `.env.local` and fill it in. The Supabase values are under Project Settings → API.
-
-### 3. Vercel
-1. Import the GitHub repo into Vercel.
-2. Add every variable from `.env.example` under Project → Settings → Environment Variables.
-3. Deploy. After that, every push to the main branch redeploys automatically.
-
-### 4. Reminders (important)
-Vercel's **Hobby plan only runs cron jobs once a day**. `vercel.json` schedules one run at 13:00 UTC, which covers "morning of" reminders but not "1 hour before".
-For accurate reminders, open `supabase/optional/reminder_cron.sql`, fill in your app URL and `CRON_SECRET`, and run it in the SQL editor. It uses Supabase's free pg_cron to call the endpoint every 5 minutes. The endpoint is idempotent, so both schedulers can run side by side.
-
-### 5. On each phone
-- **iPhone:** open the site in Safari → Share → **Add to Home Screen** → open Us from the home screen → Settings → turn on notifications. iOS only allows push from the home-screen app (iOS 16.4+).
+### On each phone
+- **iPhone:** open the site in Safari → Share → **Add to Home Screen** → open Us from the home screen → sign in → Settings → turn on notifications (needs iOS 16.4 or later).
 - **Android:** Chrome → menu → Install app → Settings → turn on notifications.
 
 ## Local dev
