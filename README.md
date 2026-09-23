@@ -30,6 +30,10 @@ Names are never hardcoded. Each person's display name lives in `profiles` and ca
 
 - **Hosting:** Netlify site `us-little-corner`. Site env vars: the VAPID keys, `CRON_SECRET`, `VAPID_SUBJECT`, `PIN_PEPPER`,
   and the Supabase vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+  Secret vars (`SUPABASE_SERVICE_ROLE_KEY`, `PIN_PEPPER`, `CRON_SECRET`, `VAPID_PRIVATE_KEY`) must be scoped to the
+  **production** context: Netlify silently drops secret values set for "all contexts" while reporting success.
+  Env var changes only reach the site on the next deploy.
+- **Deploys:** Netlify builds the `claude/festive-pasteur-p3rnc7` branch on every push.
 - **Reminders:** `netlify/functions/reminders.mts` is a Netlify scheduled function. Every 5 minutes it calls `/api/cron/reminders` with `CRON_SECRET`.
   (`supabase/optional/reminder_cron.sql` is an alternative if the app ever moves to a host without cron.)
 - **Supabase:** run the files in `supabase/migrations/` in order, turn off sign-ups, and set the Site URL to the Netlify URL.
