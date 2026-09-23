@@ -11,11 +11,19 @@ export default function LoginPage() {
 
   async function signIn(pin: string) {
     setBusy(true);
-    const res = await fetch("/api/auth/pin", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pin }),
-    }).catch(() => null);
+    // Retry when the host drops the request before our code runs (a bare,
+    // non-JSON 5xx or a network error). Real answers are JSON and aren't retried.
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch("/api/auth/pin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin }),
+      }).catch(() => null);
+      const hostHiccup = !res || (res.status >= 500 && !res.headers.get("content-type")?.includes("json"));
+      if (!hostHiccup) break;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
     if (res?.ok) {
       router.replace("/");
       router.refresh();
