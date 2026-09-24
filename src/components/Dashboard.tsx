@@ -77,9 +77,9 @@ function Today({ day }: { day: string }) {
           {vibe.theirAnswer.answer && <span> “{vibe.theirAnswer.answer}”</span>}
           <span className="small faint"> · {ago(vibe.theirAnswer.answered_at!)}</span>
         </Row>
-      ) : vibe.outgoing ? (
+      ) : vibe.recentOutgoing ? (
         <Row icon="💭" label="Vibe check">
-          <span className="muted">Asked {them} {ago(vibe.outgoing.created_at)}</span>
+          <span className="muted">Asked {them} {ago(vibe.recentOutgoing.created_at)}</span>
         </Row>
       ) : null}
 
