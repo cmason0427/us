@@ -51,7 +51,7 @@ export function dayFor(meal: Meal, now: Date) {
 export const MEAL_LABEL: Record<Meal, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner" };
 
 type Picker =
-  | { kind: "pick" } // choose one thing to propose
+  | { kind: "pick"; start?: FoodFilters } // choose one thing to propose (optionally starting from their wants)
   | { kind: "prefs"; start?: FoodFilters } // set preferences (optionally from theirs) and send
   | { kind: "options" } // choose a few to send
   | { kind: "choose"; refs: LunchRef[] } // choose one of the options they sent
@@ -189,7 +189,7 @@ export function MealPanel({ t }: { t: MealThreadState }) {
           <Thread latest={latest} theirTurn={theirTurn} refName={refName} nameOf={nameOf} onOpen={setDetail} />
 
           {theirTurn && latest.kind === "filters" && latest.filters && (
-            <TheirPrefs filters={latest.filters} place={place} onPick={(p, el) => send("decided", { refs: [toRef(p)] }, el)} />
+            <TheirPrefs filters={latest.filters} place={place} onPick={(p) => send("propose", { refs: [toRef(p)] })} />
           )}
 
           <div className="row wrap">
@@ -218,17 +218,30 @@ export function MealPanel({ t }: { t: MealThreadState }) {
                 </button>
               </>
             ) : latest.kind === "filters" ? (
-              <button className="btn btn-sm" onClick={() => setPicker({ kind: "prefs", start: latest.filters ?? undefined })}>
-                Adjust &amp; send back
-              </button>
+              <>
+                <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "pick", start: latest.filters ?? undefined })}>
+                  Suggest something
+                </button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setPicker({ kind: "prefs", start: latest.filters ?? undefined })}>
+                  Adjust &amp; send back
+                </button>
+              </>
             ) : latest.kind === "request" ? (
-              <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "options" })}>
-                Send some options
-              </button>
+              <>
+                <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "pick" })}>
+                  Suggest something
+                </button>
+                <button className="btn btn-sm" onClick={() => setPicker({ kind: "options" })}>
+                  Send a few options
+                </button>
+              </>
             ) : (
               <>
                 <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "choose", refs: latest.refs })}>
                   Pick one
+                </button>
+                <button className="btn btn-sm" onClick={() => setPicker({ kind: "pick" })}>
+                  Suggest something else
                 </button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setPicker({ kind: "prefs" })}>
                   Send what I want
@@ -355,9 +368,9 @@ function TheirPrefs({ filters, place, onPick }: { filters: FoodFilters; place: L
   return (
     <div className="stack-sm">
       <span className="small muted">
-        {picks.length} option{picks.length === 1 ? "" : "s"} match. Tap one to settle it:
+        {picks.length} option{picks.length === 1 ? "" : "s"} match. Tap one to suggest it back:
       </span>
-      <FoodResults picks={picks.slice(0, 8)} pantry={pantry} empty="Nothing matches those. Adjust and send back?" onPick={onPick} />
+      <FoodResults picks={picks.slice(0, 8)} pantry={pantry} empty="Nothing we've saved matches those. Suggest something anyway?" onPick={onPick} />
     </div>
   );
 }
@@ -378,7 +391,7 @@ function PickerSheet({
   onSend: Send;
 }) {
   const takeout = needsTakeout(place);
-  const [filters, setFilters] = useState<FoodFilters>(picker.kind === "prefs" && picker.start ? picker.start : { mode: place === "out" ? "out" : "cook" });
+  const [filters, setFilters] = useState<FoodFilters>((picker.kind === "prefs" || picker.kind === "pick") && picker.start ? picker.start : { mode: place === "out" ? "out" : "cook" });
   const label = MEAL_LABEL[meal].toLowerCase();
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
