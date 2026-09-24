@@ -5,12 +5,14 @@ import { formatWhen } from "@/lib/format";
 import { dogName, dogVoice } from "@/lib/dogs";
 import { describeFilters } from "@/lib/food";
 import type { LunchMsg } from "@/lib/lunch";
+import { VIBES } from "@/lib/vibe";
 
 type Body =
   | { kind: "ask"; id: string }
   | { kind: "ask_answered"; id: string }
   | { kind: "post"; id: string }
   | { kind: "lunch"; id: string }
+  | { kind: "vibe"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -106,6 +108,24 @@ export async function POST(req: Request) {
       decided: `Lunch: ${list} ✅`,
     }[msg.kind];
     const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: text, url: "/", tag: `lunch-${msg.day}` });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "vibe") {
+    const { data: v } = await supabase.from("vibe_checks").select("*").eq("id", body.id).single();
+    if (!v) return NextResponse.json({ error: "no such check" }, { status: 400 });
+    // Asking pings the other person; answering pings the asker. Either way it's a direct ask.
+    const asking = !v.answered_at && v.from_user === me.id;
+    const answering = !!v.answered_at && v.to_user === me.id;
+    if (!asking && !answering) return NextResponse.json({ error: "not yours to send" }, { status: 400 });
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const label = VIBES.find((x) => x.v === v.choice)?.label;
+    const sent = await sendPushToUser(partner.id, {
+      title: "💭 Vibe check",
+      body: asking ? `${myName} wants a vibe check.` : `${myName}: ${[label, v.answer ? `"${v.answer}"` : null].filter(Boolean).join(" ")}`,
+      url: "/",
+      tag: `vibe-${v.id}`,
+    });
     return NextResponse.json({ sent });
   }
 

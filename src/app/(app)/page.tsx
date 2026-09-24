@@ -12,6 +12,7 @@ import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
 import { DogTodos } from "@/components/DogTodos";
 import { LunchWidget } from "@/components/LunchWidget";
+import { VibeWidget } from "@/components/VibeWidget";
 import { Flower, Teapot, Wavy } from "@/components/Art";
 
 const PAGE = 30;
@@ -50,6 +51,7 @@ export default function HomePage() {
         <span>Share a little update…</span>
       </button>
 
+      <VibeWidget />
       <LunchWidget />
       <DogTodos />
 

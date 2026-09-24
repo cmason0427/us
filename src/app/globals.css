@@ -262,7 +262,7 @@ p { margin: 0; }
   font-weight: 650; font-size: 0.88rem; color: var(--ink-soft);
   display: inline-flex; align-items: center; gap: 6px;
 }
-.chip[aria-pressed="true"] { border-color: var(--plum); color: var(--ink); background: var(--butter); }
+.chip[aria-checked="true"], .chip[aria-pressed="true"] { border-color: var(--plum); color: var(--ink); background: var(--butter); }
 .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
 
 /* big choice tiles (energy check-in, add menu) */
@@ -383,6 +383,10 @@ p { margin: 0; }
 .batch-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--butter); color: var(--on-butter); font-weight: 650; font-size: 0.85rem; flex-shrink: 0; }
 .batch-field { display: flex; flex-direction: column; gap: 4px; }
 .chip-sm { min-height: 32px; padding: 4px 11px; font-size: 0.82rem; }
+
+/* Vibe check */
+.vibe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vibe-grid .chip { justify-content: center; }
 
 /* Food */
 .lunch-decided { font-weight: 650; font-size: 1.1rem; }
