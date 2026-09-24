@@ -38,6 +38,13 @@ export const IconGear = (p: P) => (
     <circle cx="12" cy="12" r="2.8" />
   </svg>
 );
+export const IconPiggy = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M4.5 12.5c0-3.6 3.4-6 7.5-6 1.3 0 2.5.2 3.6.7l2.4-1.4v3.1c.9.8 1.5 1.8 1.8 2.9H21v3.4h-1.5c-.5 1-1.3 1.8-2.3 2.4V20h-2.7v-1.6c-.8.2-1.6.3-2.5.3s-1.7-.1-2.5-.3V20H6.8v-2.3c-1.4-1.3-2.3-3-2.3-5.2z" />
+    <path d="M10 6.9c.2-1.4 1.4-2.4 2.8-2.4s2.6 1 2.8 2.4" />
+    <circle cx="16" cy="11" r="0.6" fill="currentColor" />
+  </svg>
+);
 export const IconBag = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
 );

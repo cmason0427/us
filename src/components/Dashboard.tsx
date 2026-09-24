@@ -12,6 +12,7 @@ import { SleepControls, useSleepTonight } from "./Sleep";
 import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
+import { useGoalCheckins } from "./Goals";
 
 /**
  * Today at a glance. Everything here is read-only until you tap it; the
@@ -39,6 +40,7 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const mealName = MEAL_LABEL[meal];
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
+  const checkins = useGoalCheckins();
   const them = partner?.display_name ?? "Them";
 
   return (
@@ -79,6 +81,12 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       {dogTodos > 0 && (
         <Row icon="🐾" label="Dogs" href="/dogs">
           {dogTodos} dog to-do{dogTodos === 1 ? "" : "s"}
+        </Row>
+      )}
+
+      {checkins > 0 && (
+        <Row icon="💰" label="Savings" href="/goals">
+          {checkins === 1 ? "A savings check-in is waiting" : `${checkins} savings check-ins are waiting`}
         </Row>
       )}
 

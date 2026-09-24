@@ -18,3 +18,6 @@ select v.to_user, 'vibe', v.id,
 from public.vibe_checks v
 where v.answered_at is not null
   and not exists (select 1 from public.posts p where p.vibe_id = v.id);
+
+-- An unasked update is addressed to yourself (see above), so allow that.
+alter table public.vibe_checks drop constraint if exists vibe_checks_check;

@@ -36,6 +36,7 @@ export interface When {
 }
 
 type Mode =
+  | "day" // just a day
   | "range" // an event: start–end, optional all day (multi-day)
   | "point" // a day and a start time, no end
   | "deadline"; // a day, time optional ("by end of day")
@@ -53,6 +54,7 @@ export function whenLabel(v: When | null, mode: Mode = "range") {
   if (!v?.date) return null;
   const d = parseISO(v.date);
   const day = format(d, "EEE, MMM d");
+  if (mode === "day") return format(d, "EEE, MMM d, yyyy");
   if (mode === "deadline") return v.start ? `${day}, by ${hm(v.start)} ${ampm(v.start)}` : `${day}, end of day`;
   if (v.allDay) {
     if (v.endDate && v.endDate > v.date) return `${day} – ${format(parseISO(v.endDate), "EEE, MMM d")} · all day`;
@@ -123,7 +125,7 @@ function WhenSheet({ initial, mode, allowAllDay, onClose, onDone }: { initial: W
   }
 
   return (
-    <Sheet title={mode === "deadline" ? "When's it due?" : "Day and time"} onClose={onClose}>
+    <Sheet title={mode === "deadline" ? "When's it due?" : mode === "day" ? "Pick a day" : "Day and time"} onClose={onClose}>
       <div className="stack">
         <div className="mini-cal">
           <div className="row-between">
@@ -166,7 +168,7 @@ function WhenSheet({ initial, mode, allowAllDay, onClose, onDone }: { initial: W
         )}
         {allDay && <p className="small muted">Tap a later day to make it span several days.</p>}
 
-        {!allDay && (
+        {!allDay && mode !== "day" && (
           <div className="time-row">
             <label className="time-field">
               <span>{mode === "deadline" ? "By (optional)" : "Starts"}</span>

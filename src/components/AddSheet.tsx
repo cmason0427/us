@@ -12,6 +12,7 @@ import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
 import { ShopAdd } from "./Shopping";
 import { RequestsList } from "./Requests";
+import { GoalForm } from "./Goals";
 import { TaskPresetForm } from "./TaskForm";
 import { MealStart } from "./MealThread";
 import { VibeAsk } from "./Vibe";
@@ -50,6 +51,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "task", emoji: "✅", label: "To-do" },
       { kind: "shop", emoji: "🛒", label: "Shopping" },
       { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_run" },
+      { kind: "goal", emoji: "💰", label: "Savings goal" },
     ],
   },
   {
@@ -78,6 +80,7 @@ const TITLES: Record<AddKind, string> = {
   requests: "Requests",
   "event-preset": "New calendar default",
   "dog-preset": "New dog preset",
+  goal: "New goal",
   vibe: "Vibe check",
 };
 
@@ -138,6 +141,7 @@ export function AddSheet() {
       {addOpen === "household" && <TaskForm listType="household" onDone={closeAdd} />}
       {addOpen === "dog-task" && <TaskForm listType="dogs" onDone={closeAdd} />}
       {addOpen === "shop" && <ShopAdd onDone={closeAdd} />}
+      {addOpen === "goal" && <GoalForm onDone={closeAdd} />}
       {addOpen === "requests" && <RequestsList onDone={closeAdd} />}
       {addOpen === "event-preset" && <EventPresetForm onDone={closeAdd} />}
       {addOpen === "dog-preset" && <TaskPresetForm listType="dogs" onDone={closeAdd} />}

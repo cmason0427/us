@@ -19,7 +19,7 @@ export function Sortable<T>({
   onReorder: (ids: string[]) => void;
 }) {
   const rows = useRef(new Map<string, HTMLElement>());
-  const [drag, setDrag] = useState<{ id: string; startY: number; dy: number; over: number; h: number } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; startY: number; startScroll: number; dy: number; over: number; h: number } | null>(null);
   const ids = items.map(getId);
 
   // Where the dragged row would land: compare its middle to the others' middles,
@@ -40,11 +40,15 @@ export function Sortable<T>({
   function onDown(e: React.PointerEvent, id: string) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({ id, startY: e.clientY, dy: 0, over: ids.indexOf(id), h: rows.current.get(id)?.offsetHeight ?? 0 });
+    setDrag({ id, startY: e.clientY, startScroll: window.scrollY, dy: 0, over: ids.indexOf(id), h: rows.current.get(id)?.offsetHeight ?? 0 });
   }
   function onMove(e: React.PointerEvent) {
     if (!drag) return;
-    const dy = e.clientY - drag.startY;
+    // Near the top or bottom of the screen, scroll so far-off spots are reachable.
+    const edge = 90;
+    if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 14);
+    else if (e.clientY < edge) window.scrollBy(0, -14);
+    const dy = e.clientY - drag.startY + (window.scrollY - drag.startScroll);
     setDrag({ ...drag, dy, over: targetIndex(drag.id, dy) });
   }
   function onUp() {

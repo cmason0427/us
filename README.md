@@ -14,12 +14,15 @@ and photo storage, and Web Push for notifications.
 | `src/app/(app)/page.tsx` | Home: a view-only "today" dashboard (`src/components/Dashboard.tsx`: sleep, meals, plans, vibe, dog to-dos; tap a row to act), then the feed |
 | `src/components/MealThread.tsx` | Breakfast / lunch / dinner back-and-forth (`lunch_msgs.meal`); lunch also has a "where"; the others only exist once started from ＋ |
 | `src/app/(app)/calendar` | Day / Week / Month / List views, the four event types, Ask accept/decline (note + suggested time); each ask step posts to the feed |
-| `src/components/Plans.tsx` | Time-block plans: a slot on a day, activities in order (drag), notes; both edit; "Send" leaves one feed note |
+| `src/components/Plans.tsx` | Time-block plans: a slot on a day, activities in order (drag), notes; both edit; "Send" leaves one feed note. Shown faded behind events in every calendar view |
 | `src/app/(app)/do` | Energy check-in + the activity library and matcher (optional filters: in/out, cost, length) |
 | `src/components/SideMenu.tsx` | The ☰ drawer; add new sections to `SECTIONS` |
 | `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us, each person's usual order) and home meals with a shared pantry and the grocery list |
 | `src/app/(app)/shopping` | Everything to buy; `shop_items.grocery` items also show in Eat → Groceries. Drag items between categories |
-| `src/app/(app)/dogs` | Dog photos, dog to-dos, and a dog-only feed (the main feed has everything) |
+| `src/app/(app)/dogs` | Dog profiles (`dogs` table: breed, weight, vet, meds, feeding…; `DogProfiles.tsx`), dog to-dos (which dog(s)), and a dog-only feed |
+| `src/app/(app)/goals` | Savings goals (`goals`, `goal_items`, `goal_logs`; math in `src/lib/goals.ts`). Private ones are owner-only in RLS; shared ones only log money when `track` is on. Archive first; delete only from Archived, typed-name confirm |
+| `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
+| `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |
 | `src/app/(app)/saved` | Private folders of saved photos |
 | `src/app/(app)/spicy` | PIN-gated: shared pics & videos tagged by who's in them, private fantasies, shared want-to-try list, notes, mood asks (presets or your own words; "not right now" hides it; a nudge if you asked < 3h ago) |
 | `src/app/(app)/lists` | To-dos with deadlines (overdue → top + high): Ours (shared, incl. dog to-dos) and Just mine |
