@@ -68,9 +68,11 @@ export function PostComposer({
     const uploaded: string[] = [];
     try {
       for (const f of files) {
-        const { blob, ext } = await shrinkImage(f);
+        // Videos (Spicy only) go up as-is; photos get downsized.
+        const isVideo = f.type.startsWith("video/");
+        const { blob, ext } = isVideo ? { blob: f as Blob, ext: f.name.split(".").pop()?.toLowerCase() || "mp4" } : await shrinkImage(f);
         const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || (isVideo ? "video/mp4" : "image/jpeg"), cacheControl: "31536000" });
         if (error) throw error;
         uploaded.push(path);
       }
@@ -95,6 +97,7 @@ export function PostComposer({
     if (!text.trim() && !files.length) return;
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
     if (spicy) return sendSpicy(e.currentTarget.querySelector<HTMLElement>("button[type=submit]"));
+    if (files.some((f) => f.type.startsWith("video/"))) return setError("Videos can only go to Spicy. Remove the video or turn on 🌶️.");
     // Grab this now: React clears currentTarget once we await.
     const submitBtn = e.currentTarget.querySelector<HTMLElement>("button[type=submit]");
     setBusy(true);
@@ -154,8 +157,12 @@ export function PostComposer({
         <div className="photo-picks">
           {previews.map((src, i) => (
             <div className="photo-pick" key={src}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" />
+              {files[i]?.type.startsWith("video/") ? (
+                <video src={src} muted playsInline />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={src} alt="" />
+              )}
               <button type="button" aria-label="Remove photo" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
                 ×
               </button>
@@ -166,7 +173,7 @@ export function PostComposer({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={spicy ? "image/*,video/*" : "image/*"}
         multiple
         hidden
         onChange={(e) => {

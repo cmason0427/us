@@ -62,6 +62,8 @@ export interface Post {
   star_color: string | null;
   /** What the star is for; the separate note is `text`. */
   star_for: string | null;
+  /** "Lunch: you?" answered with bon appétit. (A no deletes the post.) */
+  reply: "yes" | null;
   /** The "🌶️ added something for you" note (the photos are in their Spicy folder). */
   spicy: boolean;
   /** Written as a dog note: shown as from the dog(s), not the author. */

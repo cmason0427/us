@@ -399,6 +399,9 @@ p { margin: 0; }
 .folder { appearance: none; cursor: pointer; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; }
 .saved-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .saved-item { margin: 0; }
+.saved-item video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-sunk); }
+.spicy-note { display: flex; flex-direction: column; gap: 6px; }
+.spicy-lunch { font-size: 1.05rem; }
 .saved-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-sunk); }
 .saved-item figcaption { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .saved-item .icon-btn { width: 28px; height: 28px; }
@@ -438,6 +441,7 @@ p { margin: 0; }
 .post-dogs { margin-top: 8px; }
 .photo-picks { display: flex; gap: 8px; flex-wrap: wrap; }
 .photo-pick { position: relative; width: 78px; height: 78px; border-radius: 12px; overflow: hidden; border: 2px solid var(--line); }
+.photo-pick video { width: 100%; height: 100%; object-fit: cover; }
 .photo-pick img { width: 100%; height: 100%; object-fit: cover; }
 .photo-pick button { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; border: none; background: var(--plum); color: var(--cream); cursor: pointer; font-weight: 900; line-height: 1; }
 

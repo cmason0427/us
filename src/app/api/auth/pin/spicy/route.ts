@@ -4,7 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { LOCKED_OUT_MESSAGE, PIN_RE, pinDigest, pinLockedOut, recordPinAttempt } from "@/lib/pin";
 
 // How long one PIN entry keeps Spicy readable (the database checks this).
-const UNLOCK_MS = 5 * 60 * 1000;
+// Leaving the Spicy tab or folder relocks right away.
+const UNLOCK_MS = 30 * 60 * 1000;
 
 /** Re-enter your own PIN to open Spicy. Same lockout as sign-in. */
 export async function POST(req: Request) {

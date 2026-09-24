@@ -73,11 +73,12 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       )}
       {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${post.text}”` : post.text}</p>}
       {post.spicy && post.author !== meId && (
-        <Link className="btn btn-sm" href="/saved?folder=spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
-          🌶️ Open your Spicy folder
+        <Link className="btn btn-sm" href="/spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
+          🌶️ Open Spicy
         </Link>
       )}
       {saving && photos[slide] && <SaveSheet paths={[photos[slide].storage_path]} onClose={() => setSaving(false)} />}
+      {post.kind === "lunch_you" && <LunchYou post={post} />}
       {post.event_id && (
         <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
           📅 Open in calendar
@@ -145,6 +146,32 @@ function Carousel({
           <span key={ph.id} className={i === slide ? "on" : ""} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** "Lunch: you? 😏": the person it's for answers; a no quietly removes it for both. */
+function LunchYou({ post }: { post: Post }) {
+  const { meId, nameOf, toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  async function answer(yes: boolean) {
+    setBusy(true);
+    const res = await fetch("/api/spicy/lunch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "answer", id: post.id, yes }) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return toast("Couldn't send. Try again?");
+    refreshAll();
+    toast(yes ? "Bon appétit 😋" : "Maybe another time");
+  }
+  if (post.reply === "yes") return <p className="lunch-decided">😋 Bon appétit</p>;
+  if (post.to_user !== meId) return <p className="small muted">Waiting on {nameOf(post.to_user)}…</p>;
+  return (
+    <div className="row wrap" style={{ marginTop: 8 }}>
+      <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => answer(true)}>
+        Bon appétit 😋
+      </button>
+      <button className="btn btn-sm" disabled={busy} onClick={() => answer(false)}>
+        Not on the menu
+      </button>
     </div>
   );
 }

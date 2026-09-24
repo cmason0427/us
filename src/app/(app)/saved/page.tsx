@@ -2,27 +2,28 @@
 
 import { DogPic } from "@/components/DogPic";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import { usePhotoUrls } from "@/lib/photos";
 import { useFolders, useSaves, type Folder } from "@/lib/saved";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
-import { Sheet } from "@/components/Sheet";
-import { PostComposer } from "@/components/PostComposer";
 import { Wavy } from "@/components/Art";
-import { PinPad } from "@/components/PinPad";
 
 export default function SavedPage() {
-  const { meId, partner, toast } = useApp();
-  const folders = useFolders();
+  const { meId, toast } = useApp();
+  // Spicy has its own tab now.
+  const folders = useFolders().filter((f) => !f.is_spicy);
+  const router = useRouter();
   const wanted = useSearchParams().get("folder");
   const [openId, setOpenId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [sendingSpicy, setSendingSpicy] = useState(false);
-  // ?folder=spicy (from the 🌶️ note or push) opens your Spicy folder.
-  const open = folders.find((f) => f.id === openId) ?? (wanted === "spicy" && openId === null ? folders.find((f) => f.is_spicy) : undefined);
+  const open = folders.find((f) => f.id === openId);
+  // Old links to the Spicy folder go to the Spicy tab.
+  useEffect(() => {
+    if (wanted === "spicy") router.replace("/spicy");
+  }, [wanted, router]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -33,24 +34,18 @@ export default function SavedPage() {
     refreshAll();
   }
 
-  if (open) return open.is_spicy ? <SpicyGate folder={open} onBack={() => setOpenId("")} /> : <FolderView folder={open} onBack={() => setOpenId("")} />;
+  if (open) return <FolderView folder={open} onBack={() => setOpenId("")} />;
 
   return (
     <main className="page">
       <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="wiley_happy" size={38} />} />
       <Wavy />
-      {partner && (
-        <button className="card composer-prompt" onClick={() => setSendingSpicy(true)}>
-          <span style={{ fontSize: "1.6rem" }}>🌶️</span>
-          <span>Add something to {partner.display_name}&apos;s Spicy folder…</span>
-        </button>
-      )}
       <div className="folder-grid" style={{ marginTop: 16 }}>
         {folders.map((f) => (
           <button key={f.id} className="card folder" onClick={() => setOpenId(f.id)}>
-            <span style={{ fontSize: "1.6rem" }}>{f.is_spicy ? "🌶️" : "📁"}</span>
+            <span style={{ fontSize: "1.6rem" }}>📁</span>
             <strong>{f.name}</strong>
-            <span className="small muted">{f.is_spicy ? "🔒 PIN to open" : (f.saves[0]?.count ?? 0)}</span>
+            <span className="small muted">{f.saves[0]?.count ?? 0}</span>
           </button>
         ))}
       </div>
@@ -61,56 +56,6 @@ export default function SavedPage() {
           Make folder
         </button>
       </form>
-      {sendingSpicy && (
-        <Sheet title="🌶️ Something spicy" onClose={() => setSendingSpicy(false)}>
-          <PostComposer initialSpicy onDone={() => setSendingSpicy(false)} />
-        </Sheet>
-      )}
-    </main>
-  );
-}
-
-/**
- * Spicy asks for your PIN every time it's opened. The server checks it, and the
- * database only returns Spicy saves for a few minutes after; leaving relocks.
- */
-function SpicyGate({ folder, onBack }: { folder: Folder; onBack: () => void }) {
-  const [unlocked, setUnlocked] = useState(false);
-
-  useEffect(() => {
-    if (!unlocked) return;
-    return () => {
-      fetch("/api/auth/pin/spicy", { method: "DELETE" }).catch(() => {});
-    };
-  }, [unlocked]);
-
-  async function check(pin: string) {
-    const res = await fetch("/api/auth/pin/spicy", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pin }),
-    }).catch(() => null);
-    if (res?.ok) {
-      setUnlocked(true);
-      refreshAll();
-      return null;
-    }
-    const body = (await res?.json().catch(() => null)) as { error?: string } | null;
-    return body?.error ?? "Couldn't reach the server. Try again?";
-  }
-
-  if (unlocked) return <FolderView folder={folder} onBack={onBack} />;
-  return (
-    <main className="page">
-      <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 6 }}>
-        <DogPic name="kodo_back" size={26} /> Saved
-      </button>
-      <div className="card" style={{ textAlign: "center", marginTop: 12 }}>
-        <DogPic name="kodo_wiley_cuddle" size={90} style={{ margin: "0 auto" }} />
-        <h2>Spicy</h2>
-        <p className="small muted">Enter your PIN to open.</p>
-        <PinPad onComplete={check} />
-      </div>
     </main>
   );
 }

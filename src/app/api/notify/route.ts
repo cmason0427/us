@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { partnerOf, sendPushToUser } from "@/lib/push";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { formatWhen } from "@/lib/format";
 import { dogName, dogVoice } from "@/lib/dogs";
 import { describeFilters } from "@/lib/food";
@@ -16,6 +17,7 @@ type Body =
   | { kind: "vibe"; id: string }
   | { kind: "spicy"; id: string }
   | { kind: "star"; id: string }
+  | { kind: "spicy_item"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -115,6 +117,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ sent });
   }
 
+  if (body.kind === "spicy_item") {
+    // Read as admin: the row is PIN-gated. Only shared things (the list, notes for them) ping.
+    const { data: item } = await supabaseAdmin().from("spicy_items").select("author, kind, to_user").eq("id", body.id).single();
+    if (!item || item.author !== me.id || item.kind === "fantasy") return NextResponse.json({ error: "nothing to send" }, { status: 400 });
+    const sent = await sendPushToUser(partner.id, { title: "🌶️", body: `Something new for you in Spicy`, url: "/spicy", tag: "spicy-items" });
+    return NextResponse.json({ sent });
+  }
+
   if (body.kind === "star") {
     const { data: post } = await supabase.from("posts").select("id, author, kind, star_color, star_for, text").eq("id", body.id).single();
     if (!post || post.author !== me.id || post.kind !== "star") return NextResponse.json({ error: "not your star" }, { status: 400 });
@@ -131,7 +141,7 @@ export async function POST(req: Request) {
   if (body.kind === "spicy") {
     const { data: post } = await supabase.from("posts").select("id, author, spicy").eq("id", body.id).single();
     if (!post || post.author !== me.id || !post.spicy) return NextResponse.json({ error: "not a spicy note" }, { status: 400 });
-    const sent = await sendPushToUser(partner.id, { title: "🌶️", body: `${myName} added something for you`, url: "/saved?folder=spicy", tag: `spicy-${post.id}` });
+    const sent = await sendPushToUser(partner.id, { title: "🌶️", body: `${myName} added something for you`, url: "/spicy", tag: `spicy-${post.id}` });
     return NextResponse.json({ sent });
   }
 
