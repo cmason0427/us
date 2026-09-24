@@ -42,7 +42,7 @@ export default function HomePage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
+      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} art={<DogPic name="kodo_wiley_face" size={46} />} />
       <div className="wavy" />
 
       <Dashboard />

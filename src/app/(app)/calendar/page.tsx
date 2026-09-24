@@ -162,7 +162,7 @@ export default function CalendarPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="What's coming up" title="Calendar" />
+      <PageHead eyebrow="What's coming up" title="Calendar" art={<DogPic name="kodo_wiley_back_walk" size={44} />} />
       <Wavy className="sage" />
 
       {waiting.length > 0 && (

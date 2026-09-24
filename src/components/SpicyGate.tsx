@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { refreshAll } from "@/lib/useLive";
 import { PinPad } from "./PinPad";
-import { DogPic } from "./DogPic";
 
 /**
  * Spicy asks for your PIN every time it's opened. The server checks it, and
@@ -37,7 +36,7 @@ export function SpicyGate({ children }: { children: ReactNode }) {
   if (unlocked) return <>{children}</>;
   return (
     <div className="card" style={{ textAlign: "center", marginTop: 12 }}>
-      <DogPic name="kodo_wiley_cuddle" size={90} style={{ margin: "0 auto" }} />
+      <div style={{ fontSize: 56, textAlign: "center" }}>🌶️</div>
       <h2>Spicy</h2>
       <p className="small muted">Enter your PIN to open.</p>
       <PinPad onComplete={check} />

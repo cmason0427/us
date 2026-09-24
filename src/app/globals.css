@@ -36,7 +36,7 @@
   --theme-color: #edf2e8;
 }
 
-/* Fridge-magnet pops: the same bright set in both themes. */
+/* Bright accent pops: the same set in both themes. */
 :root {
   --pop-red: #e5484d;
   --pop-orange: #f07c2e;
@@ -656,15 +656,7 @@ div.dash-row { cursor: default; }
 .feed-head .section-title { margin: 0; }
 .btn-link { appearance: none; background: none; border: 0; padding: 4px 2px; color: var(--accent); font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
-/* ─── Fridge magnets & pops ─────────────────────────────────────────────── */
-.magnet { display: inline-flex; flex-wrap: wrap; align-items: baseline; font-family: var(--font-magnet), var(--font-display); font-weight: 700; letter-spacing: 0.01em; }
-.magnet-letter {
-  display: inline-block;
-  /* a raised plastic letter: darker edge below, soft shadow on the fridge */
-  text-shadow: 0 1.5px 0 color-mix(in srgb, currentColor 60%, #000), 0 3px 5px color-mix(in srgb, var(--plum) 28%, transparent);
-}
-.magnet-gap { display: inline-block; width: 0.32em; }
-.page-head h1 { font-size: 2.15rem; }
+/* ─── Bright pops ─────────────────────────────────────────────────────────── */
 
 
 

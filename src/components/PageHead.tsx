@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
 import { MenuButton } from "./SideMenu";
-import { Magnet } from "./Magnet";
 
 export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: ReactNode; art?: ReactNode }) {
   const { meId } = useApp();
@@ -15,7 +14,7 @@ export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: Rea
       <div className="grow">
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1>
-          {typeof title === "string" ? <Magnet text={title} /> : title}
+          {title}
           {art}
         </h1>
       </div>

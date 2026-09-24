@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Fredoka } from "next/font/google";
+import { Fraunces } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -9,9 +9,6 @@ const fraunces = Fraunces({
   subsets: ["latin"],
   axes: ["SOFT", "WONK", "opsz"],
 });
-
-// Round and chunky like fridge-magnet letters; only for magnet titles.
-const fredoka = Fredoka({ variable: "--font-magnet", subsets: ["latin"], weight: ["600", "700"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://us-little-corner.netlify.app"),
@@ -33,7 +30,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // The boot script sets data-theme before paint, so React shouldn't fight it.
-    <html lang="en" className={`${fraunces.variable} ${fredoka.variable}`} suppressHydrationWarning>
+    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>

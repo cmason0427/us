@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { disablePush, enablePush, isStandalone, pushState, type PushState } from "@/lib/pushClient";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
+import { DogPic } from "@/components/DogPic";
 import { PinPad } from "@/components/PinPad";
 import { MyPhoto } from "@/components/MyPhoto";
 import { THEMES, applyTheme, currentTheme, type Theme } from "@/lib/theme";
@@ -112,7 +113,7 @@ export default function SettingsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just for you" title="Settings" />
+      <PageHead eyebrow="Just for you" title="Settings" art={<DogPic name="kodo_face" size={42} />} />
       <Wavy />
 
       <section className="card stack">

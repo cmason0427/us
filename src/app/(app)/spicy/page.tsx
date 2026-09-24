@@ -10,7 +10,6 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { SpicyGate } from "@/components/SpicyGate";
-import { DogPic } from "@/components/DogPic";
 import { Wavy } from "@/components/Art";
 
 interface SpicyItem {
@@ -33,7 +32,7 @@ type Section = "pics" | "ideas" | "notes";
 export default function SpicyPage() {
   return (
     <main className="page">
-      <PageHead eyebrow="Just us" title="Spicy" art={<DogPic name="kodo_wiley_cuddle" size={48} />} />
+      <PageHead eyebrow="Just us" title="Spicy" />
       <Wavy />
       <SpicyGate>
         <Spicy />
@@ -213,7 +212,7 @@ function Pics() {
 
       {shown.length === 0 ? (
         <div className="empty">
-          <DogPic name="wiley_curled" size={90} />
+          <div style={{ fontSize: 48 }}>🌶️</div>
           <p>{media.length ? "None of those yet." : "Nothing here yet."}</p>
         </div>
       ) : (
