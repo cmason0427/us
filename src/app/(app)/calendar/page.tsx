@@ -23,7 +23,8 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
-import { timeLabel } from "@/lib/dates";
+import { fromInputs, timeLabel, toDateInput, toTimeInput } from "@/lib/dates";
+import { eventWhen, postAskUpdate } from "@/lib/askFeed";
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
@@ -264,30 +265,133 @@ export default function CalendarPage() {
 
 /* ─── event card + ask actions ──────────────────────────────────────────── */
 
+type Decline = { note: string | null; proposed: string | null };
+
 function useAnswer() {
-  const { toast, nameOf } = useApp();
-  return async (e: CalEvent, yes: boolean, el: HTMLElement) => {
+  const { meId, toast, nameOf } = useApp();
+  return async (e: CalEvent, answer: { yes: true; el: HTMLElement } | ({ yes: false } & Decline)) => {
     const { error } = await supabaseBrowser()
       .from("events")
-      .update({ response_status: yes ? "accepted" : "declined", responded_at: new Date().toISOString() })
+      .update({
+        response_status: answer.yes ? "accepted" : "declined",
+        responded_at: new Date().toISOString(),
+        decline_note: answer.yes ? null : answer.note,
+        proposed_start: answer.yes ? null : answer.proposed,
+      })
       .eq("id", e.id);
-    if (error) return toast(error.message);
-    if (yes) celebrate(el, ["💛", "🌼", "✨", "🎉"]);
+    if (error) {
+      toast(error.message);
+      return false;
+    }
+    if (answer.yes) celebrate(answer.el, ["💛", "🌼", "✨", "🎉"]);
     notify({ kind: "ask_answered", id: e.id });
+    await postAskUpdate(e, meId, answer.yes ? { kind: "accepted" } : { kind: "declined", note: answer.note, proposed: answer.proposed });
     refreshAll();
-    toast(yes ? "You're in 💛" : `Got it — ${nameOf(e.created_by)} will go solo`);
+    toast(answer.yes ? "You're in 💛" : `Got it — sent to ${nameOf(e.created_by)}`);
+    return true;
   };
 }
 
 function AskActions({ e }: { e: CalEvent }) {
   const answer = useAnswer();
+  const [declining, setDeclining] = useState(false);
   return (
     <div className="ask-actions" onClick={(ev) => ev.stopPropagation()}>
-      <button className="btn btn-plum" onClick={(ev) => answer(e, true, ev.currentTarget)}>
+      <button className="btn btn-plum" onClick={(ev) => answer(e, { yes: true, el: ev.currentTarget })}>
         I&apos;m in
       </button>
-      <button className="btn" onClick={(ev) => answer(e, false, ev.currentTarget)}>
+      <button className="btn" onClick={() => setDeclining(true)}>
         Can&apos;t make it
+      </button>
+      {declining && (
+        <Sheet title={`Can't make ${e.title}`} onClose={() => setDeclining(false)}>
+          <DeclineForm e={e} onSend={async (d) => (await answer(e, { yes: false, ...d })) && setDeclining(false)} />
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+/** Why not, and optionally a better time. Both optional; it all goes to the feed. */
+function DeclineForm({ e, onSend }: { e: CalEvent; onSend: (d: Decline) => Promise<unknown> }) {
+  const { nameOf } = useApp();
+  const start = startOf(e);
+  const [note, setNote] = useState("");
+  const [propose, setPropose] = useState(false);
+  const [date, setDate] = useState(toDateInput(addDays(start, 1)));
+  const [time, setTime] = useState(toTimeInput(start));
+  const [busy, setBusy] = useState(false);
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    setBusy(true);
+    const proposed = propose && date ? (e.all_day ? fromInputs(date) : fromInputs(date, time || "00:00")).toISOString() : null;
+    await onSend({ note: note.trim() || null, proposed });
+    setBusy(false);
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <label className="field">
+        <span>Why not? (optional)</span>
+        <textarea className="textarea" rows={3} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="Working late, already have plans…" autoFocus />
+      </label>
+      <div className="toggle-row">
+        <span className="label">Suggest another time</span>
+        <label className="switch">
+          <input type="checkbox" checked={propose} onChange={(ev) => setPropose(ev.target.checked)} />
+          <span />
+        </label>
+      </div>
+      {propose && (
+        <div className={e.all_day ? "" : "grid-2"}>
+          <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} aria-label="Suggested day" required />
+          {!e.all_day && <input className="input" type="time" value={time} onChange={(ev) => setTime(ev.target.value)} aria-label="Suggested time" required />}
+        </div>
+      )}
+      <p className="small muted">This goes to {nameOf(e.created_by)} and shows in the feed.</p>
+      <button className="btn btn-primary btn-block" disabled={busy}>
+        Send
+      </button>
+    </form>
+  );
+}
+
+/** The asker takes the suggested time: move the event and ask again. */
+function TakeProposal({ e }: { e: CalEvent }) {
+  const { meId, partner, toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  if (!e.proposed_start) return null;
+  const proposed = e.proposed_start;
+
+  async function take() {
+    setBusy(true);
+    const length = e.end_time ? new Date(e.end_time).getTime() - new Date(e.start_time).getTime() : 0;
+    const moved = {
+      start_time: proposed,
+      end_time: e.end_time ? new Date(new Date(proposed).getTime() + length).toISOString() : null,
+      response_status: "pending",
+      responded_at: null,
+      decline_note: null,
+      proposed_start: null,
+      reminder_sent_at: null,
+    };
+    const { error } = await supabaseBrowser().from("events").update(moved).eq("id", e.id);
+    setBusy(false);
+    if (error) return toast(error.message);
+    notify({ kind: "ask", id: e.id });
+    await postAskUpdate({ ...e, start_time: proposed }, meId, { kind: "moved" });
+    refreshAll();
+    toast(`Moved & asked ${partner?.display_name ?? "again"} 💌`);
+  }
+
+  return (
+    <div className="card stack-sm" style={{ background: "var(--surface-sunk)" }}>
+      <span style={{ fontWeight: 800 }}>
+        {partner?.display_name ?? "They"} suggested {eventWhen(proposed, e.all_day)}
+      </span>
+      <button className="btn btn-plum btn-sm" onClick={take} disabled={busy} style={{ alignSelf: "flex-start" }}>
+        Move it there &amp; ask again
       </button>
     </div>
   );
@@ -359,6 +463,15 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
           Added by {nameOf(e.created_by)}
           {e.type === "ask" && e.response_status !== "pending" && e.responded_at && ` · answered ${format(new Date(e.responded_at), "MMM d")}`}
         </p>
+        {e.type === "ask" && e.response_status === "declined" && e.decline_note && (
+          <p className="card" style={{ whiteSpace: "pre-wrap" }}>
+            <strong>{e.created_by === meId ? "Their note" : "Your note"}:</strong> {e.decline_note}
+          </p>
+        )}
+        {e.type === "ask" && e.response_status === "declined" && e.proposed_start && e.created_by !== meId && (
+          <p className="small muted">You suggested {eventWhen(e.proposed_start, e.all_day)}.</p>
+        )}
+        {e.type === "ask" && e.response_status === "declined" && e.created_by === meId && <TakeProposal e={e} />}
         {t === "ask" && e.created_by !== meId && <AskActions e={e} />}
         <button className="btn btn-block" onClick={onEdit}>
           Edit

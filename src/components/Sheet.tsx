@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { IconX } from "./Art";
 
-/** Bottom sheet. Tapping the backdrop or pressing Escape closes it. */
+/**
+ * Bottom sheet. Tapping the backdrop or pressing Escape closes it. Rendered
+ * into <body> so a sheet opened from inside a card isn't styled or clipped by it.
+ */
 export function Sheet({ title, onClose, children }: { title: ReactNode; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -16,7 +20,8 @@ export function Sheet({ title, onClose, children }: { title: ReactNode; onClose:
     };
   }, [onClose]);
 
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="sheet" role="dialog" aria-modal="true">
@@ -29,6 +34,7 @@ export function Sheet({ title, onClose, children }: { title: ReactNode; onClose:
         </div>
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

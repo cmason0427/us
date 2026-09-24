@@ -65,5 +65,14 @@ export async function GET(req: Request) {
       });
     }
   }
-  return NextResponse.json({ checked: candidates?.length ?? 0, sent });
+  // Passed deadlines make a to-do urgent (the lists also sort them to the top).
+  const { data: bumped } = await admin
+    .from("tasks")
+    .update({ urgency: "high" })
+    .eq("done", false)
+    .neq("urgency", "high")
+    .lt("due_at", new Date(now).toISOString())
+    .select("id");
+
+  return NextResponse.json({ checked: candidates?.length ?? 0, sent, overdueBumped: bumped?.length ?? 0 });
 }

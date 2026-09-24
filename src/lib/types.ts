@@ -26,6 +26,10 @@ export interface CalEvent {
   location: string | null;
   response_status: AskStatus | null;
   responded_at: string | null;
+  /** Why they can't make it (declined asks). */
+  decline_note: string | null;
+  /** A new start time they suggested when declining. */
+  proposed_start: string | null;
   reminder_lead_minutes: number | null;
   reminder_sent_at: string | null;
   created_by: string;
@@ -47,6 +51,8 @@ export interface Post {
   text: string | null;
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
+  /** Set on the automatic posts for asks (sent, answered, moved). */
+  event_id: string | null;
   created_at: string;
   post_photos: PostPhoto[];
 }
@@ -75,6 +81,10 @@ export interface Task {
   list_type: ListType;
   owner: string | null;
   urgency: Urgency;
+  /** When it's due; null = no deadline. */
+  due_at: string | null;
+  /** "By end of day": due_at is that day's local end, shown as a day. */
+  due_all_day: boolean;
   done: boolean;
   done_at: string | null;
   done_by: string | null;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -72,7 +73,12 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           </button>
         )}
       </div>
-      {post.text && <p className="post-text">{post.text}</p>}
+      {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.text}</p>}
+      {post.event_id && (
+        <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
+          📅 Open in calendar
+        </Link>
+      )}
       {n > 0 && (
         <div className={`photos ${n === 1 ? "n1" : n === 2 ? "n2" : n === 3 ? "n3" : "nmany"}`}>
           {photos.map((ph) => (

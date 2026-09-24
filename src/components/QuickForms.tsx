@@ -4,6 +4,8 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import type { Activity, Energy, ListType, Setting, Urgency } from "@/lib/types";
+import type { Deadline } from "@/lib/deadline";
+import { DeadlinePicker } from "./DeadlinePicker";
 import { useApp } from "./AppProvider";
 
 const URGENCIES: Urgency[] = ["low", "medium", "high"];
@@ -32,6 +34,7 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
   const [title, setTitle] = useState("");
   const [list, setList] = useState<ListType>(initialList);
   const [urgency, setUrgency] = useState<Urgency>("low");
+  const [deadline, setDeadline] = useState<Deadline | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -40,7 +43,7 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
     setBusy(true);
     const { error } = await supabaseBrowser()
       .from("tasks")
-      .insert({ title: title.trim(), list_type: list, owner: list === "personal" ? meId : null, urgency, created_by: meId });
+      .insert({ title: title.trim(), list_type: list, owner: list === "personal" ? meId : null, urgency, ...(deadline ?? {}), created_by: meId });
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
@@ -80,6 +83,11 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
       <div className="field">
         <span>Urgency</span>
         <UrgencyPicker value={urgency} onChange={setUrgency} />
+      </div>
+      <div className="field">
+        <span>Deadline</span>
+        <DeadlinePicker value={deadline} onChange={setDeadline} />
+        <p className="small muted">If it passes, it jumps to the top as high priority.</p>
       </div>
       <button className="btn btn-primary btn-block" disabled={busy || !title.trim()}>
         Add it

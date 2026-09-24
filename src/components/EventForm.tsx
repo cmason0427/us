@@ -8,6 +8,7 @@ import { refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { EVENT_TYPE_HINT, EVENT_TYPE_LABEL, type CalEvent, type EventType } from "@/lib/types";
+import { postAskUpdate } from "@/lib/askFeed";
 import { useApp } from "./AppProvider";
 
 const TYPES: EventType[] = ["confirmed", "solo", "ask", "radar"];
@@ -82,7 +83,12 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
       // Re-arm the reminder if the time or lead changed.
       ...(timeChanged || lead !== initial?.reminder_lead_minutes ? { reminder_sent_at: null } : {}),
       // A fresh ask (or switching to ask) needs an answer; other types don't track one.
-      ...(type !== "ask" ? { response_status: null, responded_at: null } : becameAsk ? { response_status: "pending", responded_at: null } : {}),
+      // Moving an existing ask needs a fresh answer for the new time.
+      ...(type !== "ask"
+        ? { response_status: null, responded_at: null, decline_note: null, proposed_start: null }
+        : becameAsk || (initial && timeChanged)
+          ? { response_status: "pending", responded_at: null, decline_note: null, proposed_start: null }
+          : {}),
     };
 
     const supabase = supabaseBrowser();
@@ -94,8 +100,13 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
       setBusy(false);
       return;
     }
+    const saved = { id: res.data.id, title: row.title, start_time: row.start_time, all_day: row.all_day };
     if (becameAsk) {
       notify({ kind: "ask", id: res.data.id });
+      await postAskUpdate(saved, meId, { kind: "sent" });
+    } else if (type === "ask" && initial && timeChanged) {
+      notify({ kind: "ask", id: res.data.id });
+      await postAskUpdate(saved, meId, { kind: "moved" });
     }
     refreshAll();
     if (!initial) celebrate(submitBtn);

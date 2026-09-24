@@ -464,6 +464,8 @@ p { margin: 0; }
 .check:checked { background: var(--sage); }
 .check:checked::after { content: ""; width: 12px; height: 7px; border-left: 3px solid var(--plum); border-bottom: 3px solid var(--plum); transform: rotate(-45deg) translate(1px, -1px); }
 .task-title { font-weight: 700; overflow-wrap: anywhere; }
+.due { font-weight: 800; color: var(--ink-soft); }
+.due.overdue { color: var(--terracotta); }
 .task-edit { appearance: none; border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: text; }
 .urg {
   appearance: none; cursor: pointer; flex-shrink: 0;
