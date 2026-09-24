@@ -412,6 +412,12 @@ p { margin: 0; }
 .vibe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vibe-grid .chip { justify-content: center; }
 
+/* Drag to reorder */
+.sortable { position: relative; }
+.sortable-row { position: relative; transition: transform 0.15s ease; }
+.sortable-row.dragging { transition: none; z-index: 2; box-shadow: var(--shadow-pop); border-radius: 12px; background: var(--surface); }
+.drag-handle { touch-action: none; cursor: grab; padding: 6px 8px; color: var(--ink-faint); font-size: 1.1rem; line-height: 1; user-select: none; }
+
 /* Food */
 .lunch-note { font-style: italic; color: var(--ink-soft); }
 .lunch-decided { font-weight: 650; font-size: 1.1rem; }

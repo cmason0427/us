@@ -18,6 +18,7 @@ import {
 } from "@/lib/food";
 import { setHave } from "@/lib/foodData";
 import { useApp } from "./AppProvider";
+import { addToShopping } from "./Shopping";
 
 type Opt = { v: string; label: string };
 
@@ -241,12 +242,10 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
   }
 
   async function addMissing() {
-    const { error } = await supabaseBrowser()
-      .from("tasks")
-      .insert(missing.map((n) => ({ title: `Buy ${n}`, list_type: "household", created_by: meId })));
+    const { error } = await addToShopping(meId, missing.map((name) => ({ name })));
     if (error) return toast(error.message);
     refreshAll();
-    toast(`Added ${missing.length} to Household 🛒`);
+    toast(`Added ${missing.length} to the shopping list 🛒`);
   }
 
   return (

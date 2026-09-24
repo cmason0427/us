@@ -2,6 +2,9 @@
 
 import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Pantry } from "@/components/Pantry";
+import { ShoppingList } from "@/components/Shopping";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import { CUISINE_OPTIONS, DISTANCE_OPTIONS, MEAL_OPTIONS, PRICE_OPTIONS, SERVICE_OPTIONS, type FoodFilters, type FoodPlace, type HomeMeal } from "@/lib/food";
@@ -24,7 +27,38 @@ const PLACE_COLUMNS: BatchColumn[] = [
 
 type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "batch" } | null;
 
+type Section = "pick" | "pantry" | "shopping";
+
 export default function EatPage() {
+  const initial = useSearchParams().get("tab");
+  const [section, setSection] = useState<Section>(initial === "pantry" || initial === "shopping" ? initial : "pick");
+  const pick = (s: Section) => {
+    setSection(s);
+    window.history.replaceState(null, "", s === "pick" ? "/eat" : `/eat?tab=${s}`);
+  };
+  return (
+    <main className="page">
+      <PageHead eyebrow="What sounds good?" title="Eat" art={<DogPic name="food_bowl" size={36} />} />
+      <Wavy />
+      <div className="seg" role="group" aria-label="Section" style={{ marginBottom: 14 }}>
+        <button aria-pressed={section === "pick"} onClick={() => pick("pick")}>
+          Pick food
+        </button>
+        <button aria-pressed={section === "pantry"} onClick={() => pick("pantry")}>
+          Pantry
+        </button>
+        <button aria-pressed={section === "shopping"} onClick={() => pick("shopping")}>
+          🛒 Shopping
+        </button>
+      </div>
+      {section === "pick" && <PickFood />}
+      {section === "pantry" && <Pantry />}
+      {section === "shopping" && <ShoppingList />}
+    </main>
+  );
+}
+
+function PickFood() {
   const { meId, toast } = useApp();
   const [filters, setFilters] = useState<FoodFilters>({ mode: "out" });
   const [showFilters, setShowFilters] = useState(false);
@@ -66,10 +100,7 @@ export default function EatPage() {
   }
 
   return (
-    <main className="page">
-      <PageHead eyebrow="What sounds good?" title="Eat" art={<DogPic name="food_bowl" size={36} />} />
-      <Wavy />
-
+    <>
       <div className="seg" role="group" aria-label="Going out or cooking" style={{ marginBottom: 12 }}>
         <button aria-pressed={out} onClick={() => setFilters({ mode: "out" })}>
           🍽️ Going out
@@ -149,6 +180,6 @@ export default function EatPage() {
           <MealDetail meal={sheet.item} pantry={pantry} onEdit={() => setSheet({ kind: "meal", item: sheet.item })} />
         </Sheet>
       )}
-    </main>
+    </>
   );
 }
