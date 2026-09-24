@@ -8,34 +8,32 @@
    The theme is set on <html data-theme> (Settings → Look; stored per device).
    ───────────────────────────────────────────────────────────────────────────── */
 :root, :root[data-theme="peach"] {
-  /* Pink: blush base, bright green accents, pink pops */
-  --cream: #fff0f5;
-  --surface: #fffafc;
-  --rose: #ff9ec0;
-  --butter: #ffd6e5;
-  --terracotta: #1f9a57;
-  --sage: #9fe0b0;
-  --plum: #3b1f2e;
-  --on-accent: #ffffff;
-  --on-soft: #0f3a22;
-  --on-butter: #7a1f45;
-  --danger: #d8433f;
-  --theme-color: #fff0f5;
+  --cream: #fcf0e9;
+  --surface: #fffaf6;
+  --rose: #eab1a8;
+  --butter: #f8d9c2;
+  --terracotta: #4e7c56;
+  --sage: #b5cfa8;
+  --plum: #3e2a2f;
+  --on-accent: #fffaf6;
+  --on-soft: #22361f;
+  --on-butter: #5a3520;
+  --danger: #c0533d;
+  --theme-color: #fcf0e9;
 }
 :root[data-theme="sage"] {
-  /* Green: mint base, hot pink accents, green pops */
-  --cream: #eaf8ee;
-  --surface: #fbfffc;
-  --rose: #7fd49a;
-  --butter: #c9f0d4;
-  --terracotta: #e23d7b;
-  --sage: #ffb3cf;
-  --plum: #1e3326;
-  --on-accent: #ffffff;
-  --on-soft: #6b1238;
-  --on-butter: #145230;
-  --danger: #d8433f;
-  --theme-color: #eaf8ee;
+  --cream: #edf2e8;
+  --surface: #f9fbf6;
+  --rose: #a9c39c;
+  --butter: #dbe7cc;
+  --terracotta: #b4546f;
+  --sage: #f0b9c4;
+  --plum: #25332a;
+  --on-accent: #fff8fa;
+  --on-soft: #4d1d2a;
+  --on-butter: #2e4027;
+  --danger: #c0533d;
+  --theme-color: #edf2e8;
 }
 
 /* Fridge-magnet pops: the same bright set in both themes. */
@@ -668,8 +666,7 @@ div.dash-row { cursor: default; }
 .magnet-gap { display: inline-block; width: 0.32em; }
 .page-head h1 { font-size: 2.15rem; }
 
-.page-head .eyebrow { color: var(--pop-pink); }
-:root[data-theme="sage"] .page-head .eyebrow { color: var(--pop-green); }
+
 
 /* Colored icon dots on the dashboard, cycling through the pops */
 .dash-icon {
@@ -684,7 +681,17 @@ div.dash-row { cursor: default; }
 .dash-row:nth-child(7n+5) { --dot: var(--pop-orange); }
 .dash-row:nth-child(7n+6) { --dot: var(--pop-purple); }
 .dash-row:nth-child(7n+7) { --dot: var(--pop-red); }
-.dash { border-top: 4px solid var(--rose); }
+.dash { position: relative; overflow: hidden; padding-top: 8px; }
+.pop-strip, .dash::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--pop-red), var(--pop-orange), var(--pop-yellow), var(--pop-green), var(--pop-blue), var(--pop-purple), var(--pop-pink)); }
+
+/* The fridge photo: Home's header and the PIN screen */
+.fridge-header { display: block; width: 100%; aspect-ratio: 1000 / 618; object-fit: cover; border-radius: var(--radius); margin: 4px 0 14px; box-shadow: var(--shadow); }
+.login.with-cover { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px; padding: 0 0 calc(var(--safe-b) + 24px); background: #6a1a10; color: #fff; }
+.login-cover { width: 100%; max-width: 560px; max-height: 52dvh; aspect-ratio: 1 / 1; object-fit: cover; -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+.login.with-cover .pin-dots span { border-color: #fff; }
+.login.with-cover .pin-dots span.on { background: var(--pop-yellow); border-color: var(--pop-yellow); }
+.login.with-cover .pin-keys button { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.45); }
+.login.with-cover .pin-msg { color: #ffd9d0; }
 
 /* Menu icons each get a pop */
 .drawer-item:nth-of-type(7n+1) svg { color: var(--pop-pink); }
@@ -694,12 +701,10 @@ div.dash-row { cursor: default; }
 .drawer-item:nth-of-type(7n+5) svg { color: var(--pop-purple); }
 .drawer-item:nth-of-type(7n+6) svg { color: var(--pop-yellow); }
 .drawer-item:nth-of-type(7n+7) svg { color: var(--pop-red); }
-.drawer-item[aria-current="page"] { background: var(--rose); color: var(--plum); }
 
 /* Primary actions pop a little more */
 .btn-primary { box-shadow: 0 3px 0 color-mix(in srgb, var(--terracotta) 60%, #000); }
 .btn-primary:active { box-shadow: none; transform: translateY(2px); }
-.fab { background: var(--terracotta); box-shadow: 0 4px 0 color-mix(in srgb, var(--terracotta) 60%, #000), var(--shadow-pop); border: 3px solid var(--surface); }
-.chip[aria-pressed="true"] { background: var(--rose); border-color: color-mix(in srgb, var(--rose) 60%, var(--plum)); color: var(--plum); }
+.fab { box-shadow: 0 4px 0 color-mix(in srgb, var(--terracotta) 60%, #000), var(--shadow-pop); border: 3px solid var(--surface); }
 .section-title::after { content: ""; flex: 0 0 26px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--pop-pink), var(--pop-yellow), var(--pop-green)); margin-left: 4px; }
 .feed-head .section-title::after { display: none; }

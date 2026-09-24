@@ -38,7 +38,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login">
+    <main className="login with-cover">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="login-cover" src="/cover.jpg" alt="" />
       <PinPad onComplete={signIn} busy={busy} />
     </main>
   );

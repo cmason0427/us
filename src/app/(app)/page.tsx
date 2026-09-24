@@ -11,7 +11,6 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
-import { Wavy } from "@/components/Art";
 import { Dashboard } from "@/components/Dashboard";
 
 const PAGE = 30;
@@ -44,7 +43,8 @@ export default function HomePage() {
   return (
     <main className="page">
       <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
-      <Wavy />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="fridge-header" src="/header.jpg" alt="Fridge magnets: no matter how hard it gets, i always want it to be you" />
 
       <Dashboard />
 

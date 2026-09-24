@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fff0f5", // the boot script swaps it for the Sage theme
+  themeColor: "#fcf0e9", // the boot script swaps it for the Sage theme
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
