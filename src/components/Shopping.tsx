@@ -22,6 +22,7 @@ export interface ShopItem {
   position: number;
   claimed_by: string | null;
   bought: boolean;
+  grocery: boolean;
   created_by: string;
 }
 
@@ -48,11 +49,24 @@ export function useShopping() {
   return { cats, items };
 }
 
-/** Put things on the shopping list (used by meals' "add missing" and the ＋ menu). */
-export async function addToShopping(meId: string, rows: { name: string; detail?: string | null; category_id?: string | null }[]) {
+/**
+ * Put things on the shopping list. Anything from Food (meals' "add missing",
+ * the pantry) is a grocery, so it shows in Food's grocery list too; other
+ * things only show there if you say so.
+ */
+export async function addToShopping(meId: string, rows: { name: string; detail?: string | null; category_id?: string | null; grocery?: boolean }[]) {
   return supabaseBrowser()
     .from("shop_items")
-    .insert(rows.map((r, i) => ({ name: r.name, detail: r.detail ?? null, category_id: r.category_id ?? null, position: Date.now() % 1e9 + i, created_by: meId })));
+    .insert(
+      rows.map((r, i) => ({
+        name: r.name,
+        detail: r.detail ?? null,
+        category_id: r.category_id ?? null,
+        grocery: r.grocery ?? true,
+        position: Date.now() % 1e9 + i,
+        created_by: meId,
+      })),
+    );
 }
 
 /** Save a new order: position = index. */
@@ -63,13 +77,14 @@ async function savePositions(table: "shop_categories" | "shop_items", ids: strin
 }
 
 /** Add one item: name, optional brand/type, category. */
-export function ShopItemForm({ initial, onDone }: { initial?: ShopItem; onDone: () => void }) {
+export function ShopItemForm({ initial, groceryDefault = false, onDone }: { initial?: ShopItem; groceryDefault?: boolean; onDone: () => void }) {
   const { meId, toast } = useApp();
   const { cats } = useShopping();
   const [name, setName] = useState(initial?.name ?? "");
   const [detail, setDetail] = useState(initial?.detail ?? "");
   const [cat, setCat] = useState<string | null>(initial?.category_id ?? null);
   const [newCat, setNewCat] = useState("");
+  const [grocery, setGrocery] = useState(initial?.grocery ?? groceryDefault);
   const [busy, setBusy] = useState(false);
 
   async function makeCategory() {
@@ -87,8 +102,8 @@ export function ShopItemForm({ initial, onDone }: { initial?: ShopItem; onDone: 
     setBusy(true);
     const supabase = supabaseBrowser();
     const { error } = initial
-      ? await supabase.from("shop_items").update({ name: name.trim(), detail: detail.trim() || null, category_id: cat }).eq("id", initial.id)
-      : await addToShopping(meId, [{ name: name.trim(), detail: detail.trim() || null, category_id: cat }]);
+      ? await supabase.from("shop_items").update({ name: name.trim(), detail: detail.trim() || null, category_id: cat, grocery }).eq("id", initial.id)
+      : await addToShopping(meId, [{ name: name.trim(), detail: detail.trim() || null, category_id: cat, grocery }]);
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
@@ -123,6 +138,10 @@ export function ShopItemForm({ initial, onDone }: { initial?: ShopItem; onDone: 
           </button>
         </div>
       </div>
+      <label className="row small">
+        <input type="checkbox" className="check" checked={grocery} onChange={(e) => setGrocery(e.target.checked)} />
+        Also on the grocery list (Food)
+      </label>
       <div className="row-between">
         {initial ? (
           <button type="button" className="btn btn-ghost" onClick={remove}>
@@ -139,21 +158,51 @@ export function ShopItemForm({ initial, onDone }: { initial?: ShopItem; onDone: 
   );
 }
 
-/** The shopping list: categories (drag to order), items (drag within a category), claim, bought, select → to-dos. */
-export function ShoppingList() {
+type Row = { kind: "cat"; id: string; name: string; count: number } | { kind: "item"; id: string; item: ShopItem };
+
+/**
+ * The shopping list: categories (drag to order), items (drag to reorder, or
+ * drag into another category), claim, bought, select → to-dos.
+ * `groceries` shows only the grocery items (Food's grocery list).
+ */
+export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
-  const { cats, items } = useShopping();
+  const { cats, items: all } = useShopping();
+  const items = groceries ? all.filter((i) => i.grocery) : all;
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ShopItem | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [ordering, setOrdering] = useState(false);
 
-  const groups = [...cats.map((c) => ({ id: c.id, name: c.name })), { id: "", name: "No category" }]
-    .map((g) => ({ ...g, items: items.filter((i) => (i.category_id ?? "") === g.id) }))
-    .filter((g) => g.items.length || g.id);
+  // One flat list, category headers included, so an item can be dragged
+  // across a header into another category. Headers themselves don't move here.
+  const groups = [...cats.map((c) => ({ id: c.id, name: c.name })), { id: "", name: "No category" }].map((g) => ({
+    ...g,
+    items: items.filter((i) => (i.category_id ?? "") === g.id),
+  }));
+  const rows: Row[] = groups.flatMap((g) => [
+    { kind: "cat" as const, id: `cat:${g.id}`, name: g.name, count: g.items.length },
+    ...g.items.map((item) => ({ kind: "item" as const, id: item.id, item })),
+  ]);
   const bought = items.filter((i) => i.bought);
+
+  async function moveRows(ids: string[]) {
+    // Each item lands in the category of the header above it.
+    let cat: string | null = cats[0]?.id ?? null;
+    const updates: { id: string; category_id: string | null; position: number }[] = [];
+    ids.forEach((id, position) => {
+      if (id.startsWith("cat:")) cat = id.slice(4) || null;
+      else updates.push({ id, category_id: cat, position });
+    });
+    const changed = updates.filter((u) => {
+      const i = items.find((x) => x.id === u.id);
+      return i && ((i.category_id ?? null) !== u.category_id || i.position !== u.position);
+    });
+    await Promise.all(changed.map((u) => supabase.from("shop_items").update({ category_id: u.category_id, position: u.position }).eq("id", u.id)));
+    refreshAll();
+  }
 
   async function toggleBought(i: ShopItem, el: HTMLElement) {
     const now = !i.bought;
@@ -187,7 +236,7 @@ export function ShoppingList() {
     refreshAll();
   }
 
-  const row = (i: ShopItem, handle: React.ReactNode) => (
+  const itemRow = (i: ShopItem, handle: React.ReactNode) => (
     <div className={`task shop-row${i.bought ? " done" : ""}`}>
       {selecting ? (
         <input
@@ -255,22 +304,25 @@ export function ShoppingList() {
           />
         </div>
       ) : items.length === 0 ? (
-        <p className="muted">Nothing to buy. Nice.</p>
+        <p className="muted">{groceries ? "No groceries needed. Nice." : "Nothing to buy. Nice."}</p>
       ) : (
-        groups.map((g) => (
-          <section key={g.id || "none"}>
-            <div className="section-title" style={{ margin: "12px 0 6px" }}>
-              {g.name}
-            </div>
-            {g.items.length === 0 ? (
-              <p className="small faint">Nothing here.</p>
-            ) : (
-              <div className="card" style={{ padding: "2px 12px" }}>
-                <Sortable items={g.items} getId={(i) => i.id} onReorder={(ids) => savePositions("shop_items", ids)} render={row} />
-              </div>
-            )}
-          </section>
-        ))
+        <div className="card" style={{ padding: "2px 12px" }}>
+          <Sortable
+            items={rows}
+            getId={(r) => r.id}
+            onReorder={moveRows}
+            render={(r, handle) =>
+              r.kind === "cat" ? (
+                <div className="section-title shop-cat">
+                  {r.name}
+                  {r.count === 0 && <span className="faint"> · drag things here</span>}
+                </div>
+              ) : (
+                itemRow(r.item, handle)
+              )
+            }
+          />
+        </div>
       )}
 
       {selecting && (
@@ -285,8 +337,8 @@ export function ShoppingList() {
       )}
 
       {adding && (
-        <Sheet title="Shopping list" onClose={() => setAdding(false)}>
-          <ShopItemForm onDone={() => setAdding(false)} />
+        <Sheet title={groceries ? "Grocery list" : "Shopping list"} onClose={() => setAdding(false)}>
+          <ShopItemForm groceryDefault={groceries} onDone={() => setAdding(false)} />
         </Sheet>
       )}
       {editing && (

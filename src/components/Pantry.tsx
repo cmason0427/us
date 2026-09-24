@@ -46,7 +46,7 @@ export function Pantry() {
     const { error } = await addToShopping(meId, [{ name }]);
     if (error) return toast(error.message);
     refreshAll();
-    toast(`${name} → shopping list 🛒`);
+    toast(`${name} → grocery list 🛒`);
   }
 
   async function forget(key: string) {

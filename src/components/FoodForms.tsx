@@ -245,7 +245,7 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
     const { error } = await addToShopping(meId, missing.map((name) => ({ name })));
     if (error) return toast(error.message);
     refreshAll();
-    toast(`Added ${missing.length} to the shopping list 🛒`);
+    toast(`Added ${missing.length} to the grocery list 🛒`);
   }
 
   return (
@@ -269,7 +269,7 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
       <p className="small muted">Checking something off here counts for every meal that uses it.</p>
       {missing.length > 0 && (
         <button className="btn btn-sage" onClick={addMissing}>
-          🛒 Add {missing.length} missing to shopping
+          🛒 Add {missing.length} missing to groceries
         </button>
       )}
       {meal.notes && <p className="card" style={{ whiteSpace: "pre-wrap" }}>{meal.notes}</p>}

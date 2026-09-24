@@ -622,3 +622,7 @@ p { margin: 0; }
   .activity-grid { grid-template-columns: repeat(3, 1fr); }
   .mcell { min-height: 78px; }
 }
+
+/* Category headers inside the one-list shopping drag */
+.shop-cat { margin: 0; padding: 12px 0 4px; font-size: 1rem; border-bottom: 1px solid var(--line); }
+.sortable-row:first-child .shop-cat { padding-top: 8px; }

@@ -16,11 +16,11 @@ import { IconPlus, Wavy } from "@/components/Art";
 
 type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "batch" } | null;
 
-type Section = "pick" | "pantry" | "shopping";
+type Section = "pick" | "pantry" | "groceries";
 
 export default function EatPage() {
   const initial = useSearchParams().get("tab");
-  const [section, setSection] = useState<Section>(initial === "pantry" || initial === "shopping" ? initial : "pick");
+  const [section, setSection] = useState<Section>(initial === "pantry" || initial === "groceries" ? initial : "pick");
   const pick = (s: Section) => {
     setSection(s);
     window.history.replaceState(null, "", s === "pick" ? "/eat" : `/eat?tab=${s}`);
@@ -36,13 +36,13 @@ export default function EatPage() {
         <button aria-pressed={section === "pantry"} onClick={() => pick("pantry")}>
           Pantry
         </button>
-        <button aria-pressed={section === "shopping"} onClick={() => pick("shopping")}>
-          🛒 Shopping
+        <button aria-pressed={section === "groceries"} onClick={() => pick("groceries")}>
+          🛒 Groceries
         </button>
       </div>
       {section === "pick" && <PickFood />}
       {section === "pantry" && <Pantry />}
-      {section === "shopping" && <ShoppingList />}
+      {section === "groceries" && <ShoppingList groceries />}
     </main>
   );
 }
