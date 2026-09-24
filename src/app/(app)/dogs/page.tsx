@@ -14,27 +14,19 @@ import { PostComposer } from "@/components/PostComposer";
 import { PostCard } from "@/components/PostCard";
 import { DogAvatar } from "@/components/DogAvatar";
 import { DogPic } from "@/components/DogPic";
-import { DogPhotos } from "@/components/DogPhotos";
+import { DogProfileCards } from "@/components/DogProfiles";
 import { TaskList } from "@/components/TaskList";
 import { Wavy } from "@/components/Art";
 
-/** Everything Kodo & Wiley: their photos, their to-dos, and a feed of just dog notes. */
+/** Everything Kodo & Wiley: their profiles (vet, meds, feeding…), their to-dos, and a feed of just dog notes. */
 export default function DogsPage() {
   const wanted = useSearchParams().get("dog");
   const initialDog = DOGS.find((d) => d.id === wanted)?.id ?? null;
-  const [showPhotos, setShowPhotos] = useState(false);
   return (
     <main className="page">
       <PageHead eyebrow="Kodo & Wiley" title="Dogs" art={<DogPic name="kodo_wiley_face" size={52} />} />
       <Wavy />
-      <button className="btn btn-ghost btn-sm" onClick={() => setShowPhotos((s) => !s)} style={{ marginBottom: 8 }}>
-        {showPhotos ? "▾" : "▸"} Their photos
-      </button>
-      {showPhotos && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <DogPhotos />
-        </div>
-      )}
+      <DogProfileCards />
       <Dogs initialDog={initialDog} />
     </main>
   );
