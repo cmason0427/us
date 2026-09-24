@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flower, Mushroom, Wavy } from "@/components/Art";
 import { PinPad } from "@/components/PinPad";
+import { markUnlocked } from "@/lib/lock";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,7 +26,10 @@ export default function LoginPage() {
       await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
     }
     if (res?.ok) {
-      router.replace("/");
+      markUnlocked();
+      // Only same-site paths, so ?next= can't send anyone elsewhere.
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.replace(next?.startsWith("/") && !next.startsWith("//") ? next : "/");
       router.refresh();
       return null;
     }

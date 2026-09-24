@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import type { Profile } from "@/lib/types";
+import { awayTooLong, isUnlocked, lockAndGoToLogin, markHidden } from "@/lib/lock";
 
 export type AddKind = "post" | "event" | "task" | "household" | "dog-note" | "dog-task" | "activity";
 
@@ -20,6 +21,8 @@ interface AppCtx {
 }
 
 const Ctx = createContext<AppCtx | null>(null);
+// The unlock flag only changes via a full page load, so there's nothing to subscribe to.
+const noSubscribe = () => () => {};
 
 export function useApp() {
   const ctx = useContext(Ctx);
@@ -68,6 +71,18 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
 
   const [addOpen, setAddOpen] = useState<AddKind | "menu" | null>(null);
 
+  // PIN on every entry (see lib/lock). Nothing renders until we know it's unlocked.
+  const unlocked = useSyncExternalStore(noSubscribe, isUnlocked, () => false);
+  useEffect(() => {
+    if (!isUnlocked()) return lockAndGoToLogin();
+    const onVis = () => {
+      if (document.visibilityState === "hidden") markHidden();
+      else if (awayTooLong()) lockAndGoToLogin();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
   const value = useMemo<AppCtx>(() => {
     const byId = new Map(profiles.map((p) => [p.id, p.display_name]));
     return {
@@ -85,7 +100,7 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
 
   return (
     <Ctx.Provider value={value}>
-      {children}
+      {unlocked ? children : null}
       {toastMsg && (
         <div className="toast" role="status">
           {toastMsg}

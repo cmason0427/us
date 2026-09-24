@@ -34,11 +34,9 @@ export async function proxy(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
-  if (signedIn && path === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
+  // Never bounce /login back to the app: the proxy only checks the token's
+  // signature, so a revoked session would ping-pong between / and /login.
+  // The PIN is asked on every entry anyway (lib/lock.ts).
   return response;
 }
 
