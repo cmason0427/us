@@ -7,6 +7,8 @@ import { refreshAll } from "@/lib/useLive";
 import { DOGS, type DogId } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
 import { DogAvatar } from "./DogAvatar";
+import { Sheet } from "./Sheet";
+import { SquareCrop } from "./SquareCrop";
 
 /** Tap a dog to set their profile photo. Either of you can change it. */
 export function DogPhotos() {
@@ -14,8 +16,10 @@ export function DogPhotos() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [picking, setPicking] = useState<DogId | null>(null);
   const [busy, setBusy] = useState<DogId | null>(null);
+  const [cropping, setCropping] = useState<{ dog: DogId; file: File } | null>(null);
 
-  async function upload(dog: DogId, file: File) {
+  async function upload(dog: DogId, file: Blob) {
+    setCropping(null);
     setBusy(dog);
     const supabase = supabaseBrowser();
     try {
@@ -58,9 +62,14 @@ export function DogPhotos() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file && picking) upload(picking, file);
+          if (file && picking) setCropping({ dog: picking, file });
         }}
       />
+      {cropping && (
+        <Sheet title="Fit it in the circle" onClose={() => setCropping(null)}>
+          <SquareCrop file={cropping.file} onDone={(b) => upload(cropping.dog, b)} onCancel={() => setCropping(null)} />
+        </Sheet>
+      )}
     </div>
   );
 }

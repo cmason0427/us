@@ -437,6 +437,11 @@ p { margin: 0; }
 .pick-card { display: flex; flex-direction: column; gap: 6px; background: var(--butter); color: var(--on-butter); }
 .task.need .task-title { color: var(--ink); }
 
+/* Square crop for profile pics */
+.crop-frame { position: relative; width: 100%; max-width: 320px; aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: 16px; touch-action: none; background: var(--surface-sunk); cursor: grab; }
+.crop-frame img { position: absolute; left: 50%; top: 50%; max-width: none; user-select: none; pointer-events: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px color-mix(in srgb, #000 35%, transparent); pointer-events: none; }
+
 /* Toggle chips: dog tags, filters. */
 .chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .chip {

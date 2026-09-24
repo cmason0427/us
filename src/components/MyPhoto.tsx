@@ -6,14 +6,18 @@ import { removeOldAvatar, uploadAvatar } from "@/lib/avatarUpload";
 import { refreshAll } from "@/lib/useLive";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
+import { Sheet } from "./Sheet";
+import { SquareCrop } from "./SquareCrop";
 
 /** Set your own profile photo. */
 export function MyPhoto() {
   const { meId, me, toast } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [cropping, setCropping] = useState<File | null>(null);
 
-  async function upload(file: File) {
+  async function upload(file: Blob) {
+    setCropping(null);
     setBusy(true);
     try {
       const path = await uploadAvatar(meId, "me", file);
@@ -29,9 +33,11 @@ export function MyPhoto() {
   }
 
   return (
-    <button type="button" className="dog-pick" disabled={busy} onClick={() => fileRef.current?.click()}>
-      <PersonAvatar id={meId} size={72} />
-      <span className="small muted">{busy ? "Uploading…" : me?.avatar_path ? "Change photo" : "Add photo"}</span>
+    <>
+      <button type="button" className="dog-pick" disabled={busy} onClick={() => fileRef.current?.click()}>
+        <PersonAvatar id={meId} size={72} />
+        <span className="small muted">{busy ? "Uploading…" : me?.avatar_path ? "Change photo" : "Add photo"}</span>
+      </button>
       <input
         ref={fileRef}
         type="file"
@@ -40,9 +46,14 @@ export function MyPhoto() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file) upload(file);
+          if (file) setCropping(file);
         }}
       />
-    </button>
+      {cropping && (
+        <Sheet title="Fit it in the circle" onClose={() => setCropping(null)}>
+          <SquareCrop file={cropping} onDone={upload} onCancel={() => setCropping(null)} />
+        </Sheet>
+      )}
+    </>
   );
 }

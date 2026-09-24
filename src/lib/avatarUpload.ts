@@ -7,8 +7,9 @@ import { shrinkImage } from "./image";
  * Uploads a small square-ish profile photo under the uploader's own folder
  * (storage rules only allow that) and returns its path.
  */
-export async function uploadAvatar(meId: string, name: string, file: File) {
-  const { blob, ext } = await shrinkImage(file, 512);
+export async function uploadAvatar(meId: string, name: string, file: File | Blob) {
+  // Already-cropped squares (SquareCrop) are the right size; raw files get shrunk.
+  const { blob, ext } = file instanceof File ? await shrinkImage(file, 512) : { blob: file, ext: "jpg" };
   const path = `${meId}/avatars/${name}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
   const { error } = await supabaseBrowser().storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
   if (error) throw error;
