@@ -48,28 +48,42 @@ export function usePlans(day: string) {
   return data;
 }
 
-/** The plans on a day, as cards, plus "plan a time block". */
-export function PlanBlocks({ day, onOpen, onNew }: { day: Date; onOpen: (id: string) => void; onNew: () => void }) {
-  const plans = usePlans(format(day, "yyyy-MM-dd"));
+/** Every plan between two days (inclusive), for the calendar views. */
+export function usePlansRange(from: string, to: string) {
+  const { data = [] } = useLive<DayPlan[]>(
+    `plans:${from}:${to}`,
+    async () => {
+      const { data, error } = await supabaseBrowser()
+        .from("day_plans")
+        .select("*, day_plan_items(id, text, activity_id, position)")
+        .gte("day", from)
+        .lte("day", to)
+        .order("day")
+        .order("start_at");
+      if (error) throw error;
+      return data as DayPlan[];
+    },
+    ["day_plans", "day_plan_items"],
+  );
+  return data;
+}
+
+export const planStart = (p: Pick<DayPlan, "day" | "start_at">) => asDate(p.day, p.start_at);
+export const planEnd = (p: Pick<DayPlan, "day" | "end_at">) => asDate(p.day, p.end_at);
+export const planSteps = (p: DayPlan) => [...p.day_plan_items].sort((a, b) => a.position - b.position).map((i) => i.text);
+
+/** A plan in a list: faded and dashed so real events read as the solid things. */
+export function PlanCard({ p, onOpen }: { p: DayPlan; onOpen: (id: string) => void }) {
+  const steps = planSteps(p);
   return (
-    <div className="stack-sm" style={{ marginTop: 12 }}>
-      {plans.map((p) => {
-        const items = [...p.day_plan_items].sort((a, b) => a.position - b.position);
-        return (
-          <button key={p.id} className="card plan-card" onClick={() => onOpen(p.id)}>
-            <span className="small muted">
-              🗓️ {planWhen(p)}
-              {p.sent_at ? "" : " · just an idea"}
-            </span>
-            <strong>{p.title || "Time together"}</strong>
-            {items.length > 0 && <span className="small">{items.map((i) => i.text).join(" → ")}</span>}
-          </button>
-        );
-      })}
-      <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={onNew}>
-        + Plan a time block
-      </button>
-    </div>
+    <button className="plan-card-bg" onClick={() => onOpen(p.id)}>
+      <span className="small muted">
+        🗓️ {planWhen(p)}
+        {p.sent_at ? "" : " · just an idea"}
+      </span>
+      <strong>{p.title || "Time together"}</strong>
+      {steps.length > 0 && <span className="small">{steps.join(" → ")}</span>}
+    </button>
   );
 }
 

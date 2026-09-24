@@ -705,3 +705,22 @@ div.dash-row { cursor: default; }
 .dog-fact a { color: var(--accent); }
 .shop-note { color: var(--on-butter); background: color-mix(in srgb, var(--butter) 55%, transparent); border-radius: 8px; padding: 2px 8px; margin-top: 3px; display: inline-block; }
 .shop-cat.empty { min-height: 52px; }
+
+/* Time-block plans: a soft backdrop. Real events sit on top of them. */
+.dayev { z-index: 2; }
+.plan-bg {
+  position: absolute; left: 48px; right: 0; z-index: 1; padding: 4px 10px; overflow: hidden; text-align: left;
+  font: inherit; font-size: 0.8rem; color: var(--ink-soft); cursor: pointer;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--sage) 26%, transparent) 0 8px, color-mix(in srgb, var(--sage) 14%, transparent) 8px 16px);
+  border: 1.5px dashed color-mix(in srgb, var(--pop-green) 45%, transparent); border-radius: 10px;
+}
+.plan-bg strong { display: block; font-weight: 650; color: var(--ink); opacity: 0.8; }
+.plan-card-bg {
+  display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; cursor: pointer; font: inherit; color: var(--ink-soft);
+  padding: 8px 12px; border-radius: 12px; opacity: 0.85;
+  background: color-mix(in srgb, var(--sage) 18%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--pop-green) 45%, transparent);
+}
+.plan-card-bg strong { color: var(--ink); font-weight: 650; }
+.mcell { position: relative; }
+.mplan { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--pop-green) 45%, transparent); }
