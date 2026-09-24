@@ -104,13 +104,14 @@ export async function POST(req: Request) {
     const names = new Map([...(ps ?? []), ...(ms ?? [])].map((x) => [x.id, x.name]));
     const list = msg.refs.map((r) => names.get(r.id) ?? "something").join(", ");
     const text = {
-      propose: `${myName} suggests ${list}. Sound good?`,
-      filters: `${myName} is feeling: ${msg.filters ? describeFilters(msg.filters) : "anything"}. Pick something?`,
+      propose: `${myName} picked ${list}. Sound good?`,
+      filters: `${myName} wants: ${msg.filters ? describeFilters(msg.filters) : "anything"}. Pick something?`,
       request: `${myName} wants some lunch options.`,
       options: `${myName} sent options: ${list}. Pick one?`,
       decided: `Lunch: ${list} ✅`,
     }[msg.kind];
-    const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: text, url: "/", tag: `lunch-${msg.day}` });
+    const note = (msg as LunchMsg).note;
+    const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: note ? `${text} "${note}"` : text, url: "/", tag: `lunch-${msg.day}` });
     return NextResponse.json({ sent });
   }
 

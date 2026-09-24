@@ -11,6 +11,8 @@ export interface LunchMsg {
   kind: LunchMsgKind;
   refs: LunchRef[];
   filters: FoodFilters | null;
+  /** Optional words with it ("I'll pay, go fancier"). */
+  note: string | null;
   created_at: string;
 }
 

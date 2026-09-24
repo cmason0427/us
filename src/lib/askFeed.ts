@@ -10,7 +10,7 @@ type AskUpdate =
   | { kind: "sent" }
   | { kind: "accepted" }
   | { kind: "declined"; note: string | null; proposed: string | null }
-  | { kind: "moved" }
+  | { kind: "moved"; note?: string | null }
   | { kind: "note"; note: string };
 
 /**
@@ -26,7 +26,7 @@ export async function postAskUpdate(e: Pick<CalEvent, "id" | "title" | "start_ti
       : u.kind === "accepted"
         ? `🎉 I'm in for ${what}`
         : u.kind === "moved"
-          ? `🔁 Moved ${what}. Can you make it now?`
+          ? `🔁 Moved ${what}. Can you make it now?${u.note ? `\n"${u.note}"` : ""}`
           : u.kind === "note"
             ? `📝 About ${what}:\n"${u.note}"`
           : [

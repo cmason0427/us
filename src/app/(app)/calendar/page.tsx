@@ -392,6 +392,7 @@ function DeclineNote({ e }: { e: CalEvent }) {
 function TakeProposal({ e }: { e: CalEvent }) {
   const { meId, partner, toast } = useApp();
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
   if (!e.proposed_start) return null;
   const proposed = e.proposed_start;
 
@@ -411,7 +412,7 @@ function TakeProposal({ e }: { e: CalEvent }) {
     setBusy(false);
     if (error) return toast(error.message);
     notify({ kind: "ask", id: e.id });
-    await postAskUpdate({ ...e, start_time: proposed }, meId, { kind: "moved" });
+    await postAskUpdate({ ...e, start_time: proposed }, meId, { kind: "moved", note: note.trim() || null });
     refreshAll();
     toast(`Moved & asked ${partner?.display_name ?? "again"} 💌`);
   }
@@ -421,6 +422,7 @@ function TakeProposal({ e }: { e: CalEvent }) {
       <span style={{ fontWeight: 800 }}>
         {partner?.display_name ?? "They"} suggested {eventWhen(proposed, e.all_day)}
       </span>
+      <input className="input" value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="Add a note (optional)" aria-label="Note" />
       <button className="btn btn-plum btn-sm" onClick={take} disabled={busy} style={{ alignSelf: "flex-start" }}>
         Move it there &amp; ask again
       </button>

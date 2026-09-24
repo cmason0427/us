@@ -413,6 +413,7 @@ p { margin: 0; }
 .vibe-grid .chip { justify-content: center; }
 
 /* Food */
+.lunch-note { font-style: italic; color: var(--ink-soft); }
 .lunch-decided { font-weight: 650; font-size: 1.1rem; }
 .food-card { appearance: none; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; font: inherit; color: inherit; width: 100%; }
 .food-card[aria-pressed="true"] { border-color: var(--terracotta); box-shadow: 0 0 0 1.5px var(--terracotta); }
