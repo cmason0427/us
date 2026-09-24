@@ -14,11 +14,23 @@ export interface ShopCategory {
   name: string;
   position: number;
 }
+/** Where to get something: a store, "Online", Costco… */
+export interface ShopStore {
+  id: string;
+  name: string;
+  position: number;
+}
 export interface ShopItem {
   id: string;
   name: string;
+  /** Brand or type. */
   detail: string | null;
+  /** A note to yourselves: "talk to your mom about this first". */
+  note: string | null;
   category_id: string | null;
+  store_id: string | null;
+  /** Where to order it, if it's online. */
+  link: string | null;
   position: number;
   claimed_by: string | null;
   bought: boolean;
@@ -37,6 +49,15 @@ export function useShopping() {
     },
     ["shop_categories"],
   );
+  const { data: stores = [] } = useLive<ShopStore[]>(
+    "shop_stores",
+    async () => {
+      const { data, error } = await supabase.from("shop_stores").select("*").order("position").order("created_at");
+      if (error) throw error;
+      return data as ShopStore[];
+    },
+    ["shop_stores"],
+  );
   const { data: items = [] } = useLive<ShopItem[]>(
     "shop_items",
     async () => {
@@ -46,64 +67,137 @@ export function useShopping() {
     },
     ["shop_items"],
   );
-  return { cats, items };
+  return { cats, stores, items };
 }
+
+type NewItem = { name: string; detail?: string | null; note?: string | null; category_id?: string | null; store_id?: string | null; link?: string | null; grocery?: boolean };
 
 /**
  * Put things on the shopping list. Anything from Food (meals' "add missing",
  * the pantry) is a grocery, so it shows in Food's grocery list too; other
  * things only show there if you say so.
  */
-export async function addToShopping(meId: string, rows: { name: string; detail?: string | null; category_id?: string | null; grocery?: boolean }[]) {
+export async function addToShopping(meId: string, rows: NewItem[]) {
   return supabaseBrowser()
     .from("shop_items")
     .insert(
       rows.map((r, i) => ({
         name: r.name,
         detail: r.detail ?? null,
+        note: r.note ?? null,
         category_id: r.category_id ?? null,
+        store_id: r.store_id ?? null,
+        link: r.link ?? null,
         grocery: r.grocery ?? true,
-        position: Date.now() % 1e9 + i,
+        position: (Date.now() % 1e9) + i,
         created_by: meId,
       })),
     );
 }
 
 /** Save a new order: position = index. */
-async function savePositions(table: "shop_categories" | "shop_items", ids: string[]) {
+async function savePositions(table: "shop_categories" | "shop_stores" | "shop_items", ids: string[]) {
   const supabase = supabaseBrowser();
   await Promise.all(ids.map((id, position) => supabase.from(table).update({ position }).eq("id", id)));
   refreshAll();
 }
 
-/** Add one item: name, optional brand/type, category. */
-export function ShopItemForm({ initial, groceryDefault = false, onDone }: { initial?: ShopItem; groceryDefault?: boolean; onDone: () => void }) {
+/** A row of chips to pick one (tap again to clear), plus "make a new one". */
+function PickOrMake({
+  label,
+  table,
+  options,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  table: "shop_categories" | "shop_stores";
+  options: { id: string; name: string }[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  placeholder: string;
+}) {
   const { meId, toast } = useApp();
-  const { cats } = useShopping();
-  const [name, setName] = useState(initial?.name ?? "");
-  const [detail, setDetail] = useState(initial?.detail ?? "");
-  const [cat, setCat] = useState<string | null>(initial?.category_id ?? null);
-  const [newCat, setNewCat] = useState("");
-  const [grocery, setGrocery] = useState(initial?.grocery ?? groceryDefault);
-  const [busy, setBusy] = useState(false);
-
-  async function makeCategory() {
-    if (!newCat.trim()) return;
-    const { data, error } = await supabaseBrowser().from("shop_categories").insert({ name: newCat.trim(), position: cats.length, created_by: meId }).select("id").single();
+  const [draft, setDraft] = useState("");
+  async function make() {
+    if (!draft.trim()) return;
+    const { data, error } = await supabaseBrowser().from(table).insert({ name: draft.trim(), position: options.length, created_by: meId }).select("id").single();
     if (error) return toast(error.message);
-    setCat(data.id);
-    setNewCat("");
+    onChange(data.id);
+    setDraft("");
     refreshAll();
   }
+  return (
+    <div className="field">
+      <span>{label}</span>
+      {options.length > 0 && (
+        <div className="chips">
+          {options.map((o) => (
+            <button key={o.id} type="button" className="chip chip-sm" aria-pressed={value === o.id} onClick={() => onChange(value === o.id ? null : o.id)}>
+              {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="row">
+        <input
+          className="input grow"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              make();
+            }
+          }}
+          placeholder={placeholder}
+          aria-label={`New ${label.toLowerCase()}`}
+        />
+        <button type="button" className="btn btn-sm" onClick={make} disabled={!draft.trim()}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GroceryToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="row small">
+      <input type="checkbox" className="check" checked={value} onChange={(e) => onChange(e.target.checked)} />
+      Also on the grocery list (Food)
+    </label>
+  );
+}
+
+/** Add or edit one item: what, brand/type, a note, category, where to get it (and a link). */
+export function ShopItemForm({ initial, groceryDefault = false, onDone }: { initial?: ShopItem; groceryDefault?: boolean; onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const { cats, stores } = useShopping();
+  const [name, setName] = useState(initial?.name ?? "");
+  const [detail, setDetail] = useState(initial?.detail ?? "");
+  const [note, setNote] = useState(initial?.note ?? "");
+  const [cat, setCat] = useState<string | null>(initial?.category_id ?? null);
+  const [store, setStore] = useState<string | null>(initial?.store_id ?? null);
+  const [link, setLink] = useState(initial?.link ?? "");
+  const [grocery, setGrocery] = useState(initial?.grocery ?? groceryDefault);
+  const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
-    const supabase = supabaseBrowser();
-    const { error } = initial
-      ? await supabase.from("shop_items").update({ name: name.trim(), detail: detail.trim() || null, category_id: cat, grocery }).eq("id", initial.id)
-      : await addToShopping(meId, [{ name: name.trim(), detail: detail.trim() || null, category_id: cat, grocery }]);
+    const fields = {
+      name: name.trim(),
+      detail: detail.trim() || null,
+      note: note.trim() || null,
+      category_id: cat,
+      store_id: store,
+      link: normalizeLink(link),
+      grocery,
+    };
+    const { error } = initial ? await supabaseBrowser().from("shop_items").update(fields).eq("id", initial.id) : await addToShopping(meId, [fields]);
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
@@ -121,27 +215,12 @@ export function ShopItemForm({ initial, groceryDefault = false, onDone }: { init
   return (
     <form className="stack" onSubmit={submit}>
       <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Eggs, dog food, paper towels…" autoFocus={!initial} required />
-      <input className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Brand or type (optional)" aria-label="Brand or type" />
-      <div className="field">
-        <span>Category (optional)</span>
-        <div className="chips">
-          {cats.map((c) => (
-            <button key={c.id} type="button" className="chip chip-sm" aria-pressed={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>
-              {c.name}
-            </button>
-          ))}
-        </div>
-        <div className="row">
-          <input className="input grow" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="New category (Costco, fun stuff…)" aria-label="New category" />
-          <button type="button" className="btn btn-sm" onClick={makeCategory} disabled={!newCat.trim()}>
-            Add
-          </button>
-        </div>
-      </div>
-      <label className="row small">
-        <input type="checkbox" className="check" checked={grocery} onChange={(e) => setGrocery(e.target.checked)} />
-        Also on the grocery list (Food)
-      </label>
+      <input className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Brand, size or type (optional)" aria-label="Brand or type" />
+      <textarea className="textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional): remember to talk to your mom about this" aria-label="Note" />
+      <PickOrMake label="Category (optional)" table="shop_categories" options={cats} value={cat} onChange={setCat} placeholder="New category (Dogs, house…)" />
+      <PickOrMake label="Where to get it (optional)" table="shop_stores" options={stores} value={store} onChange={setStore} placeholder="New place (Costco, Online, pet store…)" />
+      <input className="input" type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Order link (optional)" aria-label="Order link" />
+      <GroceryToggle value={grocery} onChange={setGrocery} />
       <div className="row-between">
         {initial ? (
           <button type="button" className="btn btn-ghost" onClick={remove}>
@@ -158,30 +237,104 @@ export function ShopItemForm({ initial, groceryDefault = false, onDone }: { init
   );
 }
 
+/** Several at once: one per line, all sharing a category / place. */
+export function ShopBatchForm({ groceryDefault = false, onDone }: { groceryDefault?: boolean; onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const { cats, stores } = useShopping();
+  const [text, setText] = useState("");
+  const [cat, setCat] = useState<string | null>(null);
+  const [store, setStore] = useState<string | null>(null);
+  const [grocery, setGrocery] = useState(groceryDefault);
+  const [busy, setBusy] = useState(false);
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lines.length) return;
+    setBusy(true);
+    const { error } = await addToShopping(
+      meId,
+      lines.map((name) => ({ name, category_id: cat, store_id: store, grocery })),
+    );
+    setBusy(false);
+    if (error) return toast(error.message);
+    refreshAll();
+    toast(`Added ${lines.length} 🛒`);
+    onDone();
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <textarea className="textarea" rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={"One per line:\nPaper towels\nDog food\nBatteries"} autoFocus aria-label="Items, one per line" />
+      <PickOrMake label="Category for all (optional)" table="shop_categories" options={cats} value={cat} onChange={setCat} placeholder="New category" />
+      <PickOrMake label="Where to get them (optional)" table="shop_stores" options={stores} value={store} onChange={setStore} placeholder="New place" />
+      <GroceryToggle value={grocery} onChange={setGrocery} />
+      <p className="small muted">Add notes, links or brands later by tapping an item.</p>
+      <button className="btn btn-primary btn-block" disabled={busy || !lines.length}>
+        Add {lines.length || ""} item{lines.length === 1 ? "" : "s"}
+      </button>
+    </form>
+  );
+}
+
+/** "Just one" or "Add several". */
+export function ShopAdd({ groceryDefault = false, onDone }: { groceryDefault?: boolean; onDone: () => void }) {
+  const [several, setSeveral] = useState(false);
+  return (
+    <div className="stack">
+      <div className="seg" role="group" aria-label="How many">
+        <button type="button" aria-pressed={!several} onClick={() => setSeveral(false)}>
+          Just one
+        </button>
+        <button type="button" aria-pressed={several} onClick={() => setSeveral(true)}>
+          Add several
+        </button>
+      </div>
+      {several ? <ShopBatchForm groceryDefault={groceryDefault} onDone={onDone} /> : <ShopItemForm groceryDefault={groceryDefault} onDone={onDone} />}
+    </div>
+  );
+}
+
+function normalizeLink(v: string) {
+  const t = v.trim();
+  if (!t) return null;
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 type Row = { kind: "cat"; id: string; name: string; count: number } | { kind: "item"; id: string; item: ShopItem };
 
 /**
- * The shopping list: categories (drag to order), items (drag to reorder, or
- * drag into another category), claim, bought, select → to-dos.
+ * The shopping list: filter by category and/or where to get it; drag items to
+ * reorder or into another category; claim, bought, select → to-dos.
  * `groceries` shows only the grocery items (Food's grocery list).
  */
 export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
-  const { cats, items: all } = useShopping();
-  const items = groceries ? all.filter((i) => i.grocery) : all;
+  const { cats, stores, items: all } = useShopping();
+  const listItems = groceries ? all.filter((i) => i.grocery) : all;
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ShopItem | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [ordering, setOrdering] = useState(false);
+  const [ordering, setOrdering] = useState<"cats" | "stores" | null>(null);
+  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [storeFilter, setStoreFilter] = useState<string | null>(null);
+  const filtering = !!catFilter || !!storeFilter;
+
+  const items = listItems.filter((i) => (!catFilter || (i.category_id ?? "none") === catFilter) && (!storeFilter || (i.store_id ?? "none") === storeFilter));
+  const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name;
 
   // One flat list, category headers included, so an item can be dragged
-  // across a header into another category. Headers themselves don't move here.
-  const groups = [...cats.map((c) => ({ id: c.id, name: c.name })), { id: "", name: "No category" }].map((g) => ({
-    ...g,
-    items: items.filter((i) => (i.category_id ?? "") === g.id),
-  }));
+  // across a header into another category. "No category" only shows when
+  // something's in it; empty categories stay as drop targets.
+  const groups = [...cats.map((c) => ({ id: c.id, name: c.name })), { id: "", name: "No category" }]
+    .map((g) => ({ ...g, items: items.filter((i) => (i.category_id ?? "") === g.id) }))
+    .filter((g) => g.id || g.items.length)
+    .filter((g) => !catFilter || g.items.length);
   const rows: Row[] = groups.flatMap((g) => [
     { kind: "cat" as const, id: `cat:${g.id}`, name: g.name, count: g.items.length },
     ...g.items.map((item) => ({ kind: "item" as const, id: item.id, item })),
@@ -200,7 +353,9 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
       const i = items.find((x) => x.id === u.id);
       return i && ((i.category_id ?? null) !== u.category_id || i.position !== u.position);
     });
-    await Promise.all(changed.map((u) => supabase.from("shop_items").update({ category_id: u.category_id, position: u.position }).eq("id", u.id)));
+    const results = await Promise.all(changed.map((u) => supabase.from("shop_items").update({ category_id: u.category_id, position: u.position }).eq("id", u.id)));
+    const failed = results.find((r) => r.error);
+    if (failed?.error) toast(failed.error.message);
     refreshAll();
   }
 
@@ -208,8 +363,8 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     const now = !i.bought;
     if (now) celebrate(el, ["🛒", "✨"]);
     await supabase.from("shop_items").update({ bought: now }).eq("id", i.id);
-    // Bought it → the pantry has it.
-    if (now) await setHave(i.name, true);
+    // Bought a grocery → the pantry has it.
+    if (now && i.grocery) await setHave(i.name, true);
     refreshAll();
   }
 
@@ -222,7 +377,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     const chosen = items.filter((i) => picked.has(i.id));
     const { error } = await supabase
       .from("tasks")
-      .insert(chosen.map((i) => ({ title: `Buy ${i.name}${i.detail ? ` (${i.detail})` : ""}`, list_type: "shared", created_by: meId, claimed_by: i.claimed_by })));
+      .insert(chosen.map((i) => ({ title: `Buy ${i.name}${i.detail ? ` (${i.detail})` : ""}`, list_type: "shared", created_by: meId, claimed_by: i.claimed_by, notes: i.note })));
     if (error) return toast(error.message);
     await supabase.from("shop_items").delete().in("id", [...picked]);
     setPicked(new Set());
@@ -260,51 +415,114 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
         <button className="task-title task-edit" onClick={() => setEditing(i)}>
           {i.name}
         </button>
-        {i.detail && <div className="small muted">{i.detail}</div>}
+        {(i.detail || i.store_id || i.link) && (
+          <div className="small muted row wrap" style={{ gap: 6 }}>
+            {i.detail && <span>{i.detail}</span>}
+            {i.store_id && <span className="sticker sage">{storeName(i.store_id)}</span>}
+            {i.link && (
+              <a href={i.link} target="_blank" rel="noreferrer" className="small">
+                Order ↗
+              </a>
+            )}
+          </div>
+        )}
+        {i.note && <div className="small shop-note">📝 {i.note}</div>}
         {!i.bought && !selecting && (
           <button className={`claim${i.claimed_by ? " claimed" : ""}`} onClick={() => claim(i)} aria-pressed={i.claimed_by === meId}>
             {i.claimed_by === meId ? "🙋 You've got this" : i.claimed_by ? `🙋 ${nameOf(i.claimed_by)}'s got this` : "🙋 I got this"}
           </button>
         )}
       </div>
-      {!selecting && handle}
+      {!selecting && !filtering && handle}
     </div>
   );
+
+  const usedStore = (id: string) => listItems.some((i) => i.store_id === id);
+  const usedCat = (id: string) => listItems.some((i) => i.category_id === id);
+  const shownStores = stores.filter((s) => usedStore(s.id));
+  const shownCats = cats.filter((c) => usedCat(c.id));
 
   return (
     <div className="stack">
       <div className="row wrap">
         <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
-          + Add item
+          + Add
         </button>
         {items.length > 0 && (
           <button className="btn btn-sm" aria-pressed={selecting} onClick={() => (setSelecting((s) => !s), setPicked(new Set()))}>
             {selecting ? "Cancel" : "Select → to-dos"}
           </button>
         )}
-        {cats.length > 1 && !selecting && (
-          <button className="btn btn-sm btn-ghost" aria-pressed={ordering} onClick={() => setOrdering((o) => !o)}>
-            {ordering ? "Done ordering" : "Order categories"}
+        {!selecting && (cats.length > 1 || stores.length > 1) && (
+          <button className="btn btn-sm btn-ghost" aria-pressed={!!ordering} onClick={() => setOrdering((o) => (o ? null : cats.length > 1 ? "cats" : "stores"))}>
+            {ordering ? "Done ordering" : "Order…"}
           </button>
         )}
       </div>
 
+      {(shownCats.length > 0 || shownStores.length > 0) && !ordering && (
+        <div className="stack-sm">
+          {shownCats.length > 0 && (
+            <div className="chips" role="group" aria-label="Filter by category">
+              <span className="small muted">Category</span>
+              {shownCats.map((c) => (
+                <button key={c.id} className="chip chip-sm" aria-pressed={catFilter === c.id} onClick={() => setCatFilter(catFilter === c.id ? null : c.id)}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {shownStores.length > 0 && (
+            <div className="chips" role="group" aria-label="Filter by where to get it">
+              <span className="small muted">Where</span>
+              {shownStores.map((s) => (
+                <button key={s.id} className="chip chip-sm" aria-pressed={storeFilter === s.id} onClick={() => setStoreFilter(storeFilter === s.id ? null : s.id)}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {filtering && <p className="small faint">Clear the filters to drag things around.</p>}
+        </div>
+      )}
+
       {ordering ? (
-        <div className="card" style={{ padding: "4px 12px" }}>
-          <Sortable
-            items={cats}
-            getId={(c) => c.id}
-            onReorder={(ids) => savePositions("shop_categories", ids)}
-            render={(c, handle) => (
-              <div className="task">
-                <strong className="grow">{c.name}</strong>
-                {handle}
-              </div>
-            )}
-          />
+        <div className="stack-sm">
+          <div className="seg" role="group" aria-label="What to order">
+            <button aria-pressed={ordering === "cats"} onClick={() => setOrdering("cats")} disabled={cats.length < 2}>
+              Categories
+            </button>
+            <button aria-pressed={ordering === "stores"} onClick={() => setOrdering("stores")} disabled={stores.length < 2}>
+              Places
+            </button>
+          </div>
+          <div className="card" style={{ padding: "4px 12px" }}>
+            <Sortable
+              items={ordering === "cats" ? cats : stores}
+              getId={(c) => c.id}
+              onReorder={(ids) => savePositions(ordering === "cats" ? "shop_categories" : "shop_stores", ids)}
+              render={(c, handle) => (
+                <div className="task">
+                  <strong className="grow">{c.name}</strong>
+                  <button
+                    className="icon-btn"
+                    aria-label={`Remove ${c.name}`}
+                    onClick={async () => {
+                      if (!confirm(`Remove "${c.name}"? Items in it stay on the list.`)) return;
+                      await supabase.from(ordering === "cats" ? "shop_categories" : "shop_stores").delete().eq("id", c.id);
+                      refreshAll();
+                    }}
+                  >
+                    ×
+                  </button>
+                  {handle}
+                </div>
+              )}
+            />
+          </div>
         </div>
       ) : items.length === 0 ? (
-        <p className="muted">{groceries ? "No groceries needed. Nice." : "Nothing to buy. Nice."}</p>
+        <p className="muted">{filtering ? "Nothing matches." : groceries ? "No groceries needed. Nice." : "Nothing to buy. Nice."}</p>
       ) : (
         <div className="card" style={{ padding: "2px 12px" }}>
           <Sortable
@@ -313,9 +531,9 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
             onReorder={moveRows}
             render={(r, handle) =>
               r.kind === "cat" ? (
-                <div className="section-title shop-cat">
+                <div className={`section-title shop-cat${r.count === 0 ? " empty" : ""}`}>
                   {r.name}
-                  {r.count === 0 && <span className="faint"> · drag things here</span>}
+                  {r.count === 0 && <span className="small faint"> · drag things here</span>}
                 </div>
               ) : (
                 itemRow(r.item, handle)
@@ -338,7 +556,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
 
       {adding && (
         <Sheet title={groceries ? "Grocery list" : "Shopping list"} onClose={() => setAdding(false)}>
-          <ShopItemForm groceryDefault={groceries} onDone={() => setAdding(false)} />
+          <ShopAdd groceryDefault={groceries} onDone={() => setAdding(false)} />
         </Sheet>
       )}
       {editing && (

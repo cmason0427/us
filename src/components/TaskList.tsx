@@ -8,7 +8,9 @@ import { URGENCY_RANK, type ListType, type Task, type Urgency } from "@/lib/type
 import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
-import { DeadlinePicker } from "./DeadlinePicker";
+import { Sheet } from "./Sheet";
+import { TaskForm, TaskPresets } from "./TaskForm";
+import { dogVoice } from "@/lib/dogs";
 import { DogPic } from "./DogPic";
 import { IconTrash } from "./Art";
 
@@ -35,10 +37,8 @@ const deadlineOf = (t: Task): Deadline | null => (t.due_at ? { due_at: t.due_at,
 export function TaskList({ listType, show = [listType], title, hint }: { listType: ListType; show?: ListType[]; title: string; hint: string }) {
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
-  const [draft, setDraft] = useState("");
-  const [urgency, setUrgency] = useState<Urgency>("low");
-  const [deadline, setDeadline] = useState<Deadline | null>(null);
-  const [pickingDeadline, setPickingDeadline] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
   // 0 before hydration: nothing reads as overdue until the phone's clock is known.
   const now = useNow()?.getTime() ?? 0;
   const [showDone, setShowDone] = useState(false);
@@ -68,24 +68,6 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
   }, [stale, supabase]);
   const done = tasks.filter((t) => t.done).sort((a, b) => (b.done_at ?? "").localeCompare(a.done_at ?? ""));
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!draft.trim()) return;
-    const title = draft.trim();
-    setDraft("");
-    const { error } = await supabase
-      .from("tasks")
-      .insert({ title, list_type: listType, owner: listType === "personal" ? meId : null, urgency, ...(deadline ?? {}), created_by: meId });
-    if (error) {
-      setDraft(title);
-      return toast(error.message);
-    }
-    setUrgency("low");
-    setDeadline(null);
-    setPickingDeadline(false);
-    refreshAll();
-  }
-
   async function toggle(t: Task, el: HTMLElement) {
     const nowDone = !t.done;
     if (nowDone) celebrate(el);
@@ -108,15 +90,6 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
     refreshAll();
   }
 
-  async function edit(t: Task, title: string, d: Deadline | null) {
-    const { error } = await supabase
-      .from("tasks")
-      .update({ title, due_at: d?.due_at ?? null, due_all_day: d?.due_all_day ?? false })
-      .eq("id", t.id);
-    if (error) toast(error.message);
-    refreshAll();
-  }
-
   async function remove(t: Task) {
     await supabase.from("tasks").delete().eq("id", t.id);
     refreshAll();
@@ -134,29 +107,25 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
       <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
         {hint}
       </p>
-      <form className="quick-add" onSubmit={add}>
-        <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add something…" aria-label={`Add to ${title}`} />
-        <button type="button" className="urg" data-u={urgency} onClick={() => setUrgency(NEXT_URGENCY[urgency])} aria-label={`Urgency: ${urgency}. Tap to change.`} style={{ minHeight: 46, paddingInline: 12 }}>
-          {urgency === "low" ? "no rush" : urgency}
+      <div className="row wrap">
+        <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+          ＋ Add new
         </button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-pressed={pickingDeadline || deadline !== null}
-          onClick={() => setPickingDeadline((p) => !p)}
-          aria-label="Set a deadline"
-          style={{ minHeight: 46 }}
-        >
-          📅
-        </button>
-        <button className="btn btn-primary" disabled={!draft.trim()}>
-          Add
-        </button>
-      </form>
-      {pickingDeadline && (
+      </div>
+      {listType !== "personal" && (
         <div style={{ marginTop: 8 }}>
-          <DeadlinePicker value={deadline} onChange={setDeadline} />
+          <TaskPresets only={listType} />
         </div>
+      )}
+      {adding && (
+        <Sheet title={listType === "dogs" ? "Dog to-do" : listType === "personal" ? "Just mine" : "To-do"} onClose={() => setAdding(false)}>
+          <TaskForm listType={listType} onDone={() => setAdding(false)} />
+        </Sheet>
+      )}
+      {editing && (
+        <Sheet title="Edit to-do" onClose={() => setEditing(null)}>
+          <TaskForm initial={editing} onDone={() => setEditing(null)} />
+        </Sheet>
       )}
 
       <div className="card" style={{ marginTop: 12, padding: "4px 14px" }}>
@@ -167,7 +136,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
 
@@ -186,7 +155,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -214,7 +183,7 @@ function TaskRow({
   showWho: boolean;
   onToggle: (t: Task, el: HTMLElement) => void;
   onBump: (t: Task) => void;
-  onEdit: (t: Task, title: string, d: Deadline | null) => void;
+  onEdit: (t: Task) => void;
   /** Shared lists only: claim or unclaim. */
   onClaim?: (t: Task) => void;
   onRemove: (t: Task) => void;
@@ -222,58 +191,24 @@ function TaskRow({
   meId: string;
   now: number;
 }) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [due, setDue] = useState<Deadline | null>(deadlineOf(t));
-  const startEdit = () => {
-    setDue(deadlineOf(t));
-    setEditing(t.title);
-  };
-  const save = () => {
-    const title = editing?.trim();
-    setEditing(null);
-    if (title) onEdit(t, title, due);
-  };
   const overdue = isOverdue(t, now);
   const d = deadlineOf(t);
   return (
     <div className={`task${t.done ? " done" : ""}`}>
       <input type="checkbox" className="check" checked={t.done} onChange={(e) => onToggle(t, e.currentTarget)} aria-label={`Done: ${t.title}`} />
       <div className="grow">
-        {editing !== null ? (
-          <div className="stack-sm">
-            <input
-              className="input"
-              value={editing}
-              onChange={(e) => setEditing(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") save();
-                if (e.key === "Escape") setEditing(null);
-              }}
-              aria-label="Edit to-do"
-              autoFocus
-            />
-            <DeadlinePicker value={due} onChange={setDue} />
-            <div className="row">
-              <button className="btn btn-primary btn-sm" onClick={save} disabled={!editing.trim()}>
-                Save
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button className="task-title task-edit" onClick={startEdit} aria-label={`Edit ${t.title}`}>
-            {t.title}
-          </button>
-        )}
-        {d && !t.done && editing === null && (
+        <button className="task-title task-edit" onClick={() => onEdit(t)} aria-label={`Edit ${t.title}`}>
+          {t.title}
+        </button>
+        {t.dogs?.length > 0 && <span className="sticker" style={{ marginLeft: 6 }}>🐾 {dogVoice(t.dogs)}</span>}
+        {t.notes && <div className="small muted">{t.notes}</div>}
+        {d && !t.done && (
           <div className={`small due${overdue ? " overdue" : ""}`}>
             {overdue ? "⏰ Overdue · " : "⏳ "}
             {dueLabel(d, new Date(now))}
           </div>
         )}
-        {onClaim && !t.done && editing === null && (
+        {onClaim && !t.done && (
           <button className={`claim${t.claimed_by ? " claimed" : ""}`} onClick={() => onClaim(t)} aria-pressed={t.claimed_by === meId}>
             {t.claimed_by === meId ? "🙋 You're on it" : t.claimed_by ? `🙋 ${nameOf(t.claimed_by)}'s on it` : "🙋 I'll do it"}
           </button>

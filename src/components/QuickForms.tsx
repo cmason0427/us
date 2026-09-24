@@ -3,10 +3,8 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
-import type { Activity, Cost, Duration, Energy, ListType, Setting, Urgency } from "@/lib/types";
+import type { Activity, Cost, Duration, Energy, Setting, Urgency } from "@/lib/types";
 import { COST_OPTIONS, DURATION_OPTIONS, KEEP_OPTIONS, SETTING_OPTIONS } from "@/lib/activity";
-import type { Deadline } from "@/lib/deadline";
-import { DeadlinePicker } from "./DeadlinePicker";
 import { useApp } from "./AppProvider";
 
 const URGENCIES: Urgency[] = ["low", "medium", "high"];
@@ -28,69 +26,8 @@ export function UrgencyPicker({ value, onChange }: { value: Urgency; onChange: (
   );
 }
 
-/* ─── To-dos ─────────────────────────────────────────────────── */
-
-export function TaskForm({ listType: initialList = "shared", onDone }: { listType?: ListType; onDone: () => void }) {
-  const { meId, partner, toast } = useApp();
-  const [title, setTitle] = useState("");
-  const [list, setList] = useState<ListType>(initialList);
-  const [urgency, setUrgency] = useState<Urgency>("low");
-  const [deadline, setDeadline] = useState<Deadline | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setBusy(true);
-    const { error } = await supabaseBrowser()
-      .from("tasks")
-      .insert({ title: title.trim(), list_type: list, owner: list === "personal" ? meId : null, urgency, ...(deadline ?? {}), created_by: meId });
-    setBusy(false);
-    if (error) return toast(error.message);
-    refreshAll();
-    toast(list === "personal" ? "Added to your list" : list === "household" ? "Added to household" : list === "dogs" ? "Added to dog to-dos" : "Added to our list");
-    onDone();
-  }
-
-  return (
-    <form className="stack" onSubmit={submit}>
-      <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" autoFocus required />
-      <div className="field">
-        <span>Which list</span>
-        <div className="seg" role="group">
-          <button type="button" aria-pressed={list === "personal"} onClick={() => setList("personal")}>
-            Just mine
-          </button>
-          <button type="button" aria-pressed={list === "shared"} onClick={() => setList("shared")}>
-            Shared
-          </button>
-          <button type="button" aria-pressed={list === "dogs"} onClick={() => setList("dogs")}>
-            Dogs
-          </button>
-        </div>
-        <p className="small muted">
-          {list === "personal"
-            ? `Private — ${partner?.display_name ?? "they"} can't see this.`
-            : list === "dogs"
-                ? "Shows in Dogs and in Ours."
-                : "Either of you can check it off."}
-        </p>
-      </div>
-      <div className="field">
-        <span>Urgency</span>
-        <UrgencyPicker value={urgency} onChange={setUrgency} />
-      </div>
-      <div className="field">
-        <span>Deadline</span>
-        <DeadlinePicker value={deadline} onChange={setDeadline} />
-        <p className="small muted">If it passes, it jumps to the top as high priority.</p>
-      </div>
-      <button className="btn btn-primary btn-block" disabled={busy || !title.trim()}>
-        Add it
-      </button>
-    </form>
-  );
-}
+/* ─── To-dos: see TaskForm.tsx ──────────────────────────────── */
+export { TaskForm } from "./TaskForm";
 
 /* ─── Activities ────────────────────────────────────────────────────────── */
 

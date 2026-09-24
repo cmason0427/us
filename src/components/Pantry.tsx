@@ -49,9 +49,20 @@ export function Pantry() {
     toast(`${name} → grocery list 🛒`);
   }
 
-  async function forget(key: string) {
-    await supabaseBrowser().from("pantry").delete().eq("name", key);
+  // Gone for good: out of the pantry, and (if you say so) out of any meal that lists it.
+  async function forget(key: string, label: string) {
+    const supabase = supabaseBrowser();
+    const usedIn = meals.filter((m) => m.meal_ingredients.some((i) => i.name.trim().toLowerCase() === key));
+    if (usedIn.length) {
+      const list = usedIn.map((m) => m.name).join(", ");
+      if (!confirm(`${label} is an ingredient in ${list}. Remove it from ${usedIn.length === 1 ? "that meal" : "those meals"} too?`)) return;
+      const ids = usedIn.flatMap((m) => m.meal_ingredients.filter((i) => i.name.trim().toLowerCase() === key).map((i) => i.id));
+      const { error } = await supabase.from("meal_ingredients").delete().in("id", ids);
+      if (error) return toast(error.message);
+    }
+    await supabase.from("pantry").delete().eq("name", key);
     refreshAll();
+    toast(`Removed ${label}`);
   }
 
   const row = ([key, label]: [string, string], isHave: boolean) => (
@@ -66,11 +77,9 @@ export function Pantry() {
             🛒 Add
           </button>
         ))}
-      {pantry.has(key) && (
-        <button className="icon-btn" onClick={() => forget(key)} aria-label={`Forget ${label}`}>
-          ×
-        </button>
-      )}
+      <button className="icon-btn" onClick={() => forget(key, label)} aria-label={`Remove ${label}`} title="Remove">
+        ×
+      </button>
     </div>
   );
 

@@ -113,6 +113,9 @@ export interface Task {
   due_all_day: boolean;
   /** Who said "I'll do it" (shared lists). */
   claimed_by: string | null;
+  /** Dog to-dos: which dog(s) it's for. */
+  dogs: string[];
+  notes: string | null;
   done: boolean;
   done_at: string | null;
   done_by: string | null;
