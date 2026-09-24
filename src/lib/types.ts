@@ -53,6 +53,8 @@ export interface Post {
   text: string | null;
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
+  /** Written as a dog note: shown as from the dog(s), not the author. */
+  as_dog: boolean;
   /** Set on the automatic posts for asks (sent, answered, moved). */
   event_id: string | null;
   created_at: string;

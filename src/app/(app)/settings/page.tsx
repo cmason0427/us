@@ -9,6 +9,7 @@ import { disablePush, enablePush, isStandalone, pushState, type PushState } from
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PinPad } from "@/components/PinPad";
+import { DogPhotos } from "@/components/DogPhotos";
 import { Flower, Wavy } from "@/components/Art";
 
 export default function SettingsPage() {
@@ -151,6 +152,12 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="card stack" style={{ marginTop: 16 }}>
+        <h2>The dogs</h2>
+        <p className="small muted">Tap a dog to set their photo. Dog notes post as them.</p>
+        <DogPhotos />
       </section>
 
       <section className="card stack" style={{ marginTop: 16 }}>

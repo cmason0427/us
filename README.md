@@ -2,7 +2,8 @@
 
 A private two-person app for Charlie and Parker: a shared calendar, a no-pressure
 update feed, a mood → activity matcher, to-dos, and dog notes (Kodo and Wiley; the list is `src/lib/dogs.ts`).
-Dog notes are feed posts tagged with dogs, so they show in the feed and the Dogs tab. It's a
+Dog notes are feed posts tagged with dogs (`as_dog`), shown as from the dog, or "The boys" for both; dog
+profile photos live in the `dogs` table and are set in Settings. It's a
 Next.js PWA hosted on Netlify (https://us-little-corner.netlify.app), with Supabase for the database, auth, realtime updates
 and photo storage, and Web Push for notifications.
 

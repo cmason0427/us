@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, u
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import type { Profile } from "@/lib/types";
+import { useDogPhotos } from "./DogAvatar";
 import { awayTooLong, isUnlocked, lockAndGoToLogin, markHidden } from "@/lib/lock";
 
 export type AddKind = "post" | "event" | "task" | "household" | "dog-note" | "dog-task" | "activity";
@@ -14,6 +15,8 @@ interface AppCtx {
   partner: Profile | undefined;
   profiles: Profile[];
   nameOf: (userId: string | null | undefined) => string;
+  /** Signed URLs of the dogs' profile photos, by dog id. */
+  dogPhotos: Record<string, string | undefined>;
   toast: (msg: string) => void;
   openAdd: (kind?: AddKind | "menu") => void;
   addOpen: AddKind | "menu" | null;
@@ -42,6 +45,7 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
     ["profiles"],
   );
 
+  const dogPhotos = useDogPhotos();
   const me = profiles.find((p) => p.id === meId);
   const partner = profiles.find((p) => p.id !== meId);
 
@@ -91,12 +95,13 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
       partner,
       profiles,
       nameOf: (id) => (id ? byId.get(id) ?? "Someone" : "Both of us"),
+      dogPhotos,
       toast,
       addOpen,
       openAdd: (kind = "menu") => setAddOpen(kind),
       closeAdd: () => setAddOpen(null),
     };
-  }, [meId, me, partner, profiles, toast, addOpen]);
+  }, [meId, me, partner, profiles, toast, addOpen, dogPhotos]);
 
   return (
     <Ctx.Provider value={value}>

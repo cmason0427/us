@@ -1,48 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import { ago } from "@/lib/dates";
-import { dogName } from "@/lib/dogs";
+import { dogName, dogVoice } from "@/lib/dogs";
+import { DogAvatar } from "./DogAvatar";
 import type { Post } from "@/lib/types";
 import { useApp } from "./AppProvider";
 import { IconTrash } from "./Art";
 
-// Signed URLs for private photos, cached for the session (they last an hour).
-const urlCache = new Map<string, { url: string; exp: number }>();
-
-export function usePhotoUrls(paths: string[]) {
-  // Bumped whenever a batch of URLs lands in the cache, to re-render.
-  const [, setVersion] = useState(0);
-  const key = paths.join("|");
-  useEffect(() => {
-    const now = Date.now();
-    const missing = key ? key.split("|").filter((p) => !((urlCache.get(p)?.exp ?? 0) > now)) : [];
-    if (!missing.length) return;
-    supabaseBrowser()
-      .storage.from("photos")
-      .createSignedUrls(missing, 3600)
-      .then(({ data }) => {
-        for (const d of data ?? []) {
-          if (d.signedUrl && d.path) urlCache.set(d.path, { url: d.signedUrl, exp: now + 50 * 60 * 1000 });
-        }
-        setVersion((v) => v + 1);
-      });
-  }, [key]);
-  const urls: Record<string, string> = {};
-  for (const p of paths) {
-    const hit = urlCache.get(p);
-    if (hit) urls[p] = hit.url;
-  }
-  return urls;
-}
-
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
-  const { meId, nameOf, toast } = useApp();
+  const { meId, nameOf, toast, dogPhotos } = useApp();
+  // Dog notes speak as the dog(s); only the person who wrote one can delete it.
+  const asDog = post.as_dog && post.dogs.length > 0;
   const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
   const n = photos.length;
   const created = new Date(post.created_at);
@@ -60,11 +33,15 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   return (
     <article className="card card-stitched post">
       <div className="post-head">
-        <span className="avatar-btn" aria-hidden style={{ width: 34, height: 34, fontSize: "0.95rem", background: post.author === meId ? "var(--butter)" : "var(--rose)" }}>
-          {nameOf(post.author)[0]}
-        </span>
+        {asDog ? (
+          <DogAvatar ids={post.dogs} photos={dogPhotos} />
+        ) : (
+          <span className="avatar-btn" aria-hidden style={{ width: 34, height: 34, fontSize: "0.95rem", background: post.author === meId ? "var(--butter)" : "var(--rose)" }}>
+            {nameOf(post.author)[0]}
+          </span>
+        )}
         <div className="grow">
-          <div className="post-author">{nameOf(post.author)}</div>
+          <div className="post-author">{asDog ? dogVoice(post.dogs) : nameOf(post.author)}</div>
           <div className="small faint">{when}</div>
         </div>
         {post.author === meId && (
@@ -89,7 +66,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           ))}
         </div>
       )}
-      {post.dogs.length > 0 && (
+      {post.dogs.length > 0 && !asDog && (
         <div className="chips post-dogs">
           {post.dogs.map((d) => (
             <span key={d} className="sticker">

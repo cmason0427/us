@@ -8,7 +8,8 @@ import { useNow } from "@/lib/dates";
 import type { Post } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
-import { PostCard, usePhotoUrls } from "@/components/PostCard";
+import { PostCard } from "@/components/PostCard";
+import { usePhotoUrls } from "@/lib/photos";
 import { DogTodos } from "@/components/DogTodos";
 import { Flower, Teapot, Wavy } from "@/components/Art";
 

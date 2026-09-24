@@ -13,8 +13,10 @@ import { PostComposer } from "@/components/PostComposer";
 import { DeadlinePicker } from "@/components/DeadlinePicker";
 import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
-import { PostCard, usePhotoUrls } from "@/components/PostCard";
+import { PostCard } from "@/components/PostCard";
+import { usePhotoUrls } from "@/lib/photos";
 import { DOGS, type DogId } from "@/lib/dogs";
+import { DogAvatar } from "@/components/DogAvatar";
 import { IconTrash, Paw, Sprig, Teapot, Wavy } from "@/components/Art";
 
 // Ours also collects household and dog to-dos, so nothing hides in a side tab.
@@ -357,6 +359,7 @@ function TaskRow({
 // Dog notes are feed posts tagged with dogs; to-dos also show in Ours.
 function Dogs({ initialDog }: { initialDog: DogId | null }) {
   const supabase = supabaseBrowser();
+  const { dogPhotos } = useApp();
   const [filter, setFilter] = useState<DogId | null>(initialDog);
   const [writing, setWriting] = useState(false);
   const pickFilter = (d: DogId | null) => {
@@ -381,7 +384,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
     <>
       <button className="card composer-prompt" onClick={() => setWriting(true)}>
         <Paw width={34} height={34} style={{ color: "var(--terracotta)" }} />
-        <span>Add a dog note… it goes in the feed too</span>
+        <span>Add a dog note… it posts as the dog</span>
       </button>
 
       <div style={{ marginTop: 18 }}>
@@ -397,7 +400,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
         </button>
         {DOGS.map((d) => (
           <button key={d.id} className="chip" aria-pressed={filter === d.id} onClick={() => pickFilter(d.id)}>
-            🐾 {d.name}
+            <DogAvatar ids={[d.id]} size={22} photos={dogPhotos} /> {d.name}
           </button>
         ))}
       </div>

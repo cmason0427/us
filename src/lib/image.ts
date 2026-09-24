@@ -7,10 +7,10 @@ const MAX_EDGE = 1800;
  * is 4–8MB; this lands around 300–600KB). Falls back to the original file if
  * the browser can't decode it.
  */
-export async function shrinkImage(file: File): Promise<{ blob: Blob; width: number | null; height: number | null; ext: string }> {
+export async function shrinkImage(file: File, maxEdge = MAX_EDGE): Promise<{ blob: Blob; width: number | null; height: number | null; ext: string }> {
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const w = Math.round(bitmap.width * scale);
     const h = Math.round(bitmap.height * scale);
     const canvas = document.createElement("canvas");

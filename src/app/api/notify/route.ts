@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { partnerOf, sendPushToUser } from "@/lib/push";
 import { formatWhen } from "@/lib/format";
-import { dogName } from "@/lib/dogs";
+import { dogName, dogVoice } from "@/lib/dogs";
 
 type Body =
   | { kind: "ask"; id: string }
@@ -66,15 +66,17 @@ export async function POST(req: Request) {
   }
 
   if (body.kind === "post") {
-    const { data: post } = await supabase.from("posts").select("id, author, text, dogs").eq("id", body.id).single();
+    const { data: post } = await supabase.from("posts").select("id, author, text, dogs, as_dog").eq("id", body.id).single();
     if (!post || post.author !== me.id) return NextResponse.json({ error: "not your post" }, { status: 400 });
     // This nudge is opt-in, off by default.
     if (!partner.notify_partner_posts) return NextResponse.json({ sent: 0 });
     // Dog notes say what happened; a vague ping about the dogs isn't useful.
     const dogs = (post.dogs as string[]).map(dogName).join(" & ");
+    // A dog note speaks as the dog: "🐾 Kodo — had a runny poop".
+    const voice = post.as_dog && dogs ? dogVoice(post.dogs as string[]) : null;
     const sent = await sendPushToUser(partner.id, {
-      title: dogs ? `🐾 ${dogs}` : "🌼 A little update",
-      body: dogs && post.text ? `${myName}: ${post.text}` : `${myName} shared something. Whenever you get a sec.`,
+      title: voice ? `🐾 ${voice}` : dogs ? `🐾 ${dogs}` : "🌼 A little update",
+      body: voice && post.text ? post.text : dogs && post.text ? `${myName}: ${post.text}` : `${myName} shared something. Whenever you get a sec.`,
       url: dogs ? "/lists?tab=dogs" : "/",
       tag: dogs ? `dogs-${post.id}` : "feed", // plain updates collapse into one quiet notification
     });

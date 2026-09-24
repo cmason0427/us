@@ -57,7 +57,7 @@ export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { on
     try {
       const { data: post, error: postErr } = await supabase
         .from("posts")
-        .insert({ author: meId, text: text.trim() || null, dogs })
+        .insert({ author: meId, text: text.trim() || null, dogs, as_dog: dogNote })
         .select("id")
         .single();
       if (postErr) throw postErr;
