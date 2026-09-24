@@ -5,11 +5,10 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { usePhotoUrls } from "@/lib/photos";
-import { useFolders, useSaves } from "@/lib/saved";
+import { shrinkImage } from "@/lib/image";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
-import { PostComposer } from "@/components/PostComposer";
 import { SpicyGate } from "@/components/SpicyGate";
 import { DogPic } from "@/components/DogPic";
 import { Wavy } from "@/components/Art";
@@ -92,65 +91,197 @@ function Spicy() {
   );
 }
 
-/* ─── Pics & videos: what they've added for you; add for them ─────────────── */
+/* ─── Pics & videos: one shared collection, tagged by who's in each ────── */
 
 const isVideo = (path: string) => /\.(mp4|mov|m4v|webm|3gp)$/i.test(path);
 
-function Pics() {
-  const { meId, partner, nameOf } = useApp();
-  const folder = useFolders().find((f) => f.is_spicy);
-  const saves = useSaves(folder?.id ?? null);
-  const urls = usePhotoUrls(saves.map((s) => s.storage_path));
-  const [adding, setAdding] = useState(false);
+interface SpicyMedia {
+  id: string;
+  storage_path: string;
+  people: string[];
+  caption: string | null;
+  added_by: string;
+  created_at: string;
+}
 
-  async function remove(id: string, path: string) {
-    if (!confirm("Remove this?")) return;
-    const supabase = supabaseBrowser();
-    await supabase.from("saves").delete().eq("id", id);
-    if (path.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([path]);
+type PeopleFilter = "all" | "me" | "them" | "both";
+
+/** Who's in it: tap one of you, or both. */
+function PeopleTags({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { profiles, meId } = useApp();
+  const ordered = [...profiles].sort((a) => (a.id === meId ? -1 : 1));
+  return (
+    <div className="chips" role="group" aria-label="Who's in it">
+      {ordered.map((p) => {
+        const on = value.includes(p.id);
+        return (
+          <button key={p.id} type="button" className="chip chip-sm" aria-pressed={on} onClick={() => onChange(on ? value.filter((x) => x !== p.id) : [...value, p.id])}>
+            {p.id === meId ? "Me" : p.display_name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Pics() {
+  const { meId, partner, nameOf, toast } = useApp();
+  const supabase = supabaseBrowser();
+  const [filter, setFilter] = useState<PeopleFilter>("all");
+  const [pending, setPending] = useState<{ file: File; url: string; people: string[] }[]>([]);
+  const [open, setOpen] = useState<SpicyMedia | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { data: media = [] } = useLive<SpicyMedia[]>(
+    "spicy_media",
+    async () => {
+      const { data, error } = await supabase.from("spicy_media").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as SpicyMedia[];
+    },
+    ["spicy_media"],
+  );
+  const urls = usePhotoUrls(media.map((m) => m.storage_path));
+  const them = partner?.id ?? "";
+  const only = (m: SpicyMedia, id: string) => m.people.length === 1 && m.people[0] === id;
+  const shown = media.filter((m) =>
+    filter === "all" ? true : filter === "me" ? only(m, meId) : filter === "them" ? only(m, them) : m.people.includes(meId) && m.people.includes(them),
+  );
+  const untagged = media.filter((m) => m.people.length === 0).length;
+
+  function pick(files: FileList | null) {
+    const list = Array.from(files ?? []);
+    setPending(list.map((file) => ({ file, url: URL.createObjectURL(file), people: [] })));
+  }
+
+  async function upload() {
+    setBusy(true);
+    const done: string[] = [];
+    try {
+      for (const p of pending) {
+        const video = p.file.type.startsWith("video/");
+        const { blob, ext } = video ? { blob: p.file as Blob, ext: p.file.name.split(".").pop()?.toLowerCase() || "mp4" } : await shrinkImage(p.file);
+        const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
+        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || (video ? "video/mp4" : "image/jpeg"), cacheControl: "31536000" });
+        if (error) throw error;
+        done.push(path);
+        const { error: rowErr } = await supabase.from("spicy_media").insert({ storage_path: path, people: p.people, added_by: meId });
+        if (rowErr) throw rowErr;
+      }
+      // The feed only hears that something's new; never what.
+      const { data: post } = await supabase.from("posts").insert({ author: meId, text: "🌶️ Something new in Spicy", spicy: true }).select("id").single();
+      if (post) notify({ kind: "spicy", id: post.id });
+      pending.forEach((p) => URL.revokeObjectURL(p.url));
+      setPending([]);
+      refreshAll();
+      toast(`Added ${done.length} 🌶️`);
+    } catch (err) {
+      toast((err as Error).message);
+    }
+    setBusy(false);
+  }
+
+  async function retag(m: SpicyMedia, people: string[]) {
+    const { error } = await supabase.from("spicy_media").update({ people }).eq("id", m.id);
+    if (error) return toast(error.message);
+    setOpen({ ...m, people });
+    refreshAll();
+  }
+
+  async function remove(m: SpicyMedia) {
+    if (!confirm("Remove this for both of you?")) return;
+    await supabase.from("spicy_media").delete().eq("id", m.id);
+    if (m.storage_path.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([m.storage_path]);
+    setOpen(null);
     refreshAll();
   }
 
   return (
     <div className="stack">
-      {partner && (
-        <button className="card composer-prompt" onClick={() => setAdding(true)}>
-          <span style={{ fontSize: "1.6rem" }}>🌶️</span>
-          <span>Add something for {partner.display_name} (photos or videos)…</span>
-        </button>
-      )}
-      {saves.length === 0 ? (
+      <label className="card composer-prompt" style={{ cursor: "pointer" }}>
+        <span style={{ fontSize: "1.6rem" }}>🌶️</span>
+        <span>Add pics or videos…</span>
+        <input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => (pick(e.target.files), (e.target.value = ""))} />
+      </label>
+
+      <div className="chips" role="group" aria-label="Show">
+        {(
+          [
+            ["all", "All"],
+            ["me", "Just me"],
+            ["them", `Just ${partner?.display_name ?? "them"}`],
+            ["both", "Both of us"],
+          ] as const
+        ).map(([v, label]) => (
+          <button key={v} className="chip chip-sm" aria-pressed={filter === v} onClick={() => setFilter(v)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {untagged > 0 && filter === "all" && <p className="small muted">{untagged} not tagged yet. Tap one to tag who&apos;s in it.</p>}
+
+      {shown.length === 0 ? (
         <div className="empty">
           <DogPic name="wiley_curled" size={90} />
-          <p>Nothing here yet.</p>
+          <p>{media.length ? "None of those yet." : "Nothing here yet."}</p>
         </div>
       ) : (
         <div className="saved-grid">
-          {saves.map((s) => (
-            <figure key={s.id} className="saved-item">
-              {isVideo(s.storage_path) ? (
-                urls[s.storage_path] && <video src={urls[s.storage_path]} controls playsInline preload="metadata" />
+          {shown.map((m) => (
+            <button key={m.id} className="saved-item spicy-thumb" onClick={() => setOpen(m)}>
+              {isVideo(m.storage_path) ? (
+                urls[m.storage_path] && <video src={urls[m.storage_path]} muted playsInline preload="metadata" />
               ) : (
-                <a href={urls[s.storage_path]} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {urls[s.storage_path] && <img src={urls[s.storage_path]} alt={s.caption ?? ""} loading="lazy" />}
-                </a>
+                // eslint-disable-next-line @next/next/no-img-element
+                urls[m.storage_path] && <img src={urls[m.storage_path]} alt="" loading="lazy" />
               )}
-              <figcaption className="small">
-                <span className="faint">
-                  {s.caption ? `${s.caption} · ` : ""}from {nameOf(s.added_by)}
-                </span>
-                <button className="icon-btn" onClick={() => remove(s.id, s.storage_path)} aria-label="Remove">
-                  ×
-                </button>
-              </figcaption>
-            </figure>
+              {isVideo(m.storage_path) && <span className="spicy-play">▶</span>}
+            </button>
           ))}
         </div>
       )}
-      {adding && (
-        <Sheet title="🌶️ Something spicy" onClose={() => setAdding(false)}>
-          <PostComposer initialSpicy onDone={() => setAdding(false)} />
+
+      {pending.length > 0 && (
+        <Sheet title={`Tag who's in ${pending.length > 1 ? "each" : "it"}`} onClose={() => setPending([])}>
+          <div className="stack">
+            {pending.map((p, i) => (
+              <div key={p.url} className="row" style={{ alignItems: "flex-start" }}>
+                <div className="photo-pick">
+                  {p.file.type.startsWith("video/") ? (
+                    <video src={p.url} muted playsInline />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.url} alt="" />
+                  )}
+                </div>
+                <PeopleTags value={p.people} onChange={(people) => setPending((ps) => ps.map((x, j) => (j === i ? { ...x, people } : x)))} />
+              </div>
+            ))}
+            <p className="small muted">Videos up to about 50 MB each.</p>
+            <button className="btn btn-primary btn-block" disabled={busy} onClick={upload}>
+              {busy ? "Adding…" : `Add ${pending.length}`}
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {open && (
+        <Sheet title="🌶️" onClose={() => setOpen(null)}>
+          <div className="stack">
+            {isVideo(open.storage_path) ? (
+              <video src={urls[open.storage_path]} controls playsInline style={{ width: "100%", borderRadius: 14 }} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={urls[open.storage_path]} alt="" style={{ width: "100%", borderRadius: 14 }} />
+            )}
+            <div className="field">
+              <span>Who&apos;s in it</span>
+              <PeopleTags value={open.people} onChange={(people) => retag(open, people)} />
+            </div>
+            <p className="small faint">Added by {open.added_by === meId ? "you" : nameOf(open.added_by)}</p>
+            <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => remove(open)}>
+              Remove for both of us
+            </button>
+          </div>
         </Sheet>
       )}
     </div>

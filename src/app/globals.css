@@ -400,6 +400,9 @@ p { margin: 0; }
 .saved-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .saved-item { margin: 0; }
 .saved-item video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-sunk); }
+.spicy-thumb { appearance: none; border: 0; padding: 0; background: none; position: relative; cursor: pointer; }
+.spicy-thumb img, .spicy-thumb video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-sunk); display: block; }
+.spicy-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 1.4rem; text-shadow: 0 1px 6px rgba(0,0,0,.5); pointer-events: none; }
 .spicy-note { display: flex; flex-direction: column; gap: 6px; }
 .spicy-lunch { font-size: 1.05rem; }
 .saved-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-sunk); }

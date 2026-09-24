@@ -40,16 +40,12 @@ export function PostComposer({
   onDone,
   dogNote = false,
   initialDogs = [],
-  initialSpicy = false,
 }: {
   onDone: () => void;
   dogNote?: boolean;
   initialDogs?: string[];
-  initialSpicy?: boolean;
 }) {
-  const { meId, partner, toast } = useApp();
-  // 🌶️: photos skip the feed and go to the other person's Spicy folder.
-  const [spicy, setSpicy] = useState(initialSpicy);
+  const { meId, toast } = useApp();
   const [dogs, setDogs] = useState<string[]>(initialDogs);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -59,45 +55,10 @@ export function PostComposer({
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
 
-  async function sendSpicy(btn: HTMLElement | null) {
-    if (!files.length) return setError("Add a photo for the spicy folder.");
-    if (!partner) return;
-    setBusy(true);
-    setError(null);
-    const supabase = supabaseBrowser();
-    const uploaded: string[] = [];
-    try {
-      for (const f of files) {
-        // Videos (Spicy only) go up as-is; photos get downsized.
-        const isVideo = f.type.startsWith("video/");
-        const { blob, ext } = isVideo ? { blob: f as Blob, ext: f.name.split(".").pop()?.toLowerCase() || "mp4" } : await shrinkImage(f);
-        const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || (isVideo ? "video/mp4" : "image/jpeg"), cacheControl: "31536000" });
-        if (error) throw error;
-        uploaded.push(path);
-      }
-      const { error: rpcErr } = await supabase.rpc("send_spicy", { recipient: partner.id, paths: uploaded, caption: text.trim() || null });
-      if (rpcErr) throw rpcErr;
-      // The feed only gets a note that something's waiting; never the photos.
-      const { data: post } = await supabase.from("posts").insert({ author: meId, text: "🌶️ Added something for you", spicy: true }).select("id").single();
-      if (post) notify({ kind: "spicy", id: post.id });
-      refreshAll();
-      celebrate(btn, ["🌶️", "🔥", "💋"]);
-      toast(`Sent to ${partner.display_name}'s Spicy folder 🌶️`);
-      onDone();
-    } catch (err) {
-      if (uploaded.length) await supabase.storage.from("photos").remove(uploaded);
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  }
-
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!text.trim() && !files.length) return;
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
-    if (spicy) return sendSpicy(e.currentTarget.querySelector<HTMLElement>("button[type=submit]"));
-    if (files.some((f) => f.type.startsWith("video/"))) return setError("Videos can only go to Spicy. Remove the video or turn on 🌶️.");
     // Grab this now: React clears currentTarget once we await.
     const submitBtn = e.currentTarget.querySelector<HTMLElement>("button[type=submit]");
     setBusy(true);
@@ -157,12 +118,8 @@ export function PostComposer({
         <div className="photo-picks">
           {previews.map((src, i) => (
             <div className="photo-pick" key={src}>
-              {files[i]?.type.startsWith("video/") ? (
-                <video src={src} muted playsInline />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={src} alt="" />
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt="" />
               <button type="button" aria-label="Remove photo" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
                 ×
               </button>
@@ -173,7 +130,7 @@ export function PostComposer({
       <input
         ref={fileRef}
         type="file"
-        accept={spicy ? "image/*,video/*" : "image/*"}
+        accept="image/*"
         multiple
         hidden
         onChange={(e) => {
@@ -182,22 +139,7 @@ export function PostComposer({
           e.target.value = "";
         }}
       />
-      {!dogNote && partner && (
-        <label className="toggle-row">
-          <span>
-            <strong>🌶️ Spicy</strong>
-            <br />
-            <span className="small muted">
-              {spicy ? `Goes straight to ${partner.display_name}'s Spicy folder. The feed just says you added something.` : "Off: a normal update in the feed."}
-            </span>
-          </span>
-          <span className="switch">
-            <input type="checkbox" checked={spicy} onChange={(e) => setSpicy(e.target.checked)} />
-            <span />
-          </span>
-        </label>
-      )}
-      {!dogNote && !spicy && (
+      {!dogNote && (
         <div className="field">
           <span>About the dogs?</span>
           <DogChips value={dogs} onChange={setDogs} />
@@ -209,7 +151,7 @@ export function PostComposer({
           <IconCamera width={22} height={22} /> Photo
         </button>
         <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length)}>
-          {busy ? "Posting…" : spicy ? "Send 🌶️" : dogNote ? "Save note" : "Share it"}
+          {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
         </button>
       </div>
     </form>
