@@ -37,7 +37,7 @@ export function DogTodos() {
         <strong className="row" style={{ gap: 6 }}>
           <DogPic name="food_bowl" size={24} /> Dog to-dos
         </strong>
-        <Link className="small muted" href="/lists?tab=dogs">
+        <Link className="small muted" href="/dogs">
           See all
         </Link>
       </div>

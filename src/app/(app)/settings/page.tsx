@@ -9,7 +9,6 @@ import { disablePush, enablePush, isStandalone, pushState, type PushState } from
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PinPad } from "@/components/PinPad";
-import { DogPhotos } from "@/components/DogPhotos";
 import { MyPhoto } from "@/components/MyPhoto";
 import { THEMES, applyTheme, currentTheme, type Theme } from "@/lib/theme";
 import { Wavy } from "@/components/Art";
@@ -188,11 +187,6 @@ export default function SettingsPage() {
         <ThemePicker />
       </section>
 
-      <section className="card stack" style={{ marginTop: 16 }}>
-        <h2>The dogs</h2>
-        <p className="small muted">Tap a dog to set their photo. Dog notes post as them.</p>
-        <DogPhotos />
-      </section>
 
       <section className="card stack" style={{ marginTop: 16 }}>
         <h2>Your PIN</h2>

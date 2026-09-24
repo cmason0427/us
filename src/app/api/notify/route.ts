@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     const sent = await sendPushToUser(partner.id, {
       title: voice ? `🐾 ${voice}` : dogs ? `🐾 ${dogs}` : "🌼 A little update",
       body: voice && post.text ? post.text : dogs && post.text ? `${myName}: ${post.text}` : `${myName} shared something. Whenever you get a sec.`,
-      url: dogs ? "/lists?tab=dogs" : "/",
+      url: dogs ? "/dogs" : "/",
       tag: dogs ? `dogs-${post.id}` : "feed", // plain updates collapse into one quiet notification
     });
     return NextResponse.json({ sent });
