@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCalendar, IconHome, IconList, IconPlus, IconSparkle } from "./Art";
+import { IconCalendar, IconFork, IconHome, IconList, IconPlus, IconSparkle } from "./Art";
 import { useApp } from "./AppProvider";
 
 const TABS = [
   { href: "/", label: "Home", Icon: IconHome },
   { href: "/calendar", label: "Calendar", Icon: IconCalendar },
-  null, // the + button sits in the middle
   { href: "/do", label: "Do Something", Icon: IconSparkle },
+  null, // the + button sits in the middle
+  { href: "/eat", label: "Eat", Icon: IconFork },
   { href: "/lists", label: "Lists", Icon: IconList },
 ] as const;
 

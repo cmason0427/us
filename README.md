@@ -14,6 +14,7 @@ and photo storage, and Web Push for notifications.
 | `src/app/(app)/page.tsx` | Home feed: updates and dog notes, photos |
 | `src/app/(app)/calendar` | Day / Week / Month / List views, the four event types, Ask accept/decline (note + suggested time); each ask step posts to the feed |
 | `src/app/(app)/do` | Energy check-in + the activity library and matcher (optional filters: in/out, cost, length) |
+| `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us) and home meals with a shared pantry |
 | `src/app/(app)/lists` | To-dos with deadlines (overdue → top + high), Ours collects shared/household/dog items, dog notes + dog to-dos |
 | `src/app/(app)/settings` | Display name, push on/off, per-kind notification toggles, change PIN, sign out |
 | `src/components/AddSheet.tsx` | The fast-entry sheet behind the + button |

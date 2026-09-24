@@ -167,7 +167,7 @@ p { margin: 0; }
   border: 1.5px solid var(--line);
   border-radius: 999px;
   box-shadow: var(--shadow-pop);
-  display: grid; grid-template-columns: 1fr 1fr 64px 1fr 1fr; align-items: center;
+  display: grid; grid-template-columns: 1fr 1fr 1fr 64px 1fr 1fr; align-items: center;
   padding: 0 6px;
 }
 .tab {
@@ -383,6 +383,12 @@ p { margin: 0; }
 .batch-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--butter); color: var(--on-butter); font-weight: 650; font-size: 0.85rem; flex-shrink: 0; }
 .batch-field { display: flex; flex-direction: column; gap: 4px; }
 .chip-sm { min-height: 32px; padding: 4px 11px; font-size: 0.82rem; }
+
+/* Food */
+.food-card { appearance: none; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; font: inherit; color: inherit; width: 100%; }
+.food-card .name { font-weight: 650; font-size: 1.05rem; }
+.pick-card { display: flex; flex-direction: column; gap: 6px; background: var(--butter); color: var(--on-butter); }
+.task.need .task-title { color: var(--ink); }
 
 /* Toggle chips: dog tags, filters. */
 .chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
