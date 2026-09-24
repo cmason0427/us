@@ -753,3 +753,17 @@ div.dash-row { cursor: default; }
 }
 .when-preview { text-align: center; }
 .request-row { width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+
+/* PIN screen: the fridge photo, whole, on the fridge's own red. The page
+   behind it (and the phone's status bar area) goes red too, so there's no
+   cream edge in Safari or the home-screen app. */
+:root:has(.login.with-cover), :root:has(.login.with-cover) body { background: #69190d; }
+.login.with-cover {
+  min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px;
+  padding: var(--safe-t) 0 calc(var(--safe-b) + 24px); background: #69190d; color: #fff;
+}
+.login-cover { display: block; width: 100%; max-width: 560px; height: auto; max-height: 55vh; object-fit: contain; }
+.login.with-cover .pin-dots span { border-color: #fff; }
+.login.with-cover .pin-dots span.on { background: var(--pop-yellow); border-color: var(--pop-yellow); }
+.login.with-cover .pin-key { background: rgba(255, 255, 255, 0.1); color: #fff; border-color: rgba(255, 255, 255, 0.45); }
+.login.with-cover .pin-msg { color: #ffd9d0; }

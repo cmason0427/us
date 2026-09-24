@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PinPad } from "@/components/PinPad";
 import { markUnlocked } from "@/lib/lock";
@@ -8,6 +8,16 @@ import { markUnlocked } from "@/lib/lock";
 export default function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+
+  // Match the phone's status bar to the fridge while this screen is up.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const prev = meta?.getAttribute("content");
+    meta?.setAttribute("content", "#69190d");
+    return () => {
+      if (prev) meta?.setAttribute("content", prev);
+    };
+  }, []);
 
   async function signIn(pin: string) {
     setBusy(true);
@@ -38,7 +48,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login">
+    <main className="login with-cover">
+      {/* The fridge photo exactly as it is: no crop, no filter. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="login-cover" src="/preview.jpg" alt="Fridge magnets: no matter how hard it gets, i always want it to be you" />
       <PinPad onComplete={signIn} busy={busy} />
     </main>
   );

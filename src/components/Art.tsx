@@ -33,7 +33,10 @@ export const IconFork = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M7 3v7a2 2 0 0 0 2 2v9M11 3v7a2 2 0 0 1-2 2M9 3v6" /><path d="M17 21V3c-2 1-3.5 3.5-3.5 7v3H17" /></svg>
 );
 export const IconGear = (p: P) => (
-  <svg viewBox="0 0 24 24" {...stroke} {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.4M12 18.8v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M10.3 2.8h3.4l.5 2.4 1.7.9 2.3-.9 1.7 2.9-1.8 1.6v2l1.8 1.6-1.7 2.9-2.3-.9-1.7.9-.5 2.4h-3.4l-.5-2.4-1.7-.9-2.3.9-1.7-2.9 1.8-1.6v-2L4.1 8.1l1.7-2.9 2.3.9 1.7-.9z" />
+    <circle cx="12" cy="12" r="2.8" />
+  </svg>
 );
 export const IconBag = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
