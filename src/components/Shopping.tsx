@@ -28,7 +28,8 @@ export interface ShopItem {
   /** A note to yourselves: "talk to your mom about this first". */
   note: string | null;
   category_id: string | null;
-  store_id: string | null;
+  /** Places you could get it (any number). */
+  store_ids: string[];
   /** Where to order it, if it's online. */
   link: string | null;
   position: number;
@@ -70,7 +71,7 @@ export function useShopping() {
   return { cats, stores, items };
 }
 
-type NewItem = { name: string; detail?: string | null; note?: string | null; category_id?: string | null; store_id?: string | null; link?: string | null; grocery?: boolean };
+type NewItem = { name: string; detail?: string | null; note?: string | null; category_id?: string | null; store_ids?: string[]; link?: string | null; grocery?: boolean };
 
 /**
  * Put things on the shopping list. Anything from Food (meals' "add missing",
@@ -86,7 +87,7 @@ export async function addToShopping(meId: string, rows: NewItem[]) {
         detail: r.detail ?? null,
         note: r.note ?? null,
         category_id: r.category_id ?? null,
-        store_id: r.store_id ?? null,
+        store_ids: r.store_ids ?? [],
         link: r.link ?? null,
         grocery: r.grocery ?? true,
         position: (Date.now() % 1e9) + i,
@@ -118,13 +119,34 @@ function PickOrMake({
   onChange: (id: string | null) => void;
   placeholder: string;
 }) {
+  return <PickManyOrMake label={label} table={table} options={options} value={value ? [value] : []} onChange={(v) => onChange(v[v.length - 1] ?? null)} single placeholder={placeholder} />;
+}
+
+/** Chips to pick any number (or one, with `single`), plus "make a new one". */
+function PickManyOrMake({
+  label,
+  table,
+  options,
+  value,
+  onChange,
+  placeholder,
+  single = false,
+}: {
+  label: string;
+  table: "shop_categories" | "shop_stores";
+  options: { id: string; name: string }[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+  single?: boolean;
+}) {
   const { meId, toast } = useApp();
   const [draft, setDraft] = useState("");
   async function make() {
     if (!draft.trim()) return;
     const { data, error } = await supabaseBrowser().from(table).insert({ name: draft.trim(), position: options.length, created_by: meId }).select("id").single();
     if (error) return toast(error.message);
-    onChange(data.id);
+    onChange(single ? [data.id] : [...value, data.id]);
     setDraft("");
     refreshAll();
   }
@@ -134,7 +156,13 @@ function PickOrMake({
       {options.length > 0 && (
         <div className="chips">
           {options.map((o) => (
-            <button key={o.id} type="button" className="chip chip-sm" aria-pressed={value === o.id} onClick={() => onChange(value === o.id ? null : o.id)}>
+            <button
+              key={o.id}
+              type="button"
+              className="chip chip-sm"
+              aria-pressed={value.includes(o.id)}
+              onClick={() => onChange(value.includes(o.id) ? value.filter((x) => x !== o.id) : single ? [o.id] : [...value, o.id])}
+            >
               {o.name}
             </button>
           ))}
@@ -179,7 +207,7 @@ export function ShopItemForm({ initial, groceryDefault = false, onDone }: { init
   const [detail, setDetail] = useState(initial?.detail ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [cat, setCat] = useState<string | null>(initial?.category_id ?? null);
-  const [store, setStore] = useState<string | null>(initial?.store_id ?? null);
+  const [storeIds, setStoreIds] = useState<string[]>(initial?.store_ids ?? []);
   const [link, setLink] = useState(initial?.link ?? "");
   const [grocery, setGrocery] = useState(initial?.grocery ?? groceryDefault);
   const [busy, setBusy] = useState(false);
@@ -193,7 +221,7 @@ export function ShopItemForm({ initial, groceryDefault = false, onDone }: { init
       detail: detail.trim() || null,
       note: note.trim() || null,
       category_id: cat,
-      store_id: store,
+      store_ids: storeIds,
       link: normalizeLink(link),
       grocery,
     };
@@ -218,7 +246,7 @@ export function ShopItemForm({ initial, groceryDefault = false, onDone }: { init
       <input className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Brand, size or type (optional)" aria-label="Brand or type" />
       <textarea className="textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional): remember to talk to your mom about this" aria-label="Note" />
       <PickOrMake label="Category (optional)" table="shop_categories" options={cats} value={cat} onChange={setCat} placeholder="New category (Dogs, house…)" />
-      <PickOrMake label="Where to get it (optional)" table="shop_stores" options={stores} value={store} onChange={setStore} placeholder="New place (Costco, Online, pet store…)" />
+      <PickManyOrMake label="Where to get it (pick any, optional)" table="shop_stores" options={stores} value={storeIds} onChange={setStoreIds} placeholder="New place (Costco, Online, pet store…)" />
       <input className="input" type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Order link (optional)" aria-label="Order link" />
       <GroceryToggle value={grocery} onChange={setGrocery} />
       <div className="row-between">
@@ -243,7 +271,7 @@ export function ShopBatchForm({ groceryDefault = false, onDone }: { groceryDefau
   const { cats, stores } = useShopping();
   const [text, setText] = useState("");
   const [cat, setCat] = useState<string | null>(null);
-  const [store, setStore] = useState<string | null>(null);
+  const [storeIds, setStoreIds] = useState<string[]>([]);
   const [grocery, setGrocery] = useState(groceryDefault);
   const [busy, setBusy] = useState(false);
   const lines = text
@@ -257,7 +285,7 @@ export function ShopBatchForm({ groceryDefault = false, onDone }: { groceryDefau
     setBusy(true);
     const { error } = await addToShopping(
       meId,
-      lines.map((name) => ({ name, category_id: cat, store_id: store, grocery })),
+      lines.map((name) => ({ name, category_id: cat, store_ids: storeIds, grocery })),
     );
     setBusy(false);
     if (error) return toast(error.message);
@@ -270,7 +298,7 @@ export function ShopBatchForm({ groceryDefault = false, onDone }: { groceryDefau
     <form className="stack" onSubmit={submit}>
       <textarea className="textarea" rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={"One per line:\nPaper towels\nDog food\nBatteries"} autoFocus aria-label="Items, one per line" />
       <PickOrMake label="Category for all (optional)" table="shop_categories" options={cats} value={cat} onChange={setCat} placeholder="New category" />
-      <PickOrMake label="Where to get them (optional)" table="shop_stores" options={stores} value={store} onChange={setStore} placeholder="New place" />
+      <PickManyOrMake label="Where to get them (pick any, optional)" table="shop_stores" options={stores} value={storeIds} onChange={setStoreIds} placeholder="New place" />
       <GroceryToggle value={grocery} onChange={setGrocery} />
       <p className="small muted">Add notes, links or brands later by tapping an item.</p>
       <button className="btn btn-primary btn-block" disabled={busy || !lines.length}>
@@ -325,7 +353,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
   const [storeFilter, setStoreFilter] = useState<string | null>(null);
   const filtering = !!catFilter || !!storeFilter;
 
-  const items = listItems.filter((i) => (!catFilter || (i.category_id ?? "none") === catFilter) && (!storeFilter || (i.store_id ?? "none") === storeFilter));
+  const items = listItems.filter((i) => (!catFilter || (i.category_id ?? "none") === catFilter) && (!storeFilter || i.store_ids.includes(storeFilter)));
   const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name;
 
   // One flat list, category headers included, so an item can be dragged
@@ -412,18 +440,24 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
         <input type="checkbox" className="check" checked={i.bought} onChange={(e) => toggleBought(i, e.currentTarget)} aria-label={`Bought ${i.name}`} />
       )}
       <div className="grow">
-        <button className="task-title task-edit" onClick={() => setEditing(i)}>
-          {i.name}
-        </button>
-        {(i.detail || i.store_id || i.link) && (
+        <span className="row" style={{ gap: 6, display: "inline-flex" }}>
+          <button className="task-title task-edit" onClick={() => setEditing(i)}>
+            {i.name}
+          </button>
+          {i.link && (
+            <a href={i.link} target="_blank" rel="noreferrer" className="order-link" aria-label={`Order ${i.name} online`} title="Can be ordered: tap to open the link">
+              🛍️
+            </a>
+          )}
+        </span>
+        {(i.detail || i.store_ids.length > 0) && (
           <div className="small muted row wrap" style={{ gap: 6 }}>
             {i.detail && <span>{i.detail}</span>}
-            {i.store_id && <span className="sticker sage">{storeName(i.store_id)}</span>}
-            {i.link && (
-              <a href={i.link} target="_blank" rel="noreferrer" className="small">
-                Order ↗
-              </a>
-            )}
+            {i.store_ids.map((id) => storeName(id) && (
+              <span key={id} className="sticker sage">
+                {storeName(id)}
+              </span>
+            ))}
           </div>
         )}
         {i.note && <div className="small shop-note">📝 {i.note}</div>}
@@ -437,7 +471,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     </div>
   );
 
-  const usedStore = (id: string) => listItems.some((i) => i.store_id === id);
+  const usedStore = (id: string) => listItems.some((i) => i.store_ids.includes(id));
   const usedCat = (id: string) => listItems.some((i) => i.category_id === id);
   const shownStores = stores.filter((s) => usedStore(s.id));
   const shownCats = cats.filter((c) => usedCat(c.id));

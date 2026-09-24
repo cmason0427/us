@@ -194,7 +194,12 @@ export function GoalsView() {
                   {g.emoji ? `${g.emoji} ` : ""}
                   {g.name}
                 </strong>
-                {g.mode !== "habit" && <span className="goal-total">{money(p.total)}</span>}
+                {g.mode !== "habit" && (
+                  <span className="goal-total">
+                    {money(p.saved !== null ? p.remaining : p.total)}
+                    {p.saved !== null && <span className="small muted"> left</span>}
+                  </span>
+                )}
               </div>
               {whenText(g) && <span className="small muted">{whenText(g)}</span>}
               {p.saved !== null && g.mode !== "habit" && p.total > 0 && <Progress saved={p.saved} total={p.total} />}

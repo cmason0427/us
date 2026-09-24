@@ -48,5 +48,6 @@ export function usePantry() {
 export async function setHave(name: string, have: boolean) {
   return supabaseBrowser()
     .from("pantry")
-    .upsert({ name: name.trim().toLowerCase(), have, updated_at: new Date().toISOString() });
+    // Restocked or used up either way, it's no longer "almost out".
+    .upsert({ name: name.trim().toLowerCase(), have, low: false, updated_at: new Date().toISOString() });
 }
