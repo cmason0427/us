@@ -684,14 +684,7 @@ div.dash-row { cursor: default; }
 .dash { position: relative; overflow: hidden; padding-top: 8px; }
 .pop-strip, .dash::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--pop-red), var(--pop-orange), var(--pop-yellow), var(--pop-green), var(--pop-blue), var(--pop-purple), var(--pop-pink)); }
 
-/* The fridge photo: Home's header and the PIN screen */
-.fridge-header { display: block; width: 100%; aspect-ratio: 1000 / 618; object-fit: cover; border-radius: var(--radius); margin: 4px 0 14px; box-shadow: var(--shadow); }
-.login.with-cover { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px; padding: 0 0 calc(var(--safe-b) + 24px); background: #6a1a10; color: #fff; }
-.login-cover { width: 100%; max-width: 560px; max-height: 52dvh; aspect-ratio: 1 / 1; object-fit: cover; -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
-.login.with-cover .pin-dots span { border-color: #fff; }
-.login.with-cover .pin-dots span.on { background: var(--pop-yellow); border-color: var(--pop-yellow); }
-.login.with-cover .pin-keys button { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.45); }
-.login.with-cover .pin-msg { color: #ffd9d0; }
+
 
 /* Menu icons each get a pop */
 .drawer-item:nth-of-type(7n+1) svg { color: var(--pop-pink); }

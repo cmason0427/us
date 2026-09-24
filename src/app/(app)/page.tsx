@@ -43,8 +43,7 @@ export default function HomePage() {
   return (
     <main className="page">
       <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="fridge-header" src="/header.jpg" alt="Fridge magnets: no matter how hard it gets, i always want it to be you" />
+      <div className="wavy" />
 
       <Dashboard />
 

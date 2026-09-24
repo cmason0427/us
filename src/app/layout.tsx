@@ -14,10 +14,13 @@ const fraunces = Fraunces({
 const fredoka = Fredoka({ variable: "--font-magnet", subsets: ["latin"], weight: ["600", "700"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://us-little-corner.netlify.app"),
   title: "Us",
   description: "Our little corner.",
   appleWebApp: { capable: true, title: "Us", statusBarStyle: "default" },
   icons: { apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }] },
+  // The fridge photo, untouched, for link previews.
+  openGraph: { title: "Us", description: "Our little corner.", images: [{ url: "/preview.jpg", width: 1091, height: 1111 }] },
 };
 
 export const viewport: Viewport = {
