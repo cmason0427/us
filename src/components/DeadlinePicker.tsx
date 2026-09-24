@@ -4,6 +4,7 @@ import { useState } from "react";
 import { addDays } from "date-fns";
 import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
 import { endOfDayDeadline, type Deadline } from "@/lib/deadline";
+import { WhenPicker } from "./WhenPicker";
 
 type Mode = "none" | "today" | "tomorrow" | "pick";
 
@@ -55,30 +56,16 @@ export function DeadlinePicker({ value, onChange }: { value: Deadline | null; on
         ))}
       </div>
       {mode === "pick" && (
-        <div className="grid-2">
-          <input
-            className="input"
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              onChange(picked(e.target.value, time));
-            }}
-            aria-label="Due date"
-          />
-          <input
-            className="input"
-            type="time"
-            value={time}
-            onChange={(e) => {
-              setTime(e.target.value);
-              onChange(picked(date, e.target.value));
-            }}
-            aria-label="Due time (leave empty for end of day)"
-          />
-        </div>
+        <WhenPicker
+          mode="deadline"
+          value={{ date, start: time }}
+          onChange={(w) => {
+            setDate(w.date);
+            setTime(w.start ?? "");
+            onChange(picked(w.date, w.start ?? ""));
+          }}
+        />
       )}
-      {mode === "pick" && !time && <p className="small muted">No time = by end of that day.</p>}
     </div>
   );
 }

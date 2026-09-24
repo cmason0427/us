@@ -26,6 +26,7 @@ import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { fromInputs, timeLabel, toDateInput, toTimeInput } from "@/lib/dates";
 import { eventWhen, postAskUpdate } from "@/lib/askFeed";
+import { WhenPicker } from "@/components/WhenPicker";
 import { PlanCard, PlanSheet, createPlan, planEnd, planStart, planSteps, usePlansRange, type DayPlan } from "@/components/Plans";
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
@@ -379,10 +380,15 @@ function DeclineForm({ e, onSend }: { e: CalEvent; onSend: (d: Decline) => Promi
         </label>
       </div>
       {propose && (
-        <div className={e.all_day ? "" : "grid-2"}>
-          <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} aria-label="Suggested day" required />
-          {!e.all_day && <input className="input" type="time" value={time} onChange={(ev) => setTime(ev.target.value)} aria-label="Suggested time" required />}
-        </div>
+        <WhenPicker
+          mode="point"
+          allowAllDay={false}
+          value={{ date, start: e.all_day ? undefined : time, allDay: e.all_day }}
+          onChange={(w) => {
+            setDate(w.date);
+            if (w.start) setTime(w.start);
+          }}
+        />
       )}
       <p className="small muted">This goes to {nameOf(e.created_by)} and shows in the feed.</p>
       <button className="btn btn-primary btn-block" disabled={busy}>

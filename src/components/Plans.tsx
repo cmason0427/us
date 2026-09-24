@@ -11,6 +11,7 @@ import type { Activity } from "@/lib/types";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { Sortable } from "./Sortable";
+import { WhenPicker } from "./WhenPicker";
 
 // Time-block plans: "Saturday 1–5pm: do savers, then scrapbook". Both of you
 // can change anything; it only reaches the feed when one of you sends it.
@@ -197,11 +198,11 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
     <Sheet title={plan.title || "Time together"} onClose={onClose}>
       <div className="stack">
         <input className="input" defaultValue={plan.title ?? ""} placeholder="Name it (optional): Saturday afternoon" onBlur={(e) => e.target.value !== (plan.title ?? "") && patch({ title: e.target.value.trim() || null })} aria-label="Plan name" />
-        <div className="grid-3">
-          <input className="input" type="date" defaultValue={plan.day} onChange={(e) => e.target.value && patch({ day: e.target.value })} aria-label="Day" />
-          <input className="input" type="time" defaultValue={hm(plan.start_at)} onChange={(e) => e.target.value && patch({ start_at: e.target.value })} aria-label="From" />
-          <input className="input" type="time" defaultValue={hm(plan.end_at)} onChange={(e) => e.target.value && patch({ end_at: e.target.value })} aria-label="To" />
-        </div>
+        <WhenPicker
+          allowAllDay={false}
+          value={{ date: plan.day, start: hm(plan.start_at), end: hm(plan.end_at) }}
+          onChange={(w) => patch({ day: w.date, start_at: w.start || hm(plan.start_at), end_at: w.end || hm(plan.end_at) })}
+        />
 
         <div className="field">
           <span>In this order (drag to change)</span>

@@ -10,6 +10,7 @@ import { celebrate } from "@/lib/celebrate";
 import { EVENT_TYPE_HINT, EVENT_TYPE_LABEL, type CalEvent, type EventType } from "@/lib/types";
 import { postAskUpdate } from "@/lib/askFeed";
 import { useApp } from "./AppProvider";
+import { WhenPicker } from "./WhenPicker";
 
 const TYPES: EventType[] = ["confirmed", "solo", "ask", "radar"];
 
@@ -253,62 +254,24 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         <p className="small muted">{type === "ask" && partner ? `Ask ${partner.display_name}: can you make it?` : EVENT_TYPE_HINT[type]}</p>
       </div>
 
-      <div className="toggle-row">
-        <span className="label">All day</span>
-        <label className="switch">
-          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
-          <span />
-        </label>
+      <div className="field">
+        <span>When</span>
+        <WhenPicker
+          value={{ date, endDate, start, end, allDay }}
+          onChange={(w) => {
+            setDate(w.date);
+            setAllDay(!!w.allDay);
+            setStart(w.start || start);
+            // A default's length wins when only the start moved.
+            if (lengthMin !== null && !w.allDay && w.start && (w.start !== start || w.date !== date) && w.end === end) {
+              setEndFrom(w.date, w.start, lengthMin);
+            } else {
+              setEnd(w.end || end);
+              setEndDate(w.endDate ?? w.date);
+            }
+          }}
+        />
       </div>
-
-      <div className="grid-2">
-        <label className="field">
-          <span>{allDay ? "From" : "Date"}</span>
-          <input
-            className="input"
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              if (lengthMin !== null && !allDay && e.target.value) setEndFrom(e.target.value, start, lengthMin);
-              else if (endDate < e.target.value) setEndDate(e.target.value);
-            }}
-            required
-          />
-        </label>
-        {allDay ? (
-          <label className="field">
-            <span>Through</span>
-            <input className="input" type="date" value={endDate} min={date} onChange={(e) => setEndDate(e.target.value)} />
-          </label>
-        ) : (
-          <label className="field">
-            <span>Starts</span>
-            <input
-              className="input"
-              type="time"
-              value={start}
-              onChange={(e) => {
-                setStart(e.target.value);
-                if (lengthMin !== null && e.target.value) setEndFrom(date, e.target.value, lengthMin);
-              }}
-              required
-            />
-          </label>
-        )}
-      </div>
-      {!allDay && (
-        <div className="grid-2">
-          <label className="field">
-            <span>End date</span>
-            <input className="input" type="date" value={endDate} min={date} onChange={(e) => setEndDate(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>Ends</span>
-            <input className="input" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-          </label>
-        </div>
-      )}
 
       <label className="field">
         <span>Where (optional)</span>
