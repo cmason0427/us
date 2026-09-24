@@ -7,7 +7,8 @@ import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { ago } from "@/lib/dates";
 import { ENERGY_RANK, type Activity, type Checkin, type Energy } from "@/lib/types";
-import { COST_OPTIONS, DURATION_OPTIONS, NO_FILTERS, SETTING_OPTIONS, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
+import { COST_OPTIONS, DURATION_OPTIONS, KEEP_OPTIONS, NO_FILTERS, SETTING_OPTIONS, isActive, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
+import { BatchAdd, type BatchColumn, type BatchRow } from "@/components/BatchAdd";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
@@ -60,11 +61,12 @@ function Tags({ a }: { a: Activity }) {
 type Match = "exact" | "atOrBelow";
 
 export default function DoSomethingPage() {
-  const { meId, me, partner, nameOf, toast } = useApp();
+  const { meId, me, partner, profiles, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [match, setMatch] = useState<Match>("exact");
   const [enteringFor, setEnteringFor] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Activity | "new" | null>(null);
+  const [editing, setEditing] = useState<Activity | "new" | "batch" | null>(null);
+  const [showDone, setShowDone] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [filters, setFilters] = useState<ActivityFilters>(NO_FILTERS);
 
@@ -116,7 +118,50 @@ export default function DoSomethingPage() {
 
   const fits = (need: Energy, have: Energy) => (match === "exact" ? need === have : ENERGY_RANK[need] <= ENERGY_RANK[have]);
 
-  const results = activities.filter((a) => {
+  const active = activities.filter(isActive);
+  const doneOnes = activities.filter((a) => !isActive(a));
+
+  // One-time ideas can be checked off; they drop out of suggestions (undo from Done).
+  async function markDone(a: Activity, done: boolean, el?: HTMLElement) {
+    const { error } = await supabase
+      .from("activities")
+      .update({ done_at: done ? new Date().toISOString() : null, done_by: done ? meId : null })
+      .eq("id", a.id);
+    if (error) return toast(error.message);
+    if (done && el) celebrate(el, ["✅", "✨", "🌿"]);
+    refreshAll();
+    toast(done ? `Done: ${a.name}` : "Back on the list");
+  }
+
+  const batchColumns: BatchColumn[] = [
+    { key: "energy", label: "Energy", required: true, initial: "low", options: [{ v: "low", label: "🛋️ Low" }, { v: "medium", label: "🚶 Medium" }, { v: "high", label: "⚡ High" }] },
+    { key: "who", label: "Who", required: true, initial: "both", options: [{ v: "both", label: "Both" }, ...profiles.map((p) => ({ v: p.id, label: p.display_name }))] },
+    { key: "keep", label: "Keep it?", required: true, initial: "keep", options: KEEP_OPTIONS },
+    { key: "setting", label: "Where", options: SETTING_OPTIONS },
+    { key: "cost", label: "Cost", options: COST_OPTIONS },
+    { key: "duration", label: "How long", options: DURATION_OPTIONS },
+  ];
+  async function saveBatch(rows: BatchRow[]) {
+    const { error } = await supabase.from("activities").insert(
+      rows.map((r) => ({
+        name: r.name,
+        energy_level: r.values.energy,
+        participant: r.values.who === "both" ? null : r.values.who,
+        recurring: r.values.keep !== "once",
+        setting: r.values.setting,
+        cost: r.values.cost,
+        duration: r.values.duration,
+        created_by: meId,
+      })),
+    );
+    if (error) return error.message;
+    refreshAll();
+    toast(`Added ${rows.length} idea${rows.length === 1 ? "" : "s"} ✨`);
+    setEditing(null);
+    return null;
+  }
+
+  const results = active.filter((a) => {
     if (!matchesFilters(a, filters)) return false;
     if (a.participant) {
       const e = energyOf.get(a.participant);
@@ -232,6 +277,11 @@ export default function DoSomethingPage() {
                     <span className="sticker">{a.participant ? nameOf(a.participant) : "Both"}</span>
                     <Tags a={a} />
                   </div>
+                  {!a.recurring && (
+                    <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={(e) => markDone(a, true, e.currentTarget)}>
+                      ✅ We did it
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -259,17 +309,22 @@ export default function DoSomethingPage() {
       {/* ─── Library ─── */}
       <div className="section-title" style={{ justifyContent: "space-between" }}>
         <button className="btn btn-ghost" style={{ padding: 0, fontFamily: "var(--font-display)", fontSize: "1.15rem" }} onClick={() => setShowLibrary((s) => !s)}>
-          Idea library ({activities.length}) {showLibrary ? "▾" : "▸"}
+          Idea library ({active.length}) {showLibrary ? "▾" : "▸"}
         </button>
-        <button className="btn btn-sm" onClick={() => setEditing("new")}>
-          <IconPlus width={16} height={16} /> Add
-        </button>
+        <div className="row">
+          <button className="btn btn-sm btn-ghost" onClick={() => setEditing("batch")}>
+            Add several
+          </button>
+          <button className="btn btn-sm" onClick={() => setEditing("new")}>
+            <IconPlus width={16} height={16} /> Add
+          </button>
+        </div>
       </div>
       {(showLibrary || activities.length === 0) && activities.length > 0 && <Filters value={filters} onChange={setFilters} />}
       {(showLibrary || activities.length === 0) && (
         <div className="card">
           {activities.length === 0 && <p className="muted">No ideas yet. Add things you like doing — low-key stuff counts.</p>}
-          {activities.filter((a) => matchesFilters(a, filters)).map((a) => (
+          {active.filter((a) => matchesFilters(a, filters)).map((a) => (
             <div key={a.id} className="lib-item">
               <span style={{ fontSize: "1.2rem" }}>{ENERGY_EMOJI[a.energy_level]}</span>
               <span className="grow" style={{ fontWeight: 700 }}>
@@ -281,8 +336,14 @@ export default function DoSomethingPage() {
                     .filter(Boolean)
                     .map((l) => ` · ${l}`)
                     .join("")}
+                  {!a.recurring && " · one-time"}
                 </span>
               </span>
+              {!a.recurring && (
+                <button className="icon-btn" onClick={(e) => markDone(a, true, e.currentTarget)} aria-label={`Mark ${a.name} done`}>
+                  ✅
+                </button>
+              )}
               <button className="icon-btn" onClick={() => setEditing(a)} aria-label={`Edit ${a.name}`}>
                 <IconEdit />
               </button>
@@ -291,7 +352,34 @@ export default function DoSomethingPage() {
         </div>
       )}
 
-      {editing && (
+      {(showLibrary || activities.length === 0) && doneOnes.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowDone((d) => !d)}>
+            {showDone ? "▾" : "▸"} Done ({doneOnes.length})
+          </button>
+          {showDone && (
+            <div className="card">
+              {doneOnes.map((a) => (
+                <div key={a.id} className="lib-item">
+                  <span className="grow faint" style={{ textDecoration: "line-through" }}>
+                    {a.name}
+                  </span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => markDone(a, false)}>
+                    Undo
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {editing === "batch" && (
+        <Sheet title="Add several ideas" onClose={() => setEditing(null)}>
+          <BatchAdd columns={batchColumns} placeholder="Farmers market, puzzle…" noun="ideas" onSave={saveBatch} />
+        </Sheet>
+      )}
+      {editing && editing !== "batch" && (
         <Sheet title={editing === "new" ? "Activity idea" : "Edit idea"} onClose={() => setEditing(null)}>
           <ActivityForm initial={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
         </Sheet>

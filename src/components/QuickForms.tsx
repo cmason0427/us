@@ -4,7 +4,7 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import type { Activity, Cost, Duration, Energy, ListType, Setting, Urgency } from "@/lib/types";
-import { COST_OPTIONS, DURATION_OPTIONS, SETTING_OPTIONS } from "@/lib/activity";
+import { COST_OPTIONS, DURATION_OPTIONS, KEEP_OPTIONS, SETTING_OPTIONS } from "@/lib/activity";
 import type { Deadline } from "@/lib/deadline";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { useApp } from "./AppProvider";
@@ -144,6 +144,7 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
   const [setting, setSetting] = useState<Setting | null>(initial?.setting ?? null);
   const [cost, setCost] = useState<Cost | null>(initial?.cost ?? null);
   const [duration, setDuration] = useState<Duration | null>(initial?.duration ?? null);
+  const [recurring, setRecurring] = useState(initial?.recurring ?? true);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -151,7 +152,7 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
     if (!name.trim()) return;
     setBusy(true);
     const supabase = supabaseBrowser();
-    const row = { name: name.trim(), energy_level: energy, participant, setting, cost, duration };
+    const row = { name: name.trim(), energy_level: energy, participant, setting, cost, duration, recurring };
     const { error } = initial
       ? await supabase.from("activities").update(row).eq("id", initial.id)
       : await supabase.from("activities").insert({ ...row, created_by: meId });
@@ -188,6 +189,17 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
             Both
           </button>
         </div>
+      </div>
+      <div className="field">
+        <span>Keep it?</span>
+        <div className="seg" role="group" aria-label="Keep or one-time">
+          {KEEP_OPTIONS.map((o) => (
+            <button key={o.v} type="button" aria-pressed={recurring === (o.v === "keep")} onClick={() => setRecurring(o.v === "keep")}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="small muted">{recurring ? "Always stays in the ideas." : "Mark it done and it won't be suggested again."}</p>
       </div>
       <p className="small muted">These are optional; tap again to clear. Unset ones match any filter.</p>
       <div className="field">

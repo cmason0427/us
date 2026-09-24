@@ -15,6 +15,14 @@ export const DURATION_OPTIONS: { v: Duration; label: string }[] = [
   { v: "all_day", label: "All day" },
 ];
 
+export const KEEP_OPTIONS = [
+  { v: "keep", label: "♾️ Keep on the list" },
+  { v: "once", label: "☝️ One-time" },
+];
+
+/** Done one-time ideas aren't suggested anymore. */
+export const isActive = (a: Activity) => a.recurring || !a.done_at;
+
 export interface ActivityFilters {
   setting: Setting | null;
   cost: Cost | null;

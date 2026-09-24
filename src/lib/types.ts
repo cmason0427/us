@@ -74,6 +74,10 @@ export interface Activity {
   /** Optional; null = not set (passes any filter). */
   cost: Cost | null;
   duration: Duration | null;
+  /** true = stays on the list; false = one-time, can be marked done. */
+  recurring: boolean;
+  done_at: string | null;
+  done_by: string | null;
   created_by: string;
 }
 
