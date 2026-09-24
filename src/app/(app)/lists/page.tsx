@@ -22,7 +22,7 @@ import { IconTrash, Wavy } from "@/components/Art";
 
 // Ours also collects household and dog to-dos, so nothing hides in a side tab.
 const OURS: ListType[] = ["shared", "household", "dogs"];
-const LIST_TAG: Partial<Record<ListType, string>> = { household: "🧺 Household", dogs: "🐾 Dogs" };
+const LIST_TAG: Partial<Record<ListType, string>> = { household: "🧺 Household", dogs: "Dogs" };
 
 type Tab = "todo" | "dogs" | "household";
 const NEXT_URGENCY: Record<Urgency, Urgency> = { low: "medium", medium: "high", high: "low" };
@@ -40,14 +40,14 @@ export default function ListsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Keeping track" title="Lists" art={<DogPic name="bone" size={34} />} />
+      <PageHead eyebrow="Keeping track" title="Lists" art={<DogPic name="wiley_standing" size={40} />} />
       <Wavy />
       <div className="seg" role="group" aria-label="List" style={{ marginBottom: 16 }}>
         <button aria-pressed={tab === "todo"} onClick={() => pick("todo")}>
           To-dos
         </button>
         <button aria-pressed={tab === "dogs"} onClick={() => pick("dogs")}>
-          🐾 Dogs
+          <DogPic name="kodo_wiley_face" size={22} /> Dogs
         </button>
         <button aria-pressed={tab === "household"} onClick={() => pick("household")}>
           Household
@@ -393,7 +393,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
       </div>
 
       <div className="section-title">
-        <DogPic name="kodo_paw" size={20} /> Dog notes
+        <DogPic name="kodo_wiley_back_walk" size={26} /> Dog notes
       </div>
       <div className="chips" role="group" aria-label="Show notes for" style={{ marginBottom: 12 }}>
         <button className="chip" aria-pressed={filter === null} onClick={() => pickFilter(null)}>

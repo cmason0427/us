@@ -8,19 +8,21 @@ import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { DOGS } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
+import { DogAvatar } from "./DogAvatar";
 import { IconCamera } from "./Art";
 
 const MAX_PHOTOS = 6;
 
 /** Tap to tag which dog(s) something is about. */
 export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs: string[]) => void }) {
+  const { dogPhotos } = useApp();
   return (
     <div className="chips" role="group" aria-label="Which dog">
       {DOGS.map((d) => {
         const on = value.includes(d.id);
         return (
           <button key={d.id} type="button" className="chip" aria-pressed={on} onClick={() => onChange(on ? value.filter((x) => x !== d.id) : [...value, d.id])}>
-            🐾 {d.name}
+            <DogAvatar ids={[d.id]} size={22} photos={dogPhotos} /> {d.name}
           </button>
         );
       })}

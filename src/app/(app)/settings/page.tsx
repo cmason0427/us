@@ -114,7 +114,7 @@ export default function SettingsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just for you" title="Settings" art={<DogPic name="kodo_paw" size={30} />} />
+      <PageHead eyebrow="Just for you" title="Settings" art={<DogPic name="kodo_happy" size={38} />} />
       <Wavy />
 
       <section className="card stack">

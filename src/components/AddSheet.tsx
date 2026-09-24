@@ -5,15 +5,16 @@ import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
 import { EventForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
+import { DogPic, type ArtName } from "./DogPic";
 
-const MENU: { kind: AddKind; emoji: string; label: string }[] = [
-  { kind: "post", emoji: "🌼", label: "Update" },
+const MENU: { kind: AddKind; emoji: string; label: string; art?: ArtName }[] = [
+  { kind: "post", emoji: "🌼", label: "Update", art: "wiley_happy" },
   { kind: "event", emoji: "📅", label: "Event" },
-  { kind: "dog-note", emoji: "🐾", label: "Dog note" },
-  { kind: "dog-task", emoji: "🦴", label: "Dog to-do" },
+  { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
+  { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_down" },
   { kind: "task", emoji: "✅", label: "To-do" },
   { kind: "household", emoji: "🧺", label: "Household" },
-  { kind: "activity", emoji: "✨", label: "Activity idea" },
+  { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_run" },
 ];
 
 const TITLES: Record<AddKind, string> = {
@@ -37,7 +38,7 @@ export function AddSheet() {
         <div className="add-grid">
           {MENU.map((m) => (
             <button key={m.kind} className="tile" onClick={() => openAdd(m.kind)}>
-              <span className="tile-emoji">{m.emoji}</span>
+              {m.art ? <DogPic name={m.art} size={34} /> : <span className="tile-emoji">{m.emoji}</span>}
               {m.label}
             </button>
           ))}

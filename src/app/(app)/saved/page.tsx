@@ -37,7 +37,7 @@ export default function SavedPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="heart_red" size={30} />} />
+      <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="wiley_happy" size={38} />} />
       <Wavy />
       {partner && (
         <button className="card composer-prompt" onClick={() => setSendingSpicy(true)}>
@@ -106,7 +106,7 @@ function SpicyGate({ folder, onBack }: { folder: Folder; onBack: () => void }) {
         <DogPic name="kodo_back" size={26} /> Saved
       </button>
       <div className="card" style={{ textAlign: "center", marginTop: 12 }}>
-        <DogPic name="heart_red" size={44} style={{ margin: "0 auto" }} />
+        <DogPic name="kodo_wiley_cuddle" size={90} style={{ margin: "0 auto" }} />
         <h2>Spicy</h2>
         <p className="small muted">Enter your PIN to open.</p>
         <PinPad onComplete={check} />

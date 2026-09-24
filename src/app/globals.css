@@ -74,7 +74,7 @@
   --font-display: var(--font-fraunces), Georgia, serif;
   --font-body: var(--font-fraunces), Georgia, serif;
 
-  --tabbar-h: 68px;
+  --tabbar-h: 54px; /* the floating ＋ */
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   --page-max: 640px;
@@ -153,47 +153,37 @@ p { margin: 0; }
 /* quiet divider (formerly a checkered strip) */
 .checker { height: 1px; background: var(--line); }
 
-/* ─── Tab bar ───────────────────────────────────────────────────────────── */
-.tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  padding: 0 12px calc(var(--safe-b) + 8px);
-  pointer-events: none;
+/* ─── Navigation: ☰ side menu + floating ＋ ────────────────────────────── */
+.menu-btn { margin-left: -8px; color: var(--ink); align-self: flex-start; margin-top: 2px; }
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--plum) 30%, transparent);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
-.tabbar-inner {
-  pointer-events: auto;
-  max-width: 480px; margin: 0 auto;
-  height: var(--tabbar-h);
-  background: var(--surface);
-  border: 1.5px solid var(--line);
-  border-radius: 999px;
-  box-shadow: var(--shadow-pop);
-  display: grid; grid-template-columns: repeat(3, 1fr) 64px repeat(3, 1fr); align-items: center;
-  padding: 0 6px;
+.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 41; width: min(80vw, 300px);
+  background: var(--surface); border-right: 1.5px solid var(--line); box-shadow: var(--shadow-pop);
+  padding: calc(var(--safe-t) + 18px) 12px calc(var(--safe-b) + 18px); overflow-y: auto;
+  transform: translateX(-102%); transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  display: flex; flex-direction: column; gap: 2px;
 }
-.tab {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  height: 100%; text-decoration: none; color: var(--ink-soft);
-  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+.drawer.open { transform: none; }
+.drawer-head { display: flex; align-items: center; gap: 12px; padding: 4px 8px 16px; border-bottom: 1.5px solid var(--line); margin-bottom: 8px; }
+.drawer-item {
+  display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px;
+  text-decoration: none; font-weight: 650; font-size: 1.05rem; color: var(--ink);
 }
-.tab svg { width: 23px; height: 23px; }
-.tab[aria-current="page"] { color: var(--terracotta); }
-.tab[aria-current="page"] svg { transform: translateY(-1px); }
+.drawer-item[aria-current="page"] { background: var(--butter); color: var(--on-butter); }
+.drawer-item:active { background: var(--surface-sunk); }
 .fab {
-  justify-self: center;
-  width: 58px; height: 58px; border-radius: 50%;
+  position: fixed; z-index: 30; left: 50%; bottom: calc(var(--safe-b) + 18px); transform: translateX(-50%);
+  width: 54px; height: 54px; border-radius: 50%;
   background: var(--terracotta); color: var(--accent-ink);
-  border: none;
-  box-shadow: var(--shadow-pop);
-  display: grid; place-items: center;
-  transform: translateY(-14px);
-  cursor: pointer; transition: transform 0.12s ease;
+  border: none; box-shadow: var(--shadow-pop);
+  display: grid; place-items: center; cursor: pointer; transition: transform 0.12s ease;
 }
-.fab:active { transform: translateY(-12px) scale(0.96); }
-.fab svg { width: 28px; height: 28px; }
-
-.theme-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; }
-.theme-swatch[data-swatch="peach"] { background: linear-gradient(135deg, #eab1a8 50%, #4e7c56 50%); }
-.theme-swatch[data-swatch="sage"] { background: linear-gradient(135deg, #a9c39c 50%, #b4546f 50%); }
+.fab:active { transform: translateX(-50%) scale(0.94); }
+.fab svg { width: 26px; height: 26px; }
 
 /* ─── Cards & surfaces ──────────────────────────────────────────────────── */
 .card {
@@ -252,6 +242,11 @@ p { margin: 0; }
   font-weight: 650; font-size: 0.85rem; color: var(--ink-soft);
 }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 0 var(--line), 0 2px 6px -2px color-mix(in srgb, var(--plum) 30%, transparent); }
+
+/* Little dog pictures sit inline with button and chip text. */
+.seg button, .chip, .btn { gap: 6px; }
+.seg button { display: inline-flex; align-items: center; justify-content: center; }
+.seg button img, .chip img, .btn img, .sticker img { display: inline-block; flex-shrink: 0; }
 
 /* chips (filters, pickers) */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }

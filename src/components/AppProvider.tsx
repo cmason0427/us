@@ -23,6 +23,8 @@ interface AppCtx {
   toast: (msg: string) => void;
   openAdd: (kind?: AddKind | "menu") => void;
   addOpen: AddKind | "menu" | null;
+  menuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
   closeAdd: () => void;
 }
 
@@ -79,6 +81,7 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
   }, [toastMsg]);
 
   const [addOpen, setAddOpen] = useState<AddKind | "menu" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // PIN on every entry (see lib/lock). Nothing renders until we know it's unlocked.
   const unlocked = useSyncExternalStore(noSubscribe, isUnlocked, () => false);
@@ -106,8 +109,10 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
       addOpen,
       openAdd: (kind = "menu") => setAddOpen(kind),
       closeAdd: () => setAddOpen(null),
+      menuOpen,
+      setMenuOpen,
     };
-  }, [meId, me, partner, profiles, toast, addOpen, dogPhotos, personPhotos]);
+  }, [meId, me, partner, profiles, toast, addOpen, dogPhotos, personPhotos, menuOpen]);
 
   return (
     <Ctx.Provider value={value}>

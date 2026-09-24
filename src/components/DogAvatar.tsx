@@ -23,7 +23,7 @@ export function useDogPhotos() {
   return photos;
 }
 
-/** A dog's round photo, or 🐾 until one's set. Several dogs overlap like a little stack. */
+/** A dog's round photo, or their illustrated face until one's set. Several dogs overlap like a little stack. */
 export function DogAvatar({ ids, size = 34, photos }: { ids: string[]; size?: number; photos: Record<string, string | undefined> }) {
   const one = (id: string, i: number) => (
     <span

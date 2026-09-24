@@ -4,12 +4,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
+import { MenuButton } from "./SideMenu";
 
 export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: ReactNode; art?: ReactNode }) {
   const { meId } = useApp();
   return (
     <header className="page-head">
-      <div>
+      <MenuButton />
+      <div className="grow">
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1>
           {title}

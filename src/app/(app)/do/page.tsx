@@ -178,7 +178,7 @@ export default function DoSomethingPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogPic name="tennis_ball" size={34} />} />
+      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogPic name="kodo_run" size={44} />} />
       <Wavy className="terracotta" />
 
       {/* ─── Check-in ─── */}
@@ -255,7 +255,7 @@ export default function DoSomethingPage() {
       {anyCheckin && (
         <section>
           <div className="section-title">
-            <DogPic name="wiley_paw" size={22} /> Things that fit
+            <DogPic name="wiley_walk" size={28} /> Things that fit
           </div>
           <div className="seg" role="group" aria-label="Energy match" style={{ marginBottom: 12 }}>
             <button aria-pressed={match === "exact"} onClick={() => setMatch("exact")}>

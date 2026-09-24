@@ -83,7 +83,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         <div className="chips post-dogs">
           {post.dogs.map((d) => (
             <span key={d} className="sticker">
-              🐾 {dogName(d)}
+              <DogAvatar ids={[d]} size={18} photos={dogPhotos} /> {dogName(d)}
             </span>
           ))}
         </div>
