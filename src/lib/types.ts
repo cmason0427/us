@@ -122,6 +122,8 @@ export interface Task {
   claimed_by: string | null;
   /** Dog to-dos: which dog(s) it's for. */
   dogs: string[];
+  /** A time window's opening (HH:mm:ss); due_at is when it closes. */
+  window_start: string | null;
   notes: string | null;
   done: boolean;
   done_at: string | null;

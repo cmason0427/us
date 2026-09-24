@@ -9,7 +9,8 @@ import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
-import { TaskForm, TaskPresets } from "./TaskForm";
+import { TaskForm, TaskPresets, windowText } from "./TaskForm";
+import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
 import { DogPic } from "./DogPic";
 import { IconTrash } from "./Art";
@@ -205,7 +206,7 @@ function TaskRow({
         {d && !t.done && (
           <div className={`small due${overdue ? " overdue" : ""}`}>
             {overdue ? "⏰ Overdue · " : "⏳ "}
-            {dueLabel(d, new Date(now))}
+            {t.window_start ? `${dayWord(new Date(t.due_at!), new Date(now))} ${windowText(t.window_start, format(new Date(t.due_at!), "HH:mm"))}` : dueLabel(d, new Date(now))}
           </div>
         )}
         {onClaim && !t.done && (
@@ -233,3 +234,5 @@ function TaskRow({
   );
 }
 
+
+const dayWord = (d: Date, now: Date) => (isSameDay(d, now) ? "Today" : isSameDay(d, addDays(now, 1)) ? "Tomorrow" : format(d, "EEE, MMM d"));

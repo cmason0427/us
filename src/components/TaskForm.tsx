@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { DOGS, dogVoice } from "@/lib/dogs";
@@ -19,6 +20,34 @@ export interface TaskPreset {
   urgency: Urgency;
   notes: string | null;
   emoji: string | null;
+  /** "Between 7 and 10 am": HH:mm:ss, both or neither. */
+  window_start: string | null;
+  window_end: string | null;
+}
+
+const hhmm = (t: string) => t.slice(0, 5);
+const clock = (t: string) => {
+  const [h, m] = hhmm(t).split(":").map(Number);
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? " am" : " pm"}`;
+};
+/** "7–10 am" / "11 am–1 pm". */
+export function windowText(start: string, end: string) {
+  const a = clock(start);
+  const b = clock(end);
+  return a.slice(-2) === b.slice(-2) ? `${a.slice(0, -3)}–${b}` : `${a}–${b}`;
+}
+
+/**
+ * When a windowed preset is used: today's window, or tomorrow's if today's
+ * has already closed (tapping "Feed breakfast" at night means tomorrow).
+ */
+function windowFields(p: Pick<TaskPreset, "window_start" | "window_end">) {
+  if (!p.window_start || !p.window_end) return {};
+  const [h, m] = hhmm(p.window_end).split(":").map(Number);
+  const due = new Date();
+  due.setHours(h, m, 0, 0);
+  if (due.getTime() <= Date.now()) due.setDate(due.getDate() + 1);
+  return { window_start: p.window_start, due_at: due.toISOString(), due_all_day: false };
 }
 
 export function useTaskPresets() {
@@ -34,7 +63,8 @@ export function useTaskPresets() {
   return data;
 }
 
-export const presetLabel = (p: TaskPreset) => `${p.emoji ? `${p.emoji} ` : ""}${p.title}${p.dogs.length ? ` · ${dogVoice(p.dogs)}` : ""}`;
+export const presetLabel = (p: TaskPreset) =>
+  `${p.emoji ? `${p.emoji} ` : ""}${p.title}${p.dogs.length ? ` · ${dogVoice(p.dogs)}` : ""}${p.window_start && p.window_end ? ` · ${windowText(p.window_start, p.window_end)}` : ""}`;
 
 /** Which dog(s) it's for. Tap to toggle; "Both" picks everyone. */
 export function DogPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
@@ -99,7 +129,7 @@ export function TaskPresets({ onAdded, only }: { onAdded?: () => void; only?: Li
   async function use(p: TaskPreset) {
     const { error } = await supabaseBrowser()
       .from("tasks")
-      .insert({ title: p.title, list_type: p.list_type, dogs: p.dogs, urgency: p.urgency, notes: p.notes, created_by: meId });
+      .insert({ title: p.title, list_type: p.list_type, dogs: p.dogs, urgency: p.urgency, notes: p.notes, ...windowFields(p), created_by: meId });
     if (error) return toast(error.message);
     refreshAll();
     toast(`Added: ${presetLabel(p)}`);
@@ -171,7 +201,17 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
     const emoji = window.prompt("Add an emoji for this preset? (optional)", "") ?? "";
     const { error } = await supabaseBrowser()
       .from("task_templates")
-      .insert({ title: f.title, emoji: emoji.trim().slice(0, 4) || null, list_type: f.list_type, dogs: f.dogs, urgency: f.urgency, notes: f.notes, created_by: meId });
+      .insert({
+        title: f.title,
+        emoji: emoji.trim().slice(0, 4) || null,
+        list_type: f.list_type,
+        dogs: f.dogs,
+        urgency: f.urgency,
+        notes: f.notes,
+        window_start: initial?.window_start ?? null,
+        window_end: initial?.window_start && initial.due_at ? format(new Date(initial.due_at), "HH:mm") : null,
+        created_by: meId,
+      });
     if (error) return toast(error.message);
     refreshAll();
     toast("Saved as a preset. It's under Quick add now.");
@@ -255,11 +295,24 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
   const [urgency, setUrgency] = useState<Urgency>(initial?.urgency ?? "low");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [emoji, setEmoji] = useState(initial?.emoji ?? "");
+  const [winStart, setWinStart] = useState(initial?.window_start ? hhmm(initial.window_start) : "");
+  const [winEnd, setWinEnd] = useState(initial?.window_end ? hhmm(initial.window_end) : "");
+  const [useWindow, setUseWindow] = useState(!!initial?.window_start);
+  const windowOk = !useWindow || (winStart && winEnd && winEnd > winStart);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-    const row = { title: title.trim(), emoji: emoji.trim() || null, list_type: list, dogs: list === "dogs" ? dogs : [], urgency, notes: notes.trim() || null };
+    if (!title.trim() || !windowOk) return;
+    const row = {
+      title: title.trim(),
+      emoji: emoji.trim() || null,
+      list_type: list,
+      dogs: list === "dogs" ? dogs : [],
+      urgency,
+      notes: notes.trim() || null,
+      window_start: useWindow ? winStart : null,
+      window_end: useWindow ? winEnd : null,
+    };
     const supabase = supabaseBrowser();
     const { error } = initial ? await supabase.from("task_templates").update(row).eq("id", initial.id) : await supabase.from("task_templates").insert({ ...row, created_by: meId });
     if (error) return toast(error.message);
@@ -296,6 +349,30 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
         <span>Urgency</span>
         <UrgencySeg value={urgency} onChange={setUrgency} />
       </div>
+      <div className="toggle-row">
+        <span className="label">Time window</span>
+        <label className="switch">
+          <input type="checkbox" checked={useWindow} onChange={(e) => (setUseWindow(e.target.checked), !winStart && (setWinStart("07:00"), setWinEnd("10:00")))} />
+          <span />
+        </label>
+      </div>
+      {useWindow && (
+        <div className="stack-sm">
+          <div className="time-row">
+            <label className="time-field">
+              <span>Between</span>
+              <input type="time" value={winStart} onChange={(e) => setWinStart(e.target.value)} />
+            </label>
+            <label className="time-field">
+              <span>And</span>
+              <input type="time" value={winEnd} onChange={(e) => setWinEnd(e.target.value)} />
+            </label>
+          </div>
+          <p className="small muted">
+            {windowOk ? `Due by the end of the window. Added after it closes, it's for tomorrow's.` : "The window has to end after it starts."}
+          </p>
+        </div>
+      )}
       <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="A note (optional): 1 cup + fish oil" aria-label="Note" />
       <div className="row-between">
         {initial ? (
@@ -305,7 +382,7 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
         ) : (
           <span />
         )}
-        <button className="btn btn-primary" disabled={!title.trim()}>
+        <button className="btn btn-primary" disabled={!title.trim() || !windowOk}>
           Save preset
         </button>
       </div>
