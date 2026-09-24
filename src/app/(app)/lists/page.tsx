@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -17,7 +18,7 @@ import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
 import { DOGS, type DogId } from "@/lib/dogs";
 import { DogAvatar } from "@/components/DogAvatar";
-import { IconTrash, Paw, Sprig, Teapot, Wavy } from "@/components/Art";
+import { IconTrash, Wavy } from "@/components/Art";
 
 // Ours also collects household and dog to-dos, so nothing hides in a side tab.
 const OURS: ListType[] = ["shared", "household", "dogs"];
@@ -39,7 +40,7 @@ export default function ListsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Keeping track" title="Lists" art={<Sprig width={34} height={34} />} />
+      <PageHead eyebrow="Keeping track" title="Lists" art={<DogPic name="bone" size={34} />} />
       <Wavy />
       <div className="seg" role="group" aria-label="List" style={{ marginBottom: 16 }}>
         <button aria-pressed={tab === "todo"} onClick={() => pick("todo")}>
@@ -218,7 +219,7 @@ function TaskList({ listType, show = [listType], title, hint }: { listType: List
       <div className="card" style={{ marginTop: 12, padding: "4px 14px" }}>
         {open.length === 0 && (
           <div className="empty" style={{ padding: 18 }}>
-            <Teapot width={52} height={52} />
+            <DogPic name={listType === "personal" ? "wiley_curled" : "kodo_curled"} size={72} />
             <span>All clear. Put the kettle on.</span>
           </div>
         )}
@@ -383,7 +384,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
   return (
     <>
       <button className="card composer-prompt" onClick={() => setWriting(true)}>
-        <Paw width={34} height={34} style={{ color: "var(--terracotta)" }} />
+        <DogPic name="kodo_wiley_face" size={40} />
         <span>Add a dog note… it posts as the dog</span>
       </button>
 
@@ -392,7 +393,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
       </div>
 
       <div className="section-title">
-        <Paw width={20} height={20} style={{ color: "var(--rose)" }} /> Dog notes
+        <DogPic name="kodo_paw" size={20} /> Dog notes
       </div>
       <div className="chips" role="group" aria-label="Show notes for" style={{ marginBottom: 12 }}>
         <button className="chip" aria-pressed={filter === null} onClick={() => pickFilter(null)}>

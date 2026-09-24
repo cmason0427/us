@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
@@ -13,7 +14,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { ActivityForm, EnergyPicker } from "@/components/QuickForms";
-import { IconEdit, IconPlus, DogArt, Sprig, Wavy } from "@/components/Art";
+import { IconEdit, IconPlus, Wavy } from "@/components/Art";
 
 // A check-in counts as "right now" for this long.
 const FRESH_MS = 4 * 60 * 60 * 1000;
@@ -177,7 +178,7 @@ export default function DoSomethingPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogArt width={36} height={36} />} />
+      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogPic name="tennis_ball" size={34} />} />
       <Wavy className="terracotta" />
 
       {/* ─── Check-in ─── */}
@@ -254,7 +255,7 @@ export default function DoSomethingPage() {
       {anyCheckin && (
         <section>
           <div className="section-title">
-            <Sprig /> Things that fit
+            <DogPic name="wiley_paw" size={22} /> Things that fit
           </div>
           <div className="seg" role="group" aria-label="Energy match" style={{ marginBottom: 12 }}>
             <button aria-pressed={match === "exact"} onClick={() => setMatch("exact")}>
@@ -287,7 +288,7 @@ export default function DoSomethingPage() {
             </div>
           ) : (
             <div className="empty">
-              <DogArt />
+              <DogPic name="kodo_down" size={110} />
               <p className="display">Nothing matches that exactly.</p>
               {match === "exact" ? (
                 <button className="btn btn-sm" onClick={() => setMatch("atOrBelow")}>

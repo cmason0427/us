@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -12,7 +13,7 @@ import { PinPad } from "@/components/PinPad";
 import { DogPhotos } from "@/components/DogPhotos";
 import { MyPhoto } from "@/components/MyPhoto";
 import { THEMES, applyTheme, currentTheme, type Theme } from "@/lib/theme";
-import { Flower, Wavy } from "@/components/Art";
+import { Wavy } from "@/components/Art";
 
 const noSubscribe = () => () => {};
 
@@ -113,7 +114,7 @@ export default function SettingsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just for you" title="Settings" art={<Flower width={34} height={34} />} />
+      <PageHead eyebrow="Just for you" title="Settings" art={<DogPic name="kodo_paw" size={30} />} />
       <Wavy />
 
       <section className="card stack">

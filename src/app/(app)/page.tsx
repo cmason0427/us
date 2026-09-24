@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
 import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -13,7 +14,7 @@ import { usePhotoUrls } from "@/lib/photos";
 import { DogTodos } from "@/components/DogTodos";
 import { LunchWidget } from "@/components/LunchWidget";
 import { VibeWidget } from "@/components/VibeWidget";
-import { Flower, Teapot, Wavy } from "@/components/Art";
+import { Wavy } from "@/components/Art";
 
 const PAGE = 30;
 
@@ -43,11 +44,11 @@ export default function HomePage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
+      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} art={now ? <DogPic name={hour >= 17 || hour < 5 ? "moon_night" : "sun"} size={36} /> : undefined} />
       <Wavy />
 
       <button className="card composer-prompt" onClick={() => openAdd("post")}>
-        <Flower width={36} height={36} />
+        <DogPic name="kodo_wiley_face" size={40} />
         <span>Share a little update…</span>
       </button>
 
@@ -59,7 +60,7 @@ export default function HomePage() {
 
       {posts && posts.length === 0 && (
         <div className="empty">
-          <Teapot />
+          <DogPic name="kodo_wiley_cuddle" size={140} />
           <p className="display">Nothing here yet</p>
           <p>Post the first little update — a photo of lunch counts.</p>
         </div>

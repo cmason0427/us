@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -66,7 +67,7 @@ export default function EatPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="What sounds good?" title="Eat" />
+      <PageHead eyebrow="What sounds good?" title="Eat" art={<DogPic name="food_bowl" size={36} />} />
       <Wavy />
 
       <div className="seg" role="group" aria-label="Going out or cooking" style={{ marginBottom: 12 }}>

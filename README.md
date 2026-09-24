@@ -65,5 +65,6 @@ npm run dev
   pink accents). Colors are role tokens in `globals.css` redefined under `:root[data-theme=…]`; a boot script in
   `app/layout.tsx` applies the saved theme before first paint. Errors and overdue use `--danger` in both.
 - Flat and quiet: no textures, hairline dividers, soft shadows only.
-- `DogArt` in `components/Art.tsx` is a placeholder for the dog artwork; replace it there.
+- Charlie's Kodo & Wiley illustrations live in `public/art` (cleaned of neighbor slivers, trimmed, square) and render
+  through `components/DogPic.tsx`. The app icons in `public/icons` are generated from `kodo_wiley_face.png`.
 - There are no animation libraries. The sticker pop in `lib/celebrate.ts` is about 60 lines of the Web Animations API, and it respects reduced-motion settings.

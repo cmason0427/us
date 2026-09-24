@@ -33,7 +33,7 @@ export function DogAvatar({ ids, size = 34, photos }: { ids: string[]; size?: nu
       style={{ width: size, height: size, fontSize: size * 0.45, marginLeft: i ? -size * 0.35 : 0, zIndex: ids.length - i }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {photos[id] ? <img src={photos[id]} alt={dogName(id)} /> : "🐾"}
+      {photos[id] ? <img src={photos[id]} alt={dogName(id)} /> : <img src={`/art/${id}_face.png`} alt={dogName(id)} style={{ transform: "scale(1.1)" }} />}
     </span>
   );
   return <span className="dog-avatars">{ids.map(one)}</span>;

@@ -8,7 +8,7 @@ import { useNow } from "@/lib/dates";
 import { dueLabel, isOverdue } from "@/lib/deadline";
 import type { Task } from "@/lib/types";
 import { useApp } from "./AppProvider";
-import { Paw } from "./Art";
+import { DogPic } from "./DogPic";
 
 /** Open dog to-dos, pinned to the top of the feed until someone checks them off. */
 export function DogTodos() {
@@ -35,7 +35,7 @@ export function DogTodos() {
     <section className="card card-stitched" style={{ marginTop: 16, padding: "12px 14px" }}>
       <div className="row-between">
         <strong className="row" style={{ gap: 6 }}>
-          <Paw width={20} height={20} style={{ color: "var(--terracotta)" }} /> Dog to-dos
+          <DogPic name="food_bowl" size={24} /> Dog to-dos
         </strong>
         <Link className="small muted" href="/lists?tab=dogs">
           See all

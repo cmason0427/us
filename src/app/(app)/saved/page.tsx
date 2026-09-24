@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -36,7 +37,7 @@ export default function SavedPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just yours" title="Saved" />
+      <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="heart_red" size={30} />} />
       <Wavy />
       {partner && (
         <button className="card composer-prompt" onClick={() => setSendingSpicy(true)}>
@@ -102,10 +103,10 @@ function SpicyGate({ folder, onBack }: { folder: Folder; onBack: () => void }) {
   return (
     <main className="page">
       <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 6 }}>
-        ← Saved
+        <DogPic name="kodo_back" size={26} /> Saved
       </button>
       <div className="card" style={{ textAlign: "center", marginTop: 12 }}>
-        <div style={{ fontSize: "2rem" }}>🌶️</div>
+        <DogPic name="heart_red" size={44} style={{ margin: "0 auto" }} />
         <h2>Spicy</h2>
         <p className="small muted">Enter your PIN to open.</p>
         <PinPad onComplete={check} />
@@ -142,12 +143,15 @@ function FolderView({ folder, onBack }: { folder: Folder; onBack: () => void }) 
   return (
     <main className="page">
       <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 6 }}>
-        ← Saved
+        <DogPic name="kodo_back" size={26} /> Saved
       </button>
       <PageHead title={`${folder.is_spicy ? "🌶️ " : ""}${folder.name}`} />
       <Wavy />
       {saves.length === 0 ? (
-        <p className="muted">Empty for now.</p>
+        <div className="empty">
+          <DogPic name="wiley_curled" size={100} />
+          <p>Empty for now.</p>
+        </div>
       ) : (
         <div className="saved-grid">
           {saves.map((s) => (

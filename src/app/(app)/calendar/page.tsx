@@ -1,5 +1,6 @@
 "use client";
 
+import { DogPic } from "@/components/DogPic";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -30,7 +31,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { EventForm } from "@/components/EventForm";
-import { Flower, IconBell, IconChevron, IconPin, IconPlus, Wavy } from "@/components/Art";
+import { IconBell, IconChevron, IconPin, IconPlus, Wavy } from "@/components/Art";
 
 type View = "day" | "week" | "month" | "agenda";
 type AgendaRange = "today" | "week" | "month" | "upcoming";
@@ -157,7 +158,7 @@ export default function CalendarPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="What's coming up" title="Calendar" art={<Flower width={34} height={34} />} />
+      <PageHead eyebrow="What's coming up" title="Calendar" art={<DogPic name="sun" size={34} />} />
       <Wavy className="sage" />
 
       {waiting.length > 0 && (
@@ -526,7 +527,7 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
 function Empty({ text }: { text: string }) {
   return (
     <div className="empty">
-      <Flower petal="var(--butter)" />
+      <DogPic name="wiley_down" size={110} />
       <p className="display">{text}</p>
     </div>
   );
