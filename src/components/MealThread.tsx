@@ -14,16 +14,21 @@ import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { FoodFilterPanel } from "./FoodFilterPanel";
 import { FoodResults, useFoodMatches, type FoodPick } from "./FoodResults";
+import { FoodDetailSheet } from "./FoodDetail";
 
 /*
- * Two ways to propose lunch, either way round:
+ * Two ways to suggest a meal, either way round:
  *   "What I want"  → preferences, which arrive with the options that match.
  *                    The other person picks one (done) or adjusts the
  *                    preferences and sends them back.
  *   "Just pick"    → one specific place/meal. The other person says sounds
  *                    good (done), picks something else, or sends preferences.
- * At home/work you can also ask for a few options. Anything can carry a note.
+ * Lunch also has a "where" (home / work / out). Breakfast and dinner have no
+ * where, and only exist once one of you starts one.
  */
+
+export type Meal = "breakfast" | "lunch" | "dinner";
+export const MEAL_LABEL: Record<Meal, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner" };
 
 type Picker =
   | { kind: "pick" } // choose one thing to propose
@@ -36,19 +41,12 @@ type Send = (kind: LunchMsg["kind"], body: { refs?: LunchRef[]; filters?: FoodFi
 
 const toRef = (p: FoodPick): LunchRef => ({ kind: p.kind, id: p.item.id });
 
-/** Lunch today: where, and a little back-and-forth until it's decided. */
-export function LunchWidget() {
-  const now = useNow();
-  if (!now) return null; // the date is the phone's; wait for the client
-  return <Lunch day={format(now, "yyyy-MM-dd")} />;
-}
-
-function Lunch({ day }: { day: string }) {
+/** Today's thread for one meal: where (lunch only), the messages, and how to reply. */
+export function useMealThread(day: string, meal: Meal) {
   const { meId, profiles, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const places = usePlaces();
   const meals = useMeals();
-  const [picker, setPicker] = useState<Picker>(null);
 
   const { data: today } = useLive<{ place: LunchPlace | null; set_by: string | null } | null>(
     `lunch_day:${day}`,
@@ -59,16 +57,16 @@ function Lunch({ day }: { day: string }) {
     ["lunch_days"],
   );
   const { data: msgs = [] } = useLive<LunchMsg[]>(
-    `lunch_msgs:${day}`,
+    `lunch_msgs:${day}:${meal}`,
     async () => {
-      const { data, error } = await supabase.from("lunch_msgs").select("*").eq("day", day).order("created_at");
+      const { data, error } = await supabase.from("lunch_msgs").select("*").eq("day", day).eq("meal", meal).order("created_at");
       if (error) throw error;
       return data as LunchMsg[];
     },
     ["lunch_msgs"],
   );
 
-  const place = today?.place ?? null;
+  const place = meal === "lunch" ? (today?.place ?? null) : null;
   const latest = msgs[msgs.length - 1];
   const theirTurn = !!latest && latest.author !== meId;
   const workOwner = profiles.find((p) => p.display_name.toLowerCase() === WORK_OWNER.toLowerCase());
@@ -81,25 +79,56 @@ function Lunch({ day }: { day: string }) {
     refreshAll();
   }
 
-  const send: Send = async (kind, body, el) => {
+  const send = async (kind: LunchMsg["kind"], body: { refs?: LunchRef[]; filters?: FoodFilters | null; note?: string | null }, el?: HTMLElement | null) => {
     const { data, error } = await supabase
       .from("lunch_msgs")
-      .insert({ day, author: meId, kind, refs: body.refs ?? [], filters: body.filters ?? null, note: body.note?.trim() || null })
+      .insert({ day, meal, author: meId, kind, refs: body.refs ?? [], filters: body.filters ?? null, note: body.note?.trim() || null })
       .select("id")
       .single();
-    if (error) return toast(error.message);
+    if (error) {
+      toast(error.message);
+      return false;
+    }
     notify({ kind: "lunch", id: data.id });
     if (kind === "decided" && el) celebrate(el, ["🍽️", "✨", "💛"]);
-    setPicker(null);
     refreshAll();
-    toast(kind === "decided" ? "Lunch is decided 🍽️" : "Sent");
+    toast(kind === "decided" ? `${MEAL_LABEL[meal]} is decided 🍽️` : "Sent");
+    return true;
   };
 
-  const choices: { v: LunchPlace; label: string }[] = [
-    { v: "home", label: "🏡 Home" },
-    { v: "work", label: `💼 ${workLabel}` },
-    { v: "out", label: "🍽️ Out" },
-  ];
+  /** One line for the dashboard. */
+  const summary = (() => {
+    const list = latest?.refs.map(refName).join(", ") ?? "";
+    const who = latest ? (theirTurn ? nameOf(latest.author) : "You") : "";
+    if (!latest) return meal === "lunch" && place ? `${placeLabel(place, workLabel)}. Nothing picked yet.` : null;
+    if (latest.kind === "decided") return `${list} ✅`;
+    const turn = theirTurn ? " · your turn" : "";
+    if (latest.kind === "propose") return `${who} picked ${list}${turn}`;
+    if (latest.kind === "filters") return `${who} sent what ${theirTurn ? "they want" : "you want"}${turn}`;
+    if (latest.kind === "request") return `${who} asked for options${turn}`;
+    return `${who} sent options: ${list}${turn}`;
+  })();
+
+  return { meal, day, place, setBy: today?.set_by ?? null, msgs, latest, theirTurn, workLabel, refName, setPlace, send, summary };
+}
+
+export type MealThreadState = ReturnType<typeof useMealThread>;
+
+const placeLabel = (p: LunchPlace, workLabel: string) => (p === "home" ? "🏡 Home" : p === "work" ? `💼 ${workLabel}` : "🍽️ Out");
+
+/** The whole back-and-forth for one meal, with every control. Lives in a sheet off the dashboard. */
+export function MealPanel({ t }: { t: MealThreadState }) {
+  const { meId, nameOf } = useApp();
+  const [picker, setPicker] = useState<Picker>(null);
+  const [detail, setDetail] = useState<LunchRef | null>(null);
+  const { meal, place, latest, theirTurn, workLabel, refName, setPlace } = t;
+  const send: Send = async (kind, body, el) => {
+    if (await t.send(kind, body, el)) setPicker(null);
+  };
+  // Lunch needs a "where" first; breakfast and dinner don't have one.
+  const ready = meal !== "lunch" || !!place;
+
+  const choices = (["home", "work", "out"] as LunchPlace[]).map((v) => ({ v, label: placeLabel(v, workLabel) }));
 
   const startButtons = (
     <>
@@ -118,22 +147,26 @@ function Lunch({ day }: { day: string }) {
   );
 
   return (
-    <section className="card lunch" style={{ marginTop: 16 }}>
-      <div className="row-between">
-        <strong>Lunch today</strong>
-        {today?.set_by && <span className="small faint">set by {today.set_by === meId ? "you" : nameOf(today.set_by)}</span>}
-      </div>
-      <div className="seg" role="group" aria-label="Where's lunch" style={{ marginTop: 8 }}>
-        {choices.map((c) => (
-          <button key={c.v} aria-pressed={place === c.v} onClick={() => setPlace(c.v)}>
-            {c.label}
-          </button>
-        ))}
-      </div>
+    <div className="stack-sm lunch">
+      {meal === "lunch" && (
+        <>
+          <div className="row-between">
+            <span className="small muted">Where?</span>
+            {t.setBy && <span className="small faint">set by {t.setBy === meId ? "you" : nameOf(t.setBy)}</span>}
+          </div>
+          <div className="seg" role="group" aria-label="Where's lunch">
+            {choices.map((c) => (
+              <button key={c.v} aria-pressed={place === c.v} onClick={() => setPlace(c.v)}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
-      {place && (
+      {ready && (
         <div className="stack-sm" style={{ marginTop: 12 }}>
-          <Thread latest={latest} theirTurn={theirTurn} refName={refName} nameOf={nameOf} />
+          <Thread latest={latest} theirTurn={theirTurn} refName={refName} nameOf={nameOf} onOpen={setDetail} />
 
           {theirTurn && latest.kind === "filters" && latest.filters && (
             <TheirPrefs filters={latest.filters} place={place} onPick={(p, el) => send("decided", { refs: [toRef(p)] }, el)} />
@@ -186,31 +219,95 @@ function Lunch({ day }: { day: string }) {
         </div>
       )}
 
-      {picker && place && <PickerSheet picker={picker} place={place} refName={refName} onClose={() => setPicker(null)} onSend={send} />}
-    </section>
+      {picker && ready && <PickerSheet picker={picker} meal={meal} place={place} refName={refName} onClose={() => setPicker(null)} onSend={send} />}
+      {detail && <FoodDetailSheet item={detail} onClose={() => setDetail(null)} />}
+    </div>
   );
 }
 
-function Thread({ latest, theirTurn, refName, nameOf }: { latest: LunchMsg | undefined; theirTurn: boolean; refName: (r: LunchRef) => string; nameOf: (id: string) => string }) {
+/** Start a breakfast or dinner suggestion (from the ＋ menu). */
+export function MealStart({ onDone }: { onDone: () => void }) {
+  const now = useNow();
+  const [meal, setMeal] = useState<Meal>(() => ((now?.getHours() ?? 12) < 11 ? "breakfast" : "dinner"));
+  if (!now) return null;
+  return (
+    <div className="stack">
+      <div className="seg" role="group" aria-label="Which meal">
+        {(["breakfast", "lunch", "dinner"] as Meal[]).map((m) => (
+          <button key={m} aria-pressed={meal === m} onClick={() => setMeal(m)}>
+            {MEAL_LABEL[m]}
+          </button>
+        ))}
+      </div>
+      <MealStartFor key={meal} day={format(now, "yyyy-MM-dd")} meal={meal} onDone={onDone} />
+    </div>
+  );
+}
+
+function MealStartFor({ day, meal, onDone }: { day: string; meal: Meal; onDone: () => void }) {
+  const t = useMealThread(day, meal);
+  const [picker, setPicker] = useState<Picker>(null);
+  const send: Send = async (kind, body, el) => {
+    if (await t.send(kind, body, el)) onDone();
+  };
+  if (meal === "lunch") return <MealPanel t={t} />;
+  return (
+    <>
+      {t.summary && <p className="small muted">Today so far: {t.summary}</p>}
+      <p className="small muted">{MEAL_LABEL[meal]} only shows on Home once you send it.</p>
+      <div className="row wrap">
+        <button className="btn btn-sm" onClick={() => setPicker({ kind: "prefs" })}>
+          What I want
+        </button>
+        <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "pick" })}>
+          Just pick something
+        </button>
+      </div>
+      {picker && <PickerSheet picker={picker} meal={meal} place={t.place} refName={t.refName} onClose={() => setPicker(null)} onSend={send} />}
+    </>
+  );
+}
+
+function Thread({
+  latest,
+  theirTurn,
+  refName,
+  nameOf,
+  onOpen,
+}: {
+  latest: LunchMsg | undefined;
+  theirTurn: boolean;
+  refName: (r: LunchRef) => string;
+  nameOf: (id: string) => string;
+  onOpen: (r: LunchRef) => void;
+}) {
   if (!latest) return <p className="small muted">Nothing picked yet.</p>;
   const who = theirTurn ? nameOf(latest.author) : "You";
-  const list = latest.refs.map(refName).join(", ");
   const text =
     latest.kind === "decided"
-      ? `Lunch: ${list} ✅`
+      ? "Decided:"
       : latest.kind === "propose"
-        ? `${who} picked ${list}`
+        ? `${who} picked`
         : latest.kind === "filters"
           ? `${who} want${theirTurn ? "s" : ""}:`
           : latest.kind === "request"
             ? `${who} asked for some options`
-            : `${who} sent options: ${list}`;
+            : `${who} sent options:`;
   return (
     <div className="stack-sm">
       <p className={latest.kind === "decided" ? "lunch-decided" : theirTurn ? "" : "muted"}>
         {text}
         {!theirTurn && latest.kind !== "decided" && <span className="small faint"> · waiting…</span>}
       </p>
+      {latest.refs.length > 0 && latest.kind !== "request" && (
+        <div className="chips">
+          {latest.refs.map((r) => (
+            <button key={r.id} className="chip chip-sm" onClick={() => onOpen(r)} title="See details">
+              {refName(r)} ›
+            </button>
+          ))}
+        </div>
+      )}
       {latest.kind === "filters" && latest.filters && <PrefChips filters={latest.filters} />}
       {latest.note && <p className="lunch-note">“{latest.note}”</p>}
     </div>
@@ -232,7 +329,7 @@ function PrefChips({ filters }: { filters: FoodFilters }) {
 }
 
 /** The options that match their preferences, right in the card. Tap one and it's decided. */
-function TheirPrefs({ filters, place, onPick }: { filters: FoodFilters; place: LunchPlace; onPick: (p: FoodPick, el: HTMLElement) => void }) {
+function TheirPrefs({ filters, place, onPick }: { filters: FoodFilters; place: LunchPlace | null; onPick: (p: FoodPick, el: HTMLElement) => void }) {
   const { picks, pantry } = useFoodMatches(filters, "", { takeoutOnly: needsTakeout(place) });
   return (
     <div className="stack-sm">
@@ -244,9 +341,24 @@ function TheirPrefs({ filters, place, onPick }: { filters: FoodFilters; place: L
   );
 }
 
-function PickerSheet({ picker, place, refName, onClose, onSend }: { picker: NonNullable<Picker>; place: LunchPlace; refName: (r: LunchRef) => string; onClose: () => void; onSend: Send }) {
+function PickerSheet({
+  picker,
+  meal,
+  place,
+  refName,
+  onClose,
+  onSend,
+}: {
+  picker: NonNullable<Picker>;
+  meal: Meal;
+  place: LunchPlace | null;
+  refName: (r: LunchRef) => string;
+  onClose: () => void;
+  onSend: Send;
+}) {
   const takeout = needsTakeout(place);
   const [filters, setFilters] = useState<FoodFilters>(picker.kind === "prefs" && picker.start ? picker.start : { mode: place === "out" ? "out" : "cook" });
+  const label = MEAL_LABEL[meal].toLowerCase();
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
   const [selected, setSelected] = useState<Map<string, LunchRef>>(new Map());
@@ -275,7 +387,7 @@ function PickerSheet({ picker, place, refName, onClose, onSend }: { picker: NonN
 
   if (picker.kind === "prefs") {
     return (
-      <Sheet title={picker.start ? "Adjust and send back" : "What do you want?"} onClose={onClose}>
+      <Sheet title={picker.start ? "Adjust and send back" : `What do you want for ${label}?`} onClose={onClose}>
         <div className="stack">
           <FoodFilterPanel value={filters} onChange={setFilters} lockMode={place === "out"} takeoutOnly={takeout} />
           {takeout && filters.mode === "out" && <p className="small muted">Only places with takeout, drive-thru or delivery.</p>}
@@ -303,7 +415,7 @@ function PickerSheet({ picker, place, refName, onClose, onSend }: { picker: NonN
   };
 
   return (
-    <Sheet title={multi ? "Send a few options" : "Pick something"} onClose={onClose}>
+    <Sheet title={multi ? "Send a few options" : `Pick ${label}`} onClose={onClose}>
       <div className="stack">
         {noteField}
         <FoodFilterPanel value={filters} onChange={setFilters} lockMode={place === "out"} takeoutOnly={takeout} />

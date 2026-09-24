@@ -99,6 +99,8 @@ export async function POST(req: Request) {
     if (!msg || msg.author !== me.id) return NextResponse.json({ error: "not your lunch message" }, { status: 400 });
     // Lunch back-and-forth is a direct question, so it follows the asks setting.
     if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const mealKey = (msg as LunchMsg & { meal?: string }).meal ?? "lunch";
+    const meal = mealKey[0].toUpperCase() + mealKey.slice(1);
     const ids = (k: string) => msg.refs.filter((r) => r.kind === k).map((r) => r.id);
     const [{ data: ps }, { data: ms }] = await Promise.all([
       ids("place").length ? supabase.from("food_places").select("id, name").in("id", ids("place")) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -109,12 +111,12 @@ export async function POST(req: Request) {
     const text = {
       propose: `${myName} picked ${list}. Sound good?`,
       filters: `${myName} wants: ${msg.filters ? describeFilters(msg.filters) : "anything"}. Pick something?`,
-      request: `${myName} wants some lunch options.`,
+      request: `${myName} wants some ${meal.toLowerCase()} options.`,
       options: `${myName} sent options: ${list}. Pick one?`,
-      decided: `Lunch: ${list} ✅`,
+      decided: `${meal}: ${list} ✅`,
     }[msg.kind];
     const note = (msg as LunchMsg).note;
-    const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: note ? `${text} "${note}"` : text, url: "/", tag: `lunch-${msg.day}` });
+    const sent = await sendPushToUser(partner.id, { title: `🍽️ ${meal}`, body: note ? `${text} "${note}"` : text, url: "/", tag: `${mealKey}-${msg.day}` });
     return NextResponse.json({ sent });
   }
 

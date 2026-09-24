@@ -16,35 +16,27 @@ interface Night {
 /** "Tonight" rolls over at 5am, so checking at 1am still shows last night's answer. */
 const nightOf = (d: Date) => format(subHours(d, 5), "yyyy-MM-dd");
 
-/**
- * Where each of you is sleeping tonight. You set yours; theirs is read-only.
- * Unset shows "Not set" to you and "not sure yet" to them. New night, fresh start.
- */
-export function SleepWidget() {
+/** Where each of you is sleeping tonight. You set yours; theirs is read-only. */
+export function useSleepTonight() {
   const now = useNow();
-  if (!now) return null;
-  return <Sleep night={nightOf(now)} />;
-}
-
-function Sleep({ night }: { night: string }) {
+  const night = now ? nightOf(now) : "";
   const { meId, partner, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
-  const [custom, setCustom] = useState<string | null>(null);
   const { data: rows = [] } = useLive<Night[]>(
     `sleep:${night}`,
     async () => {
+      if (!night) return [];
       const { data, error } = await supabase.from("sleep_nights").select("user_id, house_of, custom").eq("night", night);
       if (error) throw error;
       return data as Night[];
     },
     ["sleep_nights"],
   );
-  if (!partner) return null;
-
   const mine = rows.find((r) => r.user_id === meId);
-  const theirs = rows.find((r) => r.user_id === partner.id);
-  const place = (r: Night | undefined, viewer: string) =>
-    !r ? null : r.custom ? r.custom : !r.house_of ? "not sure yet" : r.house_of === viewer ? "my place" : `${nameOf(r.house_of)}'s place`;
+  const theirs = partner ? rows.find((r) => r.user_id === partner.id) : undefined;
+  /** Short, with an icon, from the viewer's side. Unset reads "not sure yet". */
+  const label = (r: Night | undefined) =>
+    !r || (!r.custom && !r.house_of) ? "❔ not sure yet" : r.custom ? `📍 ${r.custom}` : r.house_of === meId ? "🏡 at yours" : `🏠 at ${nameOf(r.house_of!)}'s`;
 
   // null = "not sure" (saved, so it shows as your answer).
   async function set(value: { house_of: string } | { custom: string } | null) {
@@ -56,20 +48,25 @@ function Sleep({ night }: { night: string }) {
       updated_at: new Date().toISOString(),
     });
     if (error) return toast(error.message);
-    setCustom(null);
     refreshAll();
   }
+  return { ready: !!night && !!partner, mine, theirs, label, set };
+}
 
+/** Set where you're sleeping tonight. */
+export function SleepControls() {
+  const { meId, partner } = useApp();
+  const { mine, theirs, label, set } = useSleepTonight();
+  const [custom, setCustom] = useState<string | null>(null);
+  if (!partner) return null;
   const choice = !mine ? null : mine.custom ? "custom" : !mine.house_of ? "unsure" : mine.house_of === meId ? "mine" : "theirs";
   return (
-    <section className="card" style={{ marginTop: 16 }}>
-      <div className="row-between">
-        <strong>Sleeping tonight</strong>
-        <span className="small muted">
-          {partner.display_name}: {place(theirs, partner.id) ?? "not sure yet"}
-        </span>
-      </div>
-      <div className="seg" role="group" aria-label="Where are you sleeping tonight" style={{ marginTop: 8 }}>
+    <div className="stack-sm">
+      <p>
+        <strong>{partner.display_name}:</strong> {label(theirs)}
+      </p>
+      <span className="small muted">You</span>
+      <div className="seg" role="group" aria-label="Where are you sleeping tonight">
         <button aria-pressed={choice === "mine"} onClick={() => set({ house_of: meId })}>
           My place
         </button>
@@ -86,10 +83,9 @@ function Sleep({ night }: { night: string }) {
       {custom !== null && (
         <form
           className="quick-add"
-          style={{ marginTop: 8 }}
           onSubmit={(e) => {
             e.preventDefault();
-            if (custom.trim()) set({ custom: custom.trim() });
+            if (custom.trim()) set({ custom: custom.trim() }).then(() => setCustom(null));
           }}
         >
           <input className="input grow" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="Mom's, the cabin…" aria-label="Where" autoFocus />
@@ -98,9 +94,7 @@ function Sleep({ night }: { night: string }) {
           </button>
         </form>
       )}
-      <p className="small muted" style={{ marginTop: 6 }}>
-        You: {place(mine, meId) ?? "Not set"}
-      </p>
-    </section>
+      <p className="small faint">New night at 5am, fresh start.</p>
+    </div>
   );
 }

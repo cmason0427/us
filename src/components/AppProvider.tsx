@@ -8,7 +8,7 @@ import { useDogPhotos } from "./DogAvatar";
 import { usePhotoUrls } from "@/lib/photos";
 import { awayTooLong, isUnlocked, lockAndGoToLogin, markHidden } from "@/lib/lock";
 
-export type AddKind = "post" | "event" | "task" | "household" | "dog-note" | "dog-task" | "star" | "meal" | "place" | "shop" | "activity";
+export type AddKind = "post" | "event" | "task" | "household" | "dog-note" | "dog-task" | "star" | "meal" | "place" | "shop" | "activity" | "meal-suggest" | "vibe";
 
 interface AppCtx {
   meId: string;

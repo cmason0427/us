@@ -11,11 +11,8 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
-import { DogTodos } from "@/components/DogTodos";
-import { LunchWidget } from "@/components/LunchWidget";
-import { VibeWidget } from "@/components/VibeWidget";
-import { SleepWidget } from "@/components/SleepWidget";
 import { Wavy } from "@/components/Art";
+import { Dashboard } from "@/components/Dashboard";
 
 const PAGE = 30;
 
@@ -48,20 +45,19 @@ export default function HomePage() {
       <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
       <Wavy />
 
-      <button className="card composer-prompt" onClick={() => openAdd("post")}>
-        <DogPic name="kodo_wiley_face" size={40} />
-        <span>Share a little update…</span>
-      </button>
-      <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={() => openAdd("star")}>
-        ⭐ Send a star
-      </button>
+      <Dashboard />
 
-      <SleepWidget />
-      <VibeWidget />
-      <LunchWidget />
-      <DogTodos />
-
-      <div className="checker" style={{ margin: "20px 0" }} />
+      <div className="feed-head">
+        <h2 className="section-title">Feed</h2>
+        <div className="row">
+          <button className="btn btn-sm btn-ghost" onClick={() => openAdd("star")} aria-label="Send a star">
+            ⭐
+          </button>
+          <button className="btn btn-sm" onClick={() => openAdd("post")}>
+            Share something
+          </button>
+        </div>
+      </div>
 
       {posts && posts.length === 0 && (
         <div className="empty">

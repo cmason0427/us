@@ -9,12 +9,13 @@ import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { MealBatch, PlaceBatch } from "@/components/Batches";
 import { FoodFilterPanel } from "@/components/FoodFilterPanel";
+import { PlaceDetail } from "@/components/FoodDetail";
 import { FoodResults, useFoodMatches, type FoodPick } from "@/components/FoodResults";
 import { MealDetail, MealForm, PlaceForm } from "@/components/FoodForms";
 import { IconPlus, Wavy } from "@/components/Art";
 
 
-type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "batch" } | null;
+type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "place-detail"; item: FoodPlace } | { kind: "batch" } | null;
 
 type Section = "pick" | "pantry" | "groceries";
 
@@ -58,7 +59,7 @@ function PickFood() {
   const out = filters.mode === "out";
 
   function open(p: FoodPick) {
-    setSheet(p.kind === "place" ? { kind: "place", item: p.item } : { kind: "meal-detail", item: p.item });
+    setSheet(p.kind === "place" ? { kind: "place-detail", item: p.item } : { kind: "meal-detail", item: p.item });
   }
 
   function surprise() {
@@ -139,6 +140,11 @@ function PickFood() {
       {sheet?.kind === "meal" && (
         <Sheet title={sheet.item ? `Edit ${sheet.item.name}` : "New home meal"} onClose={() => setSheet(null)}>
           <MealForm initial={sheet.item} onDone={() => setSheet(null)} />
+        </Sheet>
+      )}
+      {sheet?.kind === "place-detail" && (
+        <Sheet title={sheet.item.name} onClose={() => setSheet(null)}>
+          <PlaceDetail place={sheet.item} onEdit={() => setSheet({ kind: "place", item: sheet.item })} />
         </Sheet>
       )}
       {sheet?.kind === "meal-detail" && (

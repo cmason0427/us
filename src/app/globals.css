@@ -626,3 +626,20 @@ p { margin: 0; }
 /* Category headers inside the one-list shopping drag */
 .shop-cat { margin: 0; padding: 12px 0 4px; font-size: 1rem; border-bottom: 1px solid var(--line); }
 .sortable-row:first-child .shop-cat { padding-top: 8px; }
+
+/* ─── Home dashboard: view-only rows, tap to act ───────────────────────── */
+.dash { padding: 4px 14px; margin-top: 4px; }
+.dash[aria-busy] { min-height: 64px; }
+.dash-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 0; background: none; border: 0; text-align: left;
+  color: inherit; font: inherit; text-decoration: none; cursor: pointer;
+}
+div.dash-row { cursor: default; }
+.dash-row + .dash-row { border-top: 1px solid var(--line); }
+.dash-icon { font-size: 1.25rem; width: 28px; text-align: center; flex: none; }
+.dash-label { display: block; font-size: 0.78rem; color: var(--ink-soft); font-weight: 650; }
+.dash-value { display: block; }
+.dash-more { opacity: 0.4; font-size: 1.3rem; }
+.feed-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 24px 0 10px; }
+.feed-head .section-title { margin: 0; }

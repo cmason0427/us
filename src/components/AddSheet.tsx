@@ -11,6 +11,8 @@ import { StarForm } from "./StarForm";
 import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
 import { ShopItemForm } from "./Shopping";
+import { MealStart } from "./MealThread";
+import { VibeAsk } from "./Vibe";
 
 type Entry = { kind: AddKind; emoji: string; label: string; art?: ArtName };
 
@@ -19,31 +21,31 @@ const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Us",
     items: [
-      { kind: "post", emoji: "🌼", label: "Update", art: "wiley_happy" },
+      { kind: "post", emoji: "🌼", label: "Update" },
       { kind: "star", emoji: "⭐", label: "Send a star" },
+      { kind: "vibe", emoji: "💭", label: "Vibe check" },
       { kind: "event", emoji: "📅", label: "Event" },
     ],
   },
   {
-    title: "The dogs",
+    title: "Food",
     items: [
-      { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
+      { kind: "meal-suggest", emoji: "🍽️", label: "Meal suggestion" },
+      { kind: "meal", emoji: "🍳", label: "Home meal" },
+      { kind: "place", emoji: "📍", label: "Place to eat" },
     ],
   },
   {
-    title: "To-dos",
+    title: "Lists",
     items: [
       { kind: "task", emoji: "✅", label: "To-do" },
       { kind: "shop", emoji: "🛒", label: "Shopping item" },
+      { kind: "activity", emoji: "✨", label: "Activity idea" },
     ],
   },
   {
-    title: "Ideas",
-    items: [
-      { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_run" },
-      { kind: "meal", emoji: "🍳", label: "Home meal" },
-      { kind: "place", emoji: "🍽️", label: "Place to eat", art: "food_bowl" },
-    ],
+    title: "The dogs",
+    items: [{ kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" }],
   },
 ];
 
@@ -59,6 +61,8 @@ const TITLES: Record<AddKind, string> = {
   meal: "Home meal",
   place: "Place to eat",
   shop: "Shopping list",
+  "meal-suggest": "Suggest a meal",
+  vibe: "Vibe check",
 };
 
 /** "Just one" or "Add several" for things that come in batches. */
@@ -120,6 +124,8 @@ export function AddSheet() {
       {addOpen === "shop" && <ShopItemForm onDone={closeAdd} />}
       {addOpen === "activity" && <OneOrMany one={<ActivityForm onDone={closeAdd} />} many={<ActivityBatch onDone={closeAdd} />} />}
       {addOpen === "meal" && <OneOrMany one={<MealForm onDone={closeAdd} />} many={<MealBatch onDone={closeAdd} />} />}
+      {addOpen === "meal-suggest" && <MealStart onDone={closeAdd} />}
+      {addOpen === "vibe" && <VibeAsk onDone={closeAdd} />}
       {addOpen === "place" && <OneOrMany one={<PlaceForm onDone={closeAdd} />} many={<PlaceBatch onDone={closeAdd} />} />}
     </Sheet>
   );
