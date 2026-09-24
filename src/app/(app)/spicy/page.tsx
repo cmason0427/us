@@ -56,23 +56,15 @@ function useItems() {
 }
 
 function Spicy() {
-  const { partner, toast } = useApp();
   const [section, setSection] = useState<Section>("pics");
-  const [sentLunch, setSentLunch] = useState(false);
-
-  async function lunch() {
-    const res = await fetch("/api/spicy/lunch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "send" }) }).catch(() => null);
-    if (!res?.ok) return toast("Couldn't send. Try again?");
-    setSentLunch(true);
-    refreshAll();
-    toast(`Sent to ${partner?.display_name ?? "them"} 😏`);
-  }
+  const [asking, setAsking] = useState(false);
 
   return (
     <div className="stack">
-      <button className="btn btn-block spicy-lunch" onClick={lunch} disabled={sentLunch}>
-        {sentLunch ? "Sent: lunch, you? 😏" : "🍽️ Lunch: you? 😏"}
+      <button className="btn btn-block spicy-lunch" onClick={() => setAsking(true)}>
+        😏 In the mood?
       </button>
+      {asking && <MoodAsk onClose={() => setAsking(false)} />}
       <div className="seg" role="group" aria-label="Section">
         <button aria-pressed={section === "pics"} onClick={() => setSection("pics")}>
           Pics
@@ -477,5 +469,92 @@ function Notes() {
         </section>
       )}
     </div>
+  );
+}
+
+const MOOD_PRESETS = ["Lunch: you? 😏", "In the mood. Are you? 😏", "Tonight? 🌙", "Thinking about you 🔥"];
+const COOLDOWN_MS = 3 * 60 * 60 * 1000;
+
+/** How long ago I last sent a mood ask (answered or not), in ms. */
+async function lastMoodAskAge(meId: string) {
+  const { data: last } = await supabaseBrowser()
+    .from("posts")
+    .select("created_at")
+    .eq("author", meId)
+    .eq("kind", "lunch_you")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return last ? Date.now() - Date.parse(last.created_at) : Infinity;
+}
+
+/**
+ * A mood ask: a preset or your own words. It lands in their feed; "not right
+ * now" quietly takes it away. If you asked in the last 3 hours, it checks first.
+ */
+function MoodAsk({ onClose }: { onClose: () => void }) {
+  const { meId, partner, toast } = useApp();
+  const [custom, setCustom] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<{ text: string; hours: string } | null>(null);
+  const them = partner?.display_name ?? "them";
+
+  async function send(text: string, force = false) {
+    setBusy(true);
+    if (!force) {
+      const age = await lastMoodAskAge(meId);
+      if (age < COOLDOWN_MS) {
+        setBusy(false);
+        const h = age / 3600000;
+        return setConfirm({ text, hours: h < 1 ? "less than an hour" : `${Math.floor(h)} hour${Math.floor(h) === 1 ? "" : "s"}` });
+      }
+    }
+    const res = await fetch("/api/spicy/lunch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "send", text }) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return toast("Couldn't send. Try again?");
+    refreshAll();
+    toast(`Sent to ${them} 😏`);
+    onClose();
+  }
+
+  return (
+    <Sheet title="In the mood?" onClose={onClose}>
+      {confirm ? (
+        <div className="stack">
+          <p>You sent a mood ask {confirm.hours} ago. Would you like to send another?</p>
+          <div className="row-between">
+            <button className="btn btn-ghost" onClick={() => setConfirm(null)}>
+              Not yet
+            </button>
+            <button className="btn btn-primary" disabled={busy} onClick={() => send(confirm.text, true)}>
+              Send another
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="stack">
+          <div className="stack-sm">
+            {MOOD_PRESETS.map((p) => (
+              <button key={p} className="btn btn-block" disabled={busy} onClick={() => send(p)}>
+                {p}
+              </button>
+            ))}
+          </div>
+          <form
+            className="quick-add"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (custom.trim()) send(custom.trim());
+            }}
+          >
+            <input className="input grow" value={custom} maxLength={140} onChange={(e) => setCustom(e.target.value)} placeholder="Or say it your way…" aria-label="Your own words" />
+            <button className="btn btn-primary" disabled={busy || !custom.trim()}>
+              Send
+            </button>
+          </form>
+          <p className="small muted">It goes to {them}&apos;s feed. “Not right now” just makes it disappear, no hard feelings.</p>
+        </div>
+      )}
+    </Sheet>
   );
 }

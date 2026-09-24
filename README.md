@@ -3,7 +3,7 @@
 A private two-person app for Charlie and Parker: a shared calendar, a no-pressure
 update feed, a mood → activity matcher, to-dos, and dog notes (Kodo and Wiley; the list is `src/lib/dogs.ts`).
 Dog notes are feed posts tagged with dogs (`as_dog`), shown as from the dog, or "The boys" for both; dog
-profile photos live in the `dogs` table and are set in Settings. It's a
+profile photos live in the `dogs` table and are set on the Dogs tab. It's a
 Next.js PWA hosted on Netlify (https://us-little-corner.netlify.app), with Supabase for the database, auth, realtime updates
 and photo storage, and Web Push for notifications.
 
@@ -11,15 +11,18 @@ and photo storage, and Web Push for notifications.
 
 | Path | What |
 | --- | --- |
-| `src/app/(app)/page.tsx` | Home feed: updates and dog notes, photos |
+| `src/app/(app)/page.tsx` | Home: a view-only "today" dashboard (`src/components/Dashboard.tsx`: sleep, meals, plans, vibe, dog to-dos; tap a row to act), then the feed |
+| `src/components/MealThread.tsx` | Breakfast / lunch / dinner back-and-forth (`lunch_msgs.meal`); lunch also has a "where"; the others only exist once started from ＋ |
 | `src/app/(app)/calendar` | Day / Week / Month / List views, the four event types, Ask accept/decline (note + suggested time); each ask step posts to the feed |
 | `src/components/Plans.tsx` | Time-block plans: a slot on a day, activities in order (drag), notes; both edit; "Send" leaves one feed note |
 | `src/app/(app)/do` | Energy check-in + the activity library and matcher (optional filters: in/out, cost, length) |
 | `src/components/SideMenu.tsx` | The ☰ drawer; add new sections to `SECTIONS` |
-| `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us) and home meals with a shared pantry |
+| `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us, each person's usual order) and home meals with a shared pantry and the grocery list |
+| `src/app/(app)/shopping` | Everything to buy; `shop_items.grocery` items also show in Eat → Groceries. Drag items between categories |
+| `src/app/(app)/dogs` | Dog photos, dog to-dos, and a dog-only feed (the main feed has everything) |
 | `src/app/(app)/saved` | Private folders of saved photos |
-| `src/app/(app)/spicy` | PIN-gated: shared pics & videos tagged by who's in them, private fantasies, shared want-to-try list, notes, "Lunch: you?" |
-| `src/app/(app)/lists` | To-dos with deadlines (overdue → top + high), Ours collects shared/household/dog items, dog notes + dog to-dos |
+| `src/app/(app)/spicy` | PIN-gated: shared pics & videos tagged by who's in them, private fantasies, shared want-to-try list, notes, mood asks (presets or your own words; "not right now" hides it; a nudge if you asked < 3h ago) |
+| `src/app/(app)/lists` | To-dos with deadlines (overdue → top + high): Ours (shared, incl. dog to-dos) and Just mine |
 | `src/app/(app)/settings` | Display name, push on/off, per-kind notification toggles, change PIN, sign out |
 | `src/components/AddSheet.tsx` | The fast-entry sheet behind the + button |
 | `src/app/api/notify` | Event-triggered pushes (asks, answers, posts, energy pings) |

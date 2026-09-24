@@ -165,17 +165,17 @@ function LunchYou({ post }: { post: Post }) {
     setBusy(false);
     if (!res?.ok) return toast("Couldn't send. Try again?");
     refreshAll();
-    toast(yes ? "Bon appétit 😋" : "Maybe another time");
+    toast(yes ? "I'm in 😏" : "Another time 💛");
   }
-  if (post.reply === "yes") return <p className="lunch-decided">😋 Bon appétit</p>;
+  if (post.reply === "yes") return <p className="lunch-decided">😏 {post.to_user === meId ? "You're" : `${nameOf(post.to_user)}'s`} in</p>;
   if (post.to_user !== meId) return <p className="small muted">Waiting on {nameOf(post.to_user)}…</p>;
   return (
     <div className="row wrap" style={{ marginTop: 8 }}>
       <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => answer(true)}>
-        Bon appétit 😋
+        I&apos;m in 😏
       </button>
       <button className="btn btn-sm" disabled={busy} onClick={() => answer(false)}>
-        Not on the menu
+        Not right now
       </button>
     </div>
   );

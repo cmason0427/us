@@ -25,6 +25,7 @@ export default function HomePage() {
       const { data, error } = await supabaseBrowser()
         .from("posts")
         .select("*, post_photos(*)")
+        .or("reply.is.null,reply.neq.no") // a "not right now" quietly leaves the feed
         .order("created_at", { ascending: false })
         .limit(limit);
       if (error) throw error;
