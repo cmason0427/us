@@ -40,7 +40,7 @@ export default function ListsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Keeping track" title="Lists" art={<DogPic name="wiley_standing" size={40} />} />
+      <PageHead eyebrow="Keeping track" title="Lists" />
       <Wavy />
       <div className="seg" role="group" aria-label="List" style={{ marginBottom: 16 }}>
         <button aria-pressed={tab === "todo"} onClick={() => pick("todo")}>

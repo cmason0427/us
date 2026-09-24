@@ -173,13 +173,13 @@ export function ShoppingList() {
     const chosen = items.filter((i) => picked.has(i.id));
     const { error } = await supabase
       .from("tasks")
-      .insert(chosen.map((i) => ({ title: `Buy ${i.name}${i.detail ? ` (${i.detail})` : ""}`, list_type: "household", created_by: meId, claimed_by: i.claimed_by })));
+      .insert(chosen.map((i) => ({ title: `Buy ${i.name}${i.detail ? ` (${i.detail})` : ""}`, list_type: "shared", created_by: meId, claimed_by: i.claimed_by })));
     if (error) return toast(error.message);
     await supabase.from("shop_items").delete().in("id", [...picked]);
     setPicked(new Set());
     setSelecting(false);
     refreshAll();
-    toast(`Moved ${chosen.length} to Household to-dos`);
+    toast(`Moved ${chosen.length} to our to-dos`);
   }
 
   async function clearBought() {
@@ -275,7 +275,7 @@ export function ShoppingList() {
 
       {selecting && (
         <button className="btn btn-primary btn-block" disabled={!picked.size} onClick={sendToTodos}>
-          Add {picked.size || ""} to Household to-dos
+          Add {picked.size || ""} to our to-dos
         </button>
       )}
       {!selecting && bought.length > 0 && (

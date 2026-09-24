@@ -1,6 +1,5 @@
 "use client";
 
-import { DogPic } from "@/components/DogPic";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -114,7 +113,7 @@ export default function SettingsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just for you" title="Settings" art={<DogPic name="kodo_happy" size={38} />} />
+      <PageHead eyebrow="Just for you" title="Settings" />
       <Wavy />
 
       <section className="card stack">

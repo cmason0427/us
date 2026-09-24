@@ -1,9 +1,7 @@
 "use client";
 
-import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wavy } from "@/components/Art";
 import { PinPad } from "@/components/PinPad";
 import { markUnlocked } from "@/lib/lock";
 
@@ -41,13 +39,7 @@ export default function LoginPage() {
 
   return (
     <main className="login">
-      <div className="card card-stitched login-card">
-        <DogPic name="kodo_wiley_face" size={128} alt="Kodo and Wiley" style={{ margin: "0 auto" }} />
-        <h1>Us</h1>
-        <p className="muted">our little corner</p>
-        <Wavy />
-        <PinPad onComplete={signIn} busy={busy} />
-      </div>
+      <PinPad onComplete={signIn} busy={busy} />
     </main>
   );
 }

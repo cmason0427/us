@@ -38,7 +38,7 @@ export default function SavedPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="wiley_happy" size={38} />} />
+      <PageHead eyebrow="Just yours" title="Saved" />
       <Wavy />
       <div className="folder-grid" style={{ marginTop: 16 }}>
         {folders.map((f) => (

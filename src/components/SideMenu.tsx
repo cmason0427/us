@@ -2,21 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
-import { DogPic, type ArtName } from "./DogPic";
 import { PersonAvatar } from "./PersonAvatar";
+import { IconBag, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconList, IconPaw, IconSparkle } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
-export const SECTIONS: { href: string; label: string; art: ArtName }[] = [
-  { href: "/", label: "Home", art: "kodo_wiley_face" },
-  { href: "/calendar", label: "Calendar", art: "kodo_wiley_back_walk" },
-  { href: "/do", label: "Do something", art: "kodo_run" },
-  { href: "/eat", label: "Eat", art: "food_bowl" },
-  { href: "/lists", label: "Lists", art: "wiley_standing" },
-  { href: "/saved", label: "Saved", art: "wiley_happy" },
-  { href: "/spicy", label: "Spicy", art: "kodo_wiley_cuddle" },
-  { href: "/settings", label: "Settings", art: "kodo_happy" },
+export const SECTIONS: { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
+  { href: "/", label: "Home", Icon: IconHome },
+  { href: "/calendar", label: "Calendar", Icon: IconCalendar },
+  { href: "/do", label: "Do something", Icon: IconSparkle },
+  { href: "/eat", label: "Food", Icon: IconFork },
+  { href: "/shopping", label: "Shopping", Icon: IconBag },
+  { href: "/lists", label: "To-dos", Icon: IconList },
+  { href: "/dogs", label: "Dogs", Icon: IconPaw },
+  { href: "/spicy", label: "Spicy", Icon: IconFlame },
 ];
 
 const isHere = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
@@ -33,7 +33,7 @@ export function MenuButton() {
   );
 }
 
-/** Slide-out drawer with every section. */
+/** Slide-out drawer with every section; Saved and Settings are small icons up top. */
 export function SideMenu() {
   const { menuOpen, setMenuOpen, meId, me } = useApp();
   const path = usePathname();
@@ -52,15 +52,18 @@ export function SideMenu() {
       <div className={`drawer-backdrop${menuOpen ? " open" : ""}`} onClick={() => setMenuOpen(false)} aria-hidden />
       <nav className={`drawer${menuOpen ? " open" : ""}`} aria-label="Sections" aria-hidden={!menuOpen} inert={!menuOpen}>
         <div className="drawer-head">
-          <PersonAvatar id={meId} size={44} />
-          <div>
-            <strong>{me?.display_name ?? ""}</strong>
-            <div className="small muted">Us</div>
-          </div>
+          <PersonAvatar id={meId} size={40} />
+          <strong className="grow">{me?.display_name ?? ""}</strong>
+          <Link href="/saved" className="icon-btn" aria-label="Saved" aria-current={isHere(path, "/saved") ? "page" : undefined}>
+            <IconBookmark />
+          </Link>
+          <Link href="/settings" className="icon-btn" aria-label="Settings" aria-current={isHere(path, "/settings") ? "page" : undefined}>
+            <IconGear />
+          </Link>
         </div>
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href} className="drawer-item" aria-current={isHere(path, s.href) ? "page" : undefined}>
-            <DogPic name={s.art} size={36} />
+            <s.Icon width={22} height={22} />
             <span>{s.label}</span>
           </Link>
         ))}

@@ -1,6 +1,5 @@
 "use client";
 
-import { DogPic } from "@/components/DogPic";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Pantry } from "@/components/Pantry";
@@ -28,7 +27,7 @@ export default function EatPage() {
   };
   return (
     <main className="page">
-      <PageHead eyebrow="What sounds good?" title="Eat" art={<DogPic name="food_bowl" size={36} />} />
+      <PageHead eyebrow="What sounds good?" title="Eat" />
       <Wavy />
       <div className="seg" role="group" aria-label="Section" style={{ marginBottom: 14 }}>
         <button aria-pressed={section === "pick"} onClick={() => pick("pick")}>

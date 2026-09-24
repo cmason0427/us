@@ -45,7 +45,7 @@ export default function HomePage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} art={now ? <DogPic name={hour >= 17 || hour < 5 ? "moon_night" : "sun"} size={36} /> : undefined} />
+      <PageHead eyebrow={now ? format(now, "EEEE, MMMM d") : "\u00a0"} title={`${greeting}${me ? `, ${me.display_name}` : ""}`} />
       <Wavy />
 
       <button className="card composer-prompt" onClick={() => openAdd("post")}>

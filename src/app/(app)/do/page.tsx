@@ -153,7 +153,7 @@ export default function DoSomethingPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogPic name="kodo_run" size={44} />} />
+      <PageHead eyebrow="Mood & activity matcher" title="Do Something" />
       <Wavy className="terracotta" />
 
       {/* ─── Check-in ─── */}

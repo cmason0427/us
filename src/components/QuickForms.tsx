@@ -28,7 +28,7 @@ export function UrgencyPicker({ value, onChange }: { value: Urgency; onChange: (
   );
 }
 
-/* ─── To-do / household ─────────────────────────────────────────────────── */
+/* ─── To-dos ─────────────────────────────────────────────────── */
 
 export function TaskForm({ listType: initialList = "shared", onDone }: { listType?: ListType; onDone: () => void }) {
   const { meId, partner, toast } = useApp();
@@ -64,9 +64,6 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
           <button type="button" aria-pressed={list === "shared"} onClick={() => setList("shared")}>
             Shared
           </button>
-          <button type="button" aria-pressed={list === "household"} onClick={() => setList("household")}>
-            Household
-          </button>
           <button type="button" aria-pressed={list === "dogs"} onClick={() => setList("dogs")}>
             Dogs
           </button>
@@ -74,9 +71,7 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
         <p className="small muted">
           {list === "personal"
             ? `Private — ${partner?.display_name ?? "they"} can't see this.`
-            : list === "household"
-              ? "Shows in Household and in Ours."
-              : list === "dogs"
+            : list === "dogs"
                 ? "Shows in Dogs and in Ours."
                 : "Either of you can check it off."}
         </p>

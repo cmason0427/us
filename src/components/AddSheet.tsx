@@ -28,14 +28,12 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "The dogs",
     items: [
       { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
-      { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_down" },
     ],
   },
   {
     title: "To-dos",
     items: [
       { kind: "task", emoji: "✅", label: "To-do" },
-      { kind: "household", emoji: "🧺", label: "Household" },
       { kind: "shop", emoji: "🛒", label: "Shopping item" },
     ],
   },

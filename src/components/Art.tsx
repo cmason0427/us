@@ -32,6 +32,18 @@ export const IconBookmark = (p: P) => (
 export const IconFork = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M7 3v7a2 2 0 0 0 2 2v9M11 3v7a2 2 0 0 1-2 2M9 3v6" /><path d="M17 21V3c-2 1-3.5 3.5-3.5 7v3H17" /></svg>
 );
+export const IconGear = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.4M12 18.8v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" /></svg>
+);
+export const IconBag = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
+);
+export const IconPaw = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><ellipse cx="12" cy="16" rx="4" ry="3.3" /><circle cx="6.5" cy="11" r="1.7" /><circle cx="9.7" cy="7" r="1.7" /><circle cx="14.3" cy="7" r="1.7" /><circle cx="17.5" cy="11" r="1.7" /></svg>
+);
+export const IconFlame = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.3 2.3-5.4 3.6-7.8.5 1.9 1.5 3 2.6 3.3C11.4 7.2 12.6 4.6 15 3c-.3 3 1.5 4.6 2.6 6.4.7 1.2.9 2.4.9 3.6 0 4.3-2.6 8-6.5 8z" /></svg>
+);
 export const IconPlus = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} strokeWidth={3} {...p}><path d="M12 5v14M5 12h14" /></svg>
 );
