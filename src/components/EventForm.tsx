@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { addHours } from "date-fns";
+import { addHours, addMinutes, differenceInMinutes } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
-import { refreshAll } from "@/lib/useLive";
+import { refreshAll, useLive } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { EVENT_TYPE_HINT, EVENT_TYPE_LABEL, type CalEvent, type EventType } from "@/lib/types";
@@ -12,6 +12,32 @@ import { postAskUpdate } from "@/lib/askFeed";
 import { useApp } from "./AppProvider";
 
 const TYPES: EventType[] = ["confirmed", "solo", "ask", "radar"];
+
+/** A saved default ("Therapy"): everything but the day and start time. */
+interface EventTemplate {
+  id: string;
+  name: string;
+  title: string;
+  type: EventType;
+  all_day: boolean;
+  duration_minutes: number | null;
+  location: string | null;
+  notes: string | null;
+  reminder_lead_minutes: number | null;
+}
+
+function useTemplates() {
+  const { data = [] } = useLive<EventTemplate[]>(
+    "event_templates",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("event_templates").select("*").order("name");
+      if (error) throw error;
+      return data as EventTemplate[];
+    },
+    ["event_templates"],
+  );
+  return data;
+}
 
 // Minutes before start. All-day events start at local midnight, so "morning
 // of" is a negative lead (8h *after* midnight).
@@ -50,6 +76,66 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
   const [reminder, setReminder] = useState(initial?.reminder_lead_minutes?.toString() ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const templates = useTemplates();
+  // Set by a default: moving the start keeps this length.
+  const [lengthMin, setLengthMin] = useState<number | null>(null);
+  const [usedTemplate, setUsedTemplate] = useState<string | null>(null);
+  const [managing, setManaging] = useState(false);
+
+  function setEndFrom(d: string, t: string, minutes: number) {
+    const e = addMinutes(fromInputs(d, t), minutes);
+    setEndDate(toDateInput(e));
+    setEnd(toTimeInput(e));
+  }
+
+  function applyTemplate(t: EventTemplate) {
+    setUsedTemplate(t.id);
+    setTitle(t.title);
+    setType(t.type);
+    setAllDay(t.all_day);
+    setLocation(t.location ?? "");
+    setNotes(t.notes ?? "");
+    setReminder(t.reminder_lead_minutes?.toString() ?? "");
+    if (t.all_day) {
+      setLengthMin(null);
+      const days = Math.max(1, Math.round((t.duration_minutes ?? 1440) / 1440));
+      setEndDate(toDateInput(addHours(fromInputs(date), 24 * (days - 1))));
+    } else {
+      const m = t.duration_minutes ?? 60;
+      setLengthMin(m);
+      setEndFrom(date, start, m);
+    }
+  }
+
+  async function saveAsDefault() {
+    const name = window.prompt("Name this default (e.g. Therapy)", title.trim());
+    if (!name?.trim()) return;
+    const duration = allDay
+      ? (Math.round((fromInputs(endDate < date ? date : endDate).getTime() - fromInputs(date).getTime()) / 86_400_000) + 1) * 1440
+      : Math.max(0, differenceInMinutes(fromInputs(endDate, end), fromInputs(date, start)));
+    const row = {
+      name: name.trim(),
+      title: title.trim() || name.trim(),
+      type,
+      all_day: allDay,
+      duration_minutes: duration,
+      location: location.trim() || null,
+      notes: notes.trim() || null,
+      reminder_lead_minutes: reminderValid && reminder !== "" ? Number(reminder) : null,
+    };
+    const supabase = supabaseBrowser();
+    const same = templates.find((t) => t.name.toLowerCase() === row.name.toLowerCase());
+    const { error } = same ? await supabase.from("event_templates").update(row).eq("id", same.id) : await supabase.from("event_templates").insert({ ...row, created_by: meId });
+    if (error) return toast(error.message);
+    refreshAll();
+    toast(same ? `Updated "${row.name}"` : `Saved "${row.name}" as a default`);
+  }
+
+  async function removeTemplate(t: EventTemplate) {
+    if (!confirm(`Remove the "${t.name}" default? (Events already on the calendar stay.)`)) return;
+    await supabaseBrowser().from("event_templates").delete().eq("id", t.id);
+    refreshAll();
+  }
 
   const reminderOptions = allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
   const reminderValid = reminderOptions.some((o) => o.v === reminder);
@@ -124,6 +210,31 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
 
   return (
     <form className="stack" onSubmit={submit}>
+      {!initial && templates.length > 0 && (
+        <div className="field">
+          <div className="row-between">
+            <span>Quick add</span>
+            <button type="button" className="btn-link small" onClick={() => setManaging((m) => !m)}>
+              {managing ? "Done" : "Edit"}
+            </button>
+          </div>
+          <div className="chips">
+            {templates.map((t) =>
+              managing ? (
+                <button key={t.id} type="button" className="chip chip-sm" onClick={() => removeTemplate(t)} aria-label={`Remove ${t.name}`}>
+                  {t.name} ×
+                </button>
+              ) : (
+                <button key={t.id} type="button" className="chip" aria-pressed={usedTemplate === t.id} onClick={() => applyTemplate(t)}>
+                  + {t.name}
+                </button>
+              ),
+            )}
+          </div>
+          {managing && <p className="small muted">Tap one to remove it. To change one, use it, tweak it, and save it as a default with the same name.</p>}
+          {usedTemplate && !managing && <p className="small muted">Just pick the day and start time.</p>}
+        </div>
+      )}
       <label className="field">
         <span>What</span>
         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Card show, dinner at Mom's…" autoFocus={!initial} required />
@@ -159,7 +270,8 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
             value={date}
             onChange={(e) => {
               setDate(e.target.value);
-              if (endDate < e.target.value) setEndDate(e.target.value);
+              if (lengthMin !== null && !allDay && e.target.value) setEndFrom(e.target.value, start, lengthMin);
+              else if (endDate < e.target.value) setEndDate(e.target.value);
             }}
             required
           />
@@ -172,7 +284,16 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         ) : (
           <label className="field">
             <span>Starts</span>
-            <input className="input" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+            <input
+              className="input"
+              type="time"
+              value={start}
+              onChange={(e) => {
+                setStart(e.target.value);
+                if (lengthMin !== null && e.target.value) setEndFrom(date, e.target.value, lengthMin);
+              }}
+              required
+            />
           </label>
         )}
       </div>
@@ -208,6 +329,11 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         </select>
       </label>
 
+      {!initial && title.trim() && (
+        <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={saveAsDefault}>
+          ☆ Save as a default
+        </button>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="row-between">
         {initial ? (

@@ -643,3 +643,4 @@ div.dash-row { cursor: default; }
 .dash-more { opacity: 0.4; font-size: 1.3rem; }
 .feed-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 24px 0 10px; }
 .feed-head .section-title { margin: 0; }
+.btn-link { appearance: none; background: none; border: 0; padding: 4px 2px; color: var(--accent); font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
