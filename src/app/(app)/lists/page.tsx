@@ -155,6 +155,13 @@ function TaskList({ listType, show = [listType], title, hint }: { listType: List
     refreshAll();
   }
 
+  // "I'll do it" / "never mind". Taking over the other person's claim is fine too.
+  async function claim(t: Task) {
+    const { error } = await supabase.from("tasks").update({ claimed_by: t.claimed_by === meId ? null : meId }).eq("id", t.id);
+    if (error) toast(error.message);
+    refreshAll();
+  }
+
   async function edit(t: Task, title: string, d: Deadline | null) {
     const { error } = await supabase
       .from("tasks")
@@ -214,7 +221,7 @@ function TaskList({ listType, show = [listType], title, hint }: { listType: List
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} now={now} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
 
@@ -233,7 +240,7 @@ function TaskList({ listType, show = [listType], title, hint }: { listType: List
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} now={now} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={edit} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -250,8 +257,10 @@ function TaskRow({
   onToggle,
   onBump,
   onEdit,
+  onClaim,
   onRemove,
   nameOf,
+  meId,
   now,
 }: {
   t: Task;
@@ -260,8 +269,11 @@ function TaskRow({
   onToggle: (t: Task, el: HTMLElement) => void;
   onBump: (t: Task) => void;
   onEdit: (t: Task, title: string, d: Deadline | null) => void;
+  /** Shared lists only: claim or unclaim. */
+  onClaim?: (t: Task) => void;
   onRemove: (t: Task) => void;
   nameOf: (id: string | null) => string;
+  meId: string;
   now: number;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -314,6 +326,11 @@ function TaskRow({
             {overdue ? "⏰ Overdue · " : "⏳ "}
             {dueLabel(d, new Date(now))}
           </div>
+        )}
+        {onClaim && !t.done && editing === null && (
+          <button className={`claim${t.claimed_by ? " claimed" : ""}`} onClick={() => onClaim(t)} aria-pressed={t.claimed_by === meId}>
+            {t.claimed_by === meId ? "🙋 You're on it" : t.claimed_by ? `🙋 ${nameOf(t.claimed_by)}'s on it` : "🙋 I'll do it"}
+          </button>
         )}
         {showWho && (
           <div className="small faint">

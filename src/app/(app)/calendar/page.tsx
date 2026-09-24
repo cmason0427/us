@@ -473,9 +473,16 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
         )}
         {e.type === "ask" && e.response_status === "declined" && e.created_by === meId && <TakeProposal e={e} />}
         {t === "ask" && e.created_by !== meId && <AskActions e={e} />}
-        <button className="btn btn-block" onClick={onEdit}>
-          Edit
-        </button>
+        {/* A pending ask is the asker's to change; the other side answers (or suggests a time). */}
+        {t === "ask" && e.created_by !== meId ? (
+          <p className="small muted" style={{ textAlign: "center" }}>
+            Only {nameOf(e.created_by)} can change this until you answer. Suggest a different time with &ldquo;Can&apos;t make it&rdquo;.
+          </p>
+        ) : (
+          <button className="btn btn-block" onClick={onEdit}>
+            Edit
+          </button>
+        )}
       </div>
     </Sheet>
   );

@@ -85,6 +85,8 @@ export interface Task {
   due_at: string | null;
   /** "By end of day": due_at is that day's local end, shown as a day. */
   due_all_day: boolean;
+  /** Who said "I'll do it" (shared lists). */
+  claimed_by: string | null;
   done: boolean;
   done_at: string | null;
   done_by: string | null;

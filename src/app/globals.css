@@ -466,6 +466,11 @@ p { margin: 0; }
 .task-title { font-weight: 700; overflow-wrap: anywhere; }
 .due { font-weight: 800; color: var(--ink-soft); }
 .due.overdue { color: var(--terracotta); }
+.claim {
+  appearance: none; cursor: pointer; margin-top: 4px; padding: 2px 10px; border-radius: 999px;
+  border: 1.5px dashed var(--line); background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.8rem; font-weight: 800;
+}
+.claim.claimed { border-style: solid; border-color: var(--sage); background: color-mix(in srgb, var(--sage) 25%, var(--surface)); color: var(--ink); }
 .task-edit { appearance: none; border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: text; }
 .urg {
   appearance: none; cursor: pointer; flex-shrink: 0;
