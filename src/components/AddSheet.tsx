@@ -4,13 +4,15 @@ import { useState, type ReactNode } from "react";
 import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
-import { EventForm } from "./EventForm";
+import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
 import { DogPic, type ArtName } from "./DogPic";
 import { StarForm } from "./StarForm";
 import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
-import { ShopItemForm } from "./Shopping";
+import { ShopAdd } from "./Shopping";
+import { RequestsList } from "./Requests";
+import { TaskPresetForm } from "./TaskForm";
 import { MealStart } from "./MealThread";
 import { VibeAsk } from "./Vibe";
 
@@ -21,10 +23,17 @@ const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Us",
     items: [
-      { kind: "post", emoji: "🌼", label: "Update" },
+      { kind: "post", emoji: "🌼", label: "Update", art: "wiley_happy" },
       { kind: "star", emoji: "⭐", label: "Send a star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
+    ],
+  },
+  {
+    title: "Calendar",
+    items: [
       { kind: "event", emoji: "📅", label: "Event" },
+      { kind: "requests", emoji: "💌", label: "Requests" },
+      { kind: "event-preset", emoji: "☆", label: "New preset" },
     ],
   },
   {
@@ -39,13 +48,17 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "Lists",
     items: [
       { kind: "task", emoji: "✅", label: "To-do" },
-      { kind: "shop", emoji: "🛒", label: "Shopping item" },
-      { kind: "activity", emoji: "✨", label: "Activity idea" },
+      { kind: "shop", emoji: "🛒", label: "Shopping" },
+      { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_run" },
     ],
   },
   {
     title: "The dogs",
-    items: [{ kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" }],
+    items: [
+      { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
+      { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_down" },
+      { kind: "dog-preset", emoji: "☆", label: "New dog preset", art: "wiley_down" },
+    ],
   },
 ];
 
@@ -62,6 +75,9 @@ const TITLES: Record<AddKind, string> = {
   place: "Place to eat",
   shop: "Shopping list",
   "meal-suggest": "Suggest a meal",
+  requests: "Requests",
+  "event-preset": "New calendar default",
+  "dog-preset": "New dog preset",
   vibe: "Vibe check",
 };
 
@@ -121,7 +137,10 @@ export function AddSheet() {
       {addOpen === "task" && <TaskForm listType="shared" onDone={closeAdd} />}
       {addOpen === "household" && <TaskForm listType="household" onDone={closeAdd} />}
       {addOpen === "dog-task" && <TaskForm listType="dogs" onDone={closeAdd} />}
-      {addOpen === "shop" && <ShopItemForm onDone={closeAdd} />}
+      {addOpen === "shop" && <ShopAdd onDone={closeAdd} />}
+      {addOpen === "requests" && <RequestsList onDone={closeAdd} />}
+      {addOpen === "event-preset" && <EventPresetForm onDone={closeAdd} />}
+      {addOpen === "dog-preset" && <TaskPresetForm listType="dogs" onDone={closeAdd} />}
       {addOpen === "activity" && <OneOrMany one={<ActivityForm onDone={closeAdd} />} many={<ActivityBatch onDone={closeAdd} />} />}
       {addOpen === "meal" && <OneOrMany one={<MealForm onDone={closeAdd} />} many={<MealBatch onDone={closeAdd} />} />}
       {addOpen === "meal-suggest" && <MealStart onDone={closeAdd} />}

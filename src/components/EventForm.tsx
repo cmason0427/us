@@ -320,3 +320,100 @@ function nextHalfHour(day?: Date) {
   d.setHours(now.getHours(), now.getMinutes() < 30 ? 30 : 60, 0, 0);
   return d;
 }
+
+const LENGTHS = [
+  { v: 30, label: "30 min" },
+  { v: 45, label: "45 min" },
+  { v: 60, label: "1 hr" },
+  { v: 90, label: "1½ hr" },
+  { v: 120, label: "2 hr" },
+  { v: 180, label: "3 hr" },
+  { v: 240, label: "4 hr" },
+];
+
+/** Make a calendar default from scratch (＋ → Calendar → New preset). */
+export function EventPresetForm({ onDone }: { onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const [name, setName] = useState("");
+  const [type, setType] = useState<EventType>("solo");
+  const [allDay, setAllDay] = useState(false);
+  const [length, setLength] = useState(60);
+  const [location, setLocation] = useState("");
+  const [notes, setNotes] = useState("");
+  const [reminder, setReminder] = useState("");
+  const reminderOptions = allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const { error } = await supabaseBrowser()
+      .from("event_templates")
+      .insert({
+        name: name.trim(),
+        title: name.trim(),
+        type,
+        all_day: allDay,
+        duration_minutes: allDay ? 1440 : length,
+        location: location.trim() || null,
+        notes: notes.trim() || null,
+        reminder_lead_minutes: reminder === "" || !reminderOptions.some((o) => o.v === reminder) ? null : Number(reminder),
+        created_by: meId,
+      });
+    if (error) return toast(error.message.includes("duplicate") ? "There's already a default with that name." : error.message);
+    refreshAll();
+    toast(`Saved. "+ ${name.trim()}" is ready when you add an event.`);
+    onDone();
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <p className="small muted">A default fills everything in; you only pick the day and start time.</p>
+      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Therapy, vet visit, date night…" autoFocus required />
+      <div className="field">
+        <span>Kind of plan</span>
+        <div className="chips" role="group">
+          {TYPES.map((t) => (
+            <button key={t} type="button" className="chip" aria-pressed={type === t} onClick={() => setType(t)}>
+              <span className="swatch" data-type={t} />
+              {EVENT_TYPE_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="toggle-row">
+        <span className="label">All day</span>
+        <label className="switch">
+          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+          <span />
+        </label>
+      </div>
+      {!allDay && (
+        <div className="field">
+          <span>How long</span>
+          <div className="chips">
+            {LENGTHS.map((l) => (
+              <button key={l.v} type="button" className="chip chip-sm" aria-pressed={length === l.v} onClick={() => setLength(l.v)}>
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where (optional)" aria-label="Where" />
+      <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional)" aria-label="Notes" />
+      <label className="field">
+        <span>Reminder</span>
+        <select className="select" value={reminder} onChange={(e) => setReminder(e.target.value)}>
+          {reminderOptions.map((o) => (
+            <option key={o.v} value={o.v}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="btn btn-primary btn-block" disabled={!name.trim()}>
+        Save default
+      </button>
+    </form>
+  );
+}
