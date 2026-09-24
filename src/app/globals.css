@@ -403,6 +403,11 @@ p { margin: 0; }
 .saved-item figcaption { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .saved-item .icon-btn { width: 28px; height: 28px; }
 
+/* Stars */
+.star-preview { font-size: 4rem; line-height: 1; text-align: center; }
+.star-card { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.star-card .star-big { font-size: 2.6rem; line-height: 1; flex-shrink: 0; }
+
 /* Vibe check */
 .vibe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vibe-grid .chip { justify-content: center; }

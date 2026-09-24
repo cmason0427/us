@@ -55,6 +55,13 @@ export interface Post {
   text: string | null;
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
+  /** "post", a ⭐ "star", or a spicy "lunch_you" invite. */
+  kind: "post" | "star" | "lunch_you";
+  /** Who a star / invite is for. */
+  to_user: string | null;
+  star_color: string | null;
+  /** What the star is for; the separate note is `text`. */
+  star_for: string | null;
   /** The "🌶️ added something for you" note (the photos are in their Spicy folder). */
   spicy: boolean;
   /** Written as a dog note: shown as from the dog(s), not the author. */

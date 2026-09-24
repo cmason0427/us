@@ -6,10 +6,12 @@ import { PostComposer } from "./PostComposer";
 import { EventForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
 import { DogPic, type ArtName } from "./DogPic";
+import { StarForm } from "./StarForm";
 
 const MENU: { kind: AddKind; emoji: string; label: string; art?: ArtName }[] = [
   { kind: "post", emoji: "🌼", label: "Update", art: "wiley_happy" },
   { kind: "event", emoji: "📅", label: "Event" },
+  { kind: "star", emoji: "⭐", label: "Send a star" },
   { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
   { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_down" },
   { kind: "task", emoji: "✅", label: "To-do" },
@@ -21,6 +23,7 @@ const TITLES: Record<AddKind, string> = {
   post: "A little update",
   event: "New plan",
   "dog-note": "Dog note",
+  star: "Send a star",
   "dog-task": "Dog to-do",
   task: "To-do",
   household: "Household thing",
@@ -51,6 +54,7 @@ export function AddSheet() {
     <Sheet title={TITLES[addOpen]} onClose={closeAdd}>
       {addOpen === "post" && <PostComposer onDone={closeAdd} />}
       {addOpen === "event" && <EventForm onDone={closeAdd} />}
+      {addOpen === "star" && <StarForm onDone={closeAdd} />}
       {addOpen === "dog-note" && <PostComposer dogNote onDone={closeAdd} />}
       {addOpen === "task" && <TaskForm listType="shared" onDone={closeAdd} />}
       {addOpen === "household" && <TaskForm listType="household" onDone={closeAdd} />}

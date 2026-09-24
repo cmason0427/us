@@ -51,6 +51,9 @@ export default function HomePage() {
         <DogPic name="kodo_wiley_face" size={40} />
         <span>Share a little update…</span>
       </button>
+      <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={() => openAdd("star")}>
+        ⭐ Send a star
+      </button>
 
       <VibeWidget />
       <LunchWidget />

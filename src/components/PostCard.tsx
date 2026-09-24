@@ -12,6 +12,7 @@ import type { Post } from "@/lib/types";
 import { useState } from "react";
 import { useApp } from "./AppProvider";
 import { SaveSheet } from "./SaveSheet";
+import { starColor } from "@/lib/stars";
 import { IconTrash } from "./Art";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
@@ -59,7 +60,18 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           </button>
         )}
       </div>
-      {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.text}</p>}
+      {post.kind === "star" && (
+        <div className="star-card">
+          <span className="star-big" style={{ color: starColor(post.star_color).hex }} aria-hidden>
+            ★
+          </span>
+          <p>
+            A <strong>{starColor(post.star_color).label.toLowerCase()} star</strong> from {post.author === meId ? "you" : nameOf(post.author)}
+            {post.to_user && post.to_user !== post.author && post.author === meId ? ` to ${nameOf(post.to_user)}` : ""} for <strong>{post.star_for}</strong>
+          </p>
+        </div>
+      )}
+      {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${post.text}”` : post.text}</p>}
       {post.spicy && post.author !== meId && (
         <Link className="btn btn-sm" href="/saved?folder=spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
           🌶️ Open your Spicy folder

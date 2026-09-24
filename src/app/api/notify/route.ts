@@ -6,6 +6,7 @@ import { dogName, dogVoice } from "@/lib/dogs";
 import { describeFilters } from "@/lib/food";
 import type { LunchMsg } from "@/lib/lunch";
 import { VIBES } from "@/lib/vibe";
+import { STAR_COLORS } from "@/lib/stars";
 
 type Body =
   | { kind: "ask"; id: string }
@@ -14,6 +15,7 @@ type Body =
   | { kind: "lunch"; id: string }
   | { kind: "vibe"; id: string }
   | { kind: "spicy"; id: string }
+  | { kind: "star"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -112,6 +114,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ sent });
   }
 
+  if (body.kind === "star") {
+    const { data: post } = await supabase.from("posts").select("id, author, kind, star_color, star_for, text").eq("id", body.id).single();
+    if (!post || post.author !== me.id || post.kind !== "star") return NextResponse.json({ error: "not your star" }, { status: 400 });
+    const color = STAR_COLORS.find((c) => c.v === post.star_color)?.label.toLowerCase() ?? "gold";
+    const sent = await sendPushToUser(partner.id, {
+      title: "⭐ A star for you",
+      body: `A ${color} star from ${myName} for ${post.star_for}${post.text ? ` — "${post.text}"` : ""}`,
+      url: "/",
+      tag: `star-${post.id}`,
+    });
+    return NextResponse.json({ sent });
+  }
+
   if (body.kind === "spicy") {
     const { data: post } = await supabase.from("posts").select("id, author, spicy").eq("id", body.id).single();
     if (!post || post.author !== me.id || !post.spicy) return NextResponse.json({ error: "not a spicy note" }, { status: 400 });
@@ -127,7 +142,8 @@ export async function POST(req: Request) {
     const answering = !!v.answered_at && v.to_user === me.id;
     if (!asking && !answering) return NextResponse.json({ error: "not yours to send" }, { status: 400 });
     if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
-    const label = VIBES.find((x) => x.v === v.choice)?.label;
+    const picked: string[] = v.choices?.length ? v.choices : v.choice ? [v.choice] : [];
+    const label = picked.map((c) => VIBES.find((x) => x.v === c)?.label).filter(Boolean).join(", ");
     const sent = await sendPushToUser(partner.id, {
       title: "💭 Vibe check",
       body: asking ? `${myName} wants a vibe check.` : `${myName}: ${[label, v.answer ? `"${v.answer}"` : null].filter(Boolean).join(" ")}`,

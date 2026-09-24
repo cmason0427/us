@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { ago, useNow } from "@/lib/dates";
 import { notify } from "@/lib/notify";
-import { VIBES, vibeLabel, type VibeCheck } from "@/lib/vibe";
+import { VIBES, vibeLabels, type VibeCheck } from "@/lib/vibe";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 
@@ -66,7 +66,7 @@ export function VibeWidget() {
         {outgoing && <p className="small muted">Waiting on {partner.display_name}… (asked {ago(outgoing.created_at)})</p>}
         {theirAnswer && (
           <p>
-            <strong>{partner.display_name}:</strong> {vibeLabel(theirAnswer.choice)}
+            <strong>{partner.display_name}:</strong> {vibeLabels(theirAnswer.choices.length ? theirAnswer.choices : theirAnswer.choice ? [theirAnswer.choice] : [])}
             {theirAnswer.answer && <span> “{theirAnswer.answer}”</span>}
             <span className="small faint"> · {ago(theirAnswer.answered_at!)}</span>
           </p>
@@ -83,7 +83,8 @@ export function VibeWidget() {
 
 function AnswerSheet({ check, onClose }: { check: VibeCheck; onClose: () => void }) {
   const { partner, toast } = useApp();
-  const [choice, setChoice] = useState<string | null>(null);
+  // Pick as many as fit.
+  const [choices, setChoices] = useState<string[]>([]);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -91,7 +92,7 @@ function AnswerSheet({ check, onClose }: { check: VibeCheck; onClose: () => void
     setBusy(true);
     const { error } = await supabaseBrowser()
       .from("vibe_checks")
-      .update({ choice, answer: answer.trim() || null, answered_at: new Date().toISOString() })
+      .update({ choices, answer: answer.trim() || null, answered_at: new Date().toISOString() })
       .eq("id", check.id);
     setBusy(false);
     if (error) return toast(error.message);
@@ -102,11 +103,17 @@ function AnswerSheet({ check, onClose }: { check: VibeCheck; onClose: () => void
   }
 
   return (
-    <Sheet title="How's your vibe?" onClose={onClose}>
+    <Sheet title="How's your vibe? (pick any)" onClose={onClose}>
       <div className="stack">
-        <div className="vibe-grid" role="radiogroup" aria-label="Vibe">
+        <div className="vibe-grid" role="group" aria-label="Vibe (pick any)">
           {VIBES.map((v) => (
-            <button key={v.v} type="button" role="radio" aria-checked={choice === v.v} className="chip" onClick={() => setChoice(choice === v.v ? null : v.v)}>
+            <button
+              key={v.v}
+              type="button"
+              className="chip"
+              aria-pressed={choices.includes(v.v)}
+              onClick={() => setChoices((c) => (c.includes(v.v) ? c.filter((x) => x !== v.v) : [...c, v.v]))}
+            >
               {v.label}
             </button>
           ))}
@@ -115,7 +122,7 @@ function AnswerSheet({ check, onClose }: { check: VibeCheck; onClose: () => void
           <span>Or in your own words</span>
           <textarea className="textarea" rows={3} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Long day, but the dogs helped…" />
         </label>
-        <button className="btn btn-primary btn-block" disabled={busy || (!choice && !answer.trim())} onClick={submit}>
+        <button className="btn btn-primary btn-block" disabled={busy || (!choices.length && !answer.trim())} onClick={submit}>
           Send to {partner?.display_name ?? "them"}
         </button>
       </div>
