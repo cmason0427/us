@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { DOGS, dogVoice } from "@/lib/dogs";
@@ -17,6 +18,7 @@ export interface TaskPreset {
   dogs: string[];
   urgency: Urgency;
   notes: string | null;
+  emoji: string | null;
 }
 
 export function useTaskPresets() {
@@ -32,7 +34,7 @@ export function useTaskPresets() {
   return data;
 }
 
-const presetLabel = (p: TaskPreset) => (p.dogs.length ? `${p.title} · ${dogVoice(p.dogs)}` : p.title);
+export const presetLabel = (p: TaskPreset) => `${p.emoji ? `${p.emoji} ` : ""}${p.title}${p.dogs.length ? ` · ${dogVoice(p.dogs)}` : ""}`;
 
 /** Which dog(s) it's for. Tap to toggle; "Both" picks everyone. */
 export function DogPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
@@ -92,7 +94,6 @@ function UrgencySeg({ value, onChange }: { value: Urgency; onChange: (u: Urgency
 export function TaskPresets({ onAdded, only }: { onAdded?: () => void; only?: ListType }) {
   const { meId, toast } = useApp();
   const presets = useTaskPresets().filter((p) => !only || p.list_type === only || (only === "shared" && p.list_type === "household"));
-  const [managing, setManaging] = useState(false);
   if (!presets.length) return null;
 
   async function use(p: TaskPreset) {
@@ -104,34 +105,21 @@ export function TaskPresets({ onAdded, only }: { onAdded?: () => void; only?: Li
     toast(`Added: ${presetLabel(p)}`);
     onAdded?.();
   }
-  async function remove(p: TaskPreset) {
-    if (!confirm(`Remove the "${p.title}" preset?`)) return;
-    await supabaseBrowser().from("task_templates").delete().eq("id", p.id);
-    refreshAll();
-  }
-
   return (
     <div className="field">
       <div className="row-between">
         <span>Quick add</span>
-        <button type="button" className="btn-link small" onClick={() => setManaging((m) => !m)}>
-          {managing ? "Done" : "Edit"}
-        </button>
+        <Link href="/presets" className="btn-link small">
+          Edit presets
+        </Link>
       </div>
       <div className="chips">
-        {presets.map((p) =>
-          managing ? (
-            <button key={p.id} type="button" className="chip chip-sm" onClick={() => remove(p)} aria-label={`Remove preset ${p.title}`}>
-              {presetLabel(p)} ×
-            </button>
-          ) : (
-            <button key={p.id} type="button" className="chip" onClick={() => use(p)}>
-              + {presetLabel(p)}
-            </button>
-          ),
-        )}
+        {presets.map((p) => (
+          <button key={p.id} type="button" className="chip" onClick={() => use(p)}>
+            + {presetLabel(p)}
+          </button>
+        ))}
       </div>
-      {managing && <p className="small muted">Tap one to remove it.</p>}
     </div>
   );
 }
@@ -180,9 +168,10 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
   async function saveAsPreset() {
     if (!title.trim() || list === "personal") return;
     const f = fields();
+    const emoji = window.prompt("Add an emoji for this preset? (optional)", "") ?? "";
     const { error } = await supabaseBrowser()
       .from("task_templates")
-      .insert({ title: f.title, list_type: f.list_type, dogs: f.dogs, urgency: f.urgency, notes: f.notes, created_by: meId });
+      .insert({ title: f.title, emoji: emoji.trim().slice(0, 4) || null, list_type: f.list_type, dogs: f.dogs, urgency: f.urgency, notes: f.notes, created_by: meId });
     if (error) return toast(error.message);
     refreshAll();
     toast("Saved as a preset. It's under Quick add now.");
@@ -257,31 +246,42 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
   );
 }
 
-/** Make a to-do preset without adding the to-do (＋ menu). */
-export function TaskPresetForm({ listType = "dogs", onDone }: { listType?: ListType; onDone: () => void }) {
+/** Make (or edit) a to-do preset without adding the to-do. */
+export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial?: TaskPreset; listType?: ListType; onDone: () => void }) {
   const { meId, toast } = useApp();
-  const [title, setTitle] = useState("");
-  const [list, setList] = useState<ListType>(listType === "personal" ? "shared" : listType);
-  const [dogs, setDogs] = useState<string[]>(DOGS.map((d) => d.id));
-  const [urgency, setUrgency] = useState<Urgency>("low");
-  const [notes, setNotes] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [list, setList] = useState<ListType>(initial?.list_type ?? (listType === "personal" ? "shared" : listType));
+  const [dogs, setDogs] = useState<string[]>(initial?.dogs ?? DOGS.map((d) => d.id));
+  const [urgency, setUrgency] = useState<Urgency>(initial?.urgency ?? "low");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    const { error } = await supabaseBrowser()
-      .from("task_templates")
-      .insert({ title: title.trim(), list_type: list, dogs: list === "dogs" ? dogs : [], urgency, notes: notes.trim() || null, created_by: meId });
+    const row = { title: title.trim(), emoji: emoji.trim() || null, list_type: list, dogs: list === "dogs" ? dogs : [], urgency, notes: notes.trim() || null };
+    const supabase = supabaseBrowser();
+    const { error } = initial ? await supabase.from("task_templates").update(row).eq("id", initial.id) : await supabase.from("task_templates").insert({ ...row, created_by: meId });
     if (error) return toast(error.message);
     refreshAll();
-    toast(`Preset saved: tap "+ ${title.trim()}" when adding a to-do`);
+    toast(initial ? "Preset saved" : `Preset saved: tap "+ ${title.trim()}" when adding a to-do`);
+    onDone();
+  }
+
+  async function remove() {
+    if (!initial || !confirm(`Remove the "${initial.title}" preset?`)) return;
+    await supabaseBrowser().from("task_templates").delete().eq("id", initial.id);
+    refreshAll();
     onDone();
   }
 
   return (
     <form className="stack" onSubmit={submit}>
-      <p className="small muted">A preset adds a to-do in one tap, with everything below already filled in.</p>
-      <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={list === "dogs" ? "Feed breakfast" : "Take out the trash"} autoFocus required />
+      {!initial && <p className="small muted">A preset adds a to-do in one tap, with everything below already filled in.</p>}
+      <div className="row">
+        <input className="input" style={{ width: 64, textAlign: "center" }} value={emoji} onChange={(e) => setEmoji(e.target.value.slice(0, 4))} placeholder="🥣" aria-label="Emoji (optional)" />
+        <input className="input grow" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={list === "dogs" ? "Feed breakfast" : "Take out the trash"} autoFocus required />
+      </div>
       <div className="field">
         <span>Which list</span>
         <ListPicker value={list} onChange={setList} allowPersonal={false} />
@@ -297,9 +297,18 @@ export function TaskPresetForm({ listType = "dogs", onDone }: { listType?: ListT
         <UrgencySeg value={urgency} onChange={setUrgency} />
       </div>
       <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="A note (optional): 1 cup + fish oil" aria-label="Note" />
-      <button className="btn btn-primary btn-block" disabled={!title.trim()}>
-        Save preset
-      </button>
+      <div className="row-between">
+        {initial ? (
+          <button type="button" className="btn btn-ghost" onClick={remove}>
+            Remove
+          </button>
+        ) : (
+          <span />
+        )}
+        <button className="btn btn-primary" disabled={!title.trim()}>
+          Save preset
+        </button>
+      </div>
     </form>
   );
 }

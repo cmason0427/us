@@ -36,6 +36,10 @@ export interface CalEvent {
   proposed_start: string | null;
   reminder_lead_minutes: number | null;
   reminder_sent_at: string | null;
+  /** Color marker (a pop color key), separate from the kind of plan. */
+  color: string | null;
+  /** The preset it was made from, if any. */
+  template_id: string | null;
   created_by: string;
   created_at: string;
 }
@@ -80,8 +84,11 @@ export interface Activity {
   id: string;
   name: string;
   energy_level: Energy;
-  /** null = needs both of you */
+  /** null = needs both of you (unless `anyone`) */
   participant: string | null;
+  /** Either of you / doesn't matter who. */
+  anyone: boolean;
+  emoji: string | null;
   /** null = works at home or out */
   setting: Setting | null;
   /** Optional; null = not set (passes any filter). */

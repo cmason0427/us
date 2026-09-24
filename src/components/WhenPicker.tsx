@@ -50,6 +50,16 @@ function timeRange(start?: string, end?: string) {
   return ampm(start) === ampm(end) ? `${hm(start)}–${hm(end)} ${ampm(end)}` : `${hm(start)} ${ampm(start)}–${hm(end)} ${ampm(end)}`;
 }
 
+const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const hhmm = (m: number) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, "0")}:${String((((m % 1440) + 1440) % 1440) % 60).padStart(2, "0")}`;
+
+/** Moving the start keeps the length: the end moves with it. */
+function moveStart(v: When, start: string, mode: Mode): When {
+  if (mode !== "range" || !start || !v.start || !v.end) return { ...v, start };
+  const length = (mins(v.end) - mins(v.start) + 1440) % 1440 || 1440;
+  return { ...v, start, end: hhmm(mins(start) + length) };
+}
+
 export function whenLabel(v: When | null, mode: Mode = "range") {
   if (!v?.date) return null;
   const d = parseISO(v.date);
@@ -172,7 +182,7 @@ function WhenSheet({ initial, mode, allowAllDay, onClose, onDone }: { initial: W
           <div className="time-row">
             <label className="time-field">
               <span>{mode === "deadline" ? "By (optional)" : "Starts"}</span>
-              <input type="time" value={v.start ?? ""} onChange={(e) => setV({ ...v, start: e.target.value })} />
+              <input type="time" value={v.start ?? ""} onChange={(e) => setV(moveStart(v, e.target.value, mode))} />
             </label>
             {mode === "range" && (
               <label className="time-field">

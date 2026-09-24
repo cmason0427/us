@@ -246,7 +246,8 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
             <div className="chips">
               {unused.map((a) => (
                 <button key={a.id} type="button" className="chip chip-sm" onClick={() => addItem(a.name, a.id)}>
-                  + {a.name}
+                  + {a.emoji ? `${a.emoji} ` : ""}
+                  {a.name}
                 </button>
               ))}
             </div>

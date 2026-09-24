@@ -27,6 +27,7 @@ import { celebrate } from "@/lib/celebrate";
 import { fromInputs, timeLabel, toDateInput, toTimeInput } from "@/lib/dates";
 import { eventWhen, postAskUpdate } from "@/lib/askFeed";
 import { WhenPicker } from "@/components/WhenPicker";
+import { CAL_COLORS, Swatch, colorVar, useColorLabels } from "@/components/CalendarColors";
 import { PlanCard, PlanSheet, createPlan, planEnd, planStart, planSteps, usePlansRange, type DayPlan } from "@/components/Plans";
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
@@ -100,8 +101,12 @@ export default function CalendarPage() {
   const [planId, setPlanId] = useState<string | null>(params.get("plan"));
   const [editing, setEditing] = useState<CalEvent | "new" | null>(null);
 
+  const { meId, toast } = useApp();
   const [from, to] = rangeFor(view, cursor, agenda);
-  const { data: events = [] } = useLive<CalEvent[]>(
+  const [showFilters, setShowFilters] = useState(false);
+  const [whoFilter, setWhoFilter] = useState<Who[]>([]);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
+  const { data: allEvents = [] } = useLive<CalEvent[]>(
     `events:${from.toISOString()}:${to.toISOString()}`,
     async () => {
       const { data, error } = await supabaseBrowser()
@@ -116,12 +121,18 @@ export default function CalendarPage() {
     ["events"],
   );
 
+  const filtering = whoFilter.length > 0 || colorFilter.length > 0;
+  const events = allEvents.filter(
+    (e) => (!whoFilter.length || whoFilter.includes(whoOf(e, meId))) && (!colorFilter.length || (e.color !== null && colorFilter.includes(e.color))),
+  );
+
   // Time-block plans sit behind events: faded, and anything real goes on top.
   const plans = usePlansRange(format(from, "yyyy-MM-dd"), format(to, "yyyy-MM-dd"));
-  const plansOn = (d: Date) => plans.filter((p) => p.day === format(d, "yyyy-MM-dd"));
+  // Plans are things together: they stay unless a filter rules that out.
+  const plansVisible = !colorFilter.length && (!whoFilter.length || whoFilter.includes("both"));
+  const plansOn = (d: Date) => (plansVisible ? plans.filter((p) => p.day === format(d, "yyyy-MM-dd")) : []);
 
   // Pending asks waiting on me, regardless of the visible range.
-  const { meId, toast } = useApp();
   const { data: waiting = [] } = useLive<CalEvent[]>(
     "events:waiting",
     async () => {
@@ -217,6 +228,14 @@ export default function CalendarPage() {
           </button>
         </div>
       )}
+
+      <div className="row-between" style={{ marginBottom: 6 }}>
+        <span />
+        <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || filtering} onClick={() => setShowFilters((f) => !f)}>
+          {filtering ? `Filtered (${whoFilter.length + colorFilter.length})` : "Filter"}
+        </button>
+      </div>
+      {showFilters && <CalendarFilters who={whoFilter} setWho={setWhoFilter} colors={colorFilter} setColors={setColorFilter} />}
 
       <div className="legend">
         {(["confirmed", "solo", "ask", "radar"] as EventType[]).map((t) => (
@@ -484,11 +503,74 @@ function EventBadges({ e }: { e: CalEvent }) {
   return null;
 }
 
+/** The color marker, as a CSS variable the stripe reads. */
+const markStyle = (e: CalEvent) => (e.color ? ({ "--mark": colorVar(e.color) } as React.CSSProperties) : undefined);
+
+type Who = "both" | "me" | "them" | "ask" | "radar";
+
+/** Who a calendar thing is for, from the viewer's side. */
+function whoOf(e: CalEvent, meId: string): Who {
+  const t = effectiveType(e);
+  if (t === "confirmed") return "both";
+  if (t === "ask") return "ask";
+  if (t === "radar") return "radar";
+  return e.created_by === meId ? "me" : "them";
+}
+
+/** Narrow every view by who it's for and/or its color. Nothing picked = everything. */
+function CalendarFilters({ who, setWho, colors, setColors }: { who: Who[]; setWho: (w: Who[]) => void; colors: string[]; setColors: (c: string[]) => void }) {
+  const { partner } = useApp();
+  const labels = useColorLabels();
+  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const whoOptions: [Who, string][] = [
+    ["both", "Both of us"],
+    ["me", "Just me"],
+    ["them", `Just ${partner?.display_name ?? "them"}`],
+    ["ask", "Asks"],
+    ["radar", "On the radar"],
+  ];
+  return (
+    <div className="card stack-sm cal-filters">
+      <div className="chips" role="group" aria-label="Filter by who">
+        <span className="small muted">Who</span>
+        {whoOptions.map(([k, label]) => (
+          <button key={k} className="chip chip-sm" aria-pressed={who.includes(k)} onClick={() => setWho(toggle(who, k))}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="chips" role="group" aria-label="Filter by color">
+        <span className="small muted">Color</span>
+        {CAL_COLORS.map((c) => (
+          <button key={c} className="chip chip-sm" aria-pressed={colors.includes(c)} onClick={() => setColors(toggle(colors, c))} aria-label={labels[c] ?? c}>
+            <Swatch color={c} />
+            {labels[c] && <span>{labels[c]}</span>}
+          </button>
+        ))}
+      </div>
+      {(who.length > 0 || colors.length > 0) && (
+        <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => (setWho([]), setColors([]))}>
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+}
+
 function EventCard({ e, onOpen, showDate = false }: { e: CalEvent; onOpen: (e: CalEvent) => void; showDate?: boolean }) {
   const { meId } = useApp();
   const t = effectiveType(e);
   return (
-    <div className="ev ev-card" data-type={t} role="button" tabIndex={0} onClick={() => onOpen(e)} onKeyDown={(k) => k.key === "Enter" && onOpen(e)}>
+    <div
+      className="ev ev-card"
+      data-type={t}
+      data-color={e.color ?? undefined}
+      style={markStyle(e)}
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(e)}
+      onKeyDown={(k) => k.key === "Enter" && onOpen(e)}
+    >
       <div className="row-between" style={{ alignItems: "flex-start" }}>
         <div className="grow">
           <div className="ev-title">{e.title}</div>
@@ -746,7 +828,8 @@ function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: Ca
               key={e.id}
               className="ev dayev"
               data-type={t}
-              style={{ top, height, left: `calc(48px + (100% - 48px) * ${lane / laneCount})`, width: `calc((100% - 48px) / ${laneCount} - 3px)`, right: "auto" }}
+              data-color={e.color ?? undefined}
+              style={{ ...markStyle(e), top, height, left: `calc(48px + (100% - 48px) * ${lane / laneCount})`, width: `calc((100% - 48px) / ${laneCount} - 3px)`, right: "auto" }}
               onClick={() => onOpen(e)}
             >
               <strong>{e.title}</strong>

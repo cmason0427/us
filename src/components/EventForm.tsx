@@ -11,13 +11,17 @@ import { EVENT_TYPE_HINT, EVENT_TYPE_LABEL, type CalEvent, type EventType } from
 import { postAskUpdate } from "@/lib/askFeed";
 import { useApp } from "./AppProvider";
 import { WhenPicker } from "./WhenPicker";
+import { ColorPicker, Swatch } from "./CalendarColors";
+import Link from "next/link";
 
 const TYPES: EventType[] = ["confirmed", "solo", "ask", "radar"];
 
 /** A saved default ("Therapy"): everything but the day and start time. */
-interface EventTemplate {
+export interface EventTemplate {
   id: string;
   name: string;
+  emoji: string | null;
+  color: string | null;
   title: string;
   type: EventType;
   all_day: boolean;
@@ -27,7 +31,7 @@ interface EventTemplate {
   reminder_lead_minutes: number | null;
 }
 
-function useTemplates() {
+export function useTemplates() {
   const { data = [] } = useLive<EventTemplate[]>(
     "event_templates",
     async () => {
@@ -75,13 +79,12 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
   const [location, setLocation] = useState(initial?.location ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [reminder, setReminder] = useState(initial?.reminder_lead_minutes?.toString() ?? "");
+  const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const templates = useTemplates();
-  // Set by a default: moving the start keeps this length.
-  const [lengthMin, setLengthMin] = useState<number | null>(null);
-  const [usedTemplate, setUsedTemplate] = useState<string | null>(null);
-  const [managing, setManaging] = useState(false);
+  // The preset this came from, so editing the preset can update it.
+  const [usedTemplate, setUsedTemplate] = useState<string | null>(initial?.template_id ?? null);
 
   function setEndFrom(d: string, t: string, minutes: number) {
     const e = addMinutes(fromInputs(d, t), minutes);
@@ -97,14 +100,12 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
     setLocation(t.location ?? "");
     setNotes(t.notes ?? "");
     setReminder(t.reminder_lead_minutes?.toString() ?? "");
+    setColor(t.color);
     if (t.all_day) {
-      setLengthMin(null);
       const days = Math.max(1, Math.round((t.duration_minutes ?? 1440) / 1440));
       setEndDate(toDateInput(addHours(fromInputs(date), 24 * (days - 1))));
     } else {
-      const m = t.duration_minutes ?? 60;
-      setLengthMin(m);
-      setEndFrom(date, start, m);
+      setEndFrom(date, start, t.duration_minutes ?? 60);
     }
   }
 
@@ -123,6 +124,7 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
       location: location.trim() || null,
       notes: notes.trim() || null,
       reminder_lead_minutes: reminderValid && reminder !== "" ? Number(reminder) : null,
+      color,
     };
     const supabase = supabaseBrowser();
     const same = templates.find((t) => t.name.toLowerCase() === row.name.toLowerCase());
@@ -130,12 +132,6 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
     if (error) return toast(error.message);
     refreshAll();
     toast(same ? `Updated "${row.name}"` : `Saved "${row.name}" as a default`);
-  }
-
-  async function removeTemplate(t: EventTemplate) {
-    if (!confirm(`Remove the "${t.name}" default? (Events already on the calendar stay.)`)) return;
-    await supabaseBrowser().from("event_templates").delete().eq("id", t.id);
-    refreshAll();
   }
 
   const reminderOptions = allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
@@ -167,6 +163,8 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
       location: location.trim() || null,
       notes: notes.trim() || null,
       reminder_lead_minutes: lead,
+      color,
+      template_id: usedTemplate,
       // Re-arm the reminder if the time or lead changed.
       ...(timeChanged || lead !== initial?.reminder_lead_minutes ? { reminder_sent_at: null } : {}),
       // A fresh ask (or switching to ask) needs an answer; other types don't track one.
@@ -215,25 +213,19 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         <div className="field">
           <div className="row-between">
             <span>Quick add</span>
-            <button type="button" className="btn-link small" onClick={() => setManaging((m) => !m)}>
-              {managing ? "Done" : "Edit"}
-            </button>
+            <Link href="/presets" className="btn-link small" onClick={onDone}>
+              Edit presets
+            </Link>
           </div>
           <div className="chips">
-            {templates.map((t) =>
-              managing ? (
-                <button key={t.id} type="button" className="chip chip-sm" onClick={() => removeTemplate(t)} aria-label={`Remove ${t.name}`}>
-                  {t.name} ×
-                </button>
-              ) : (
-                <button key={t.id} type="button" className="chip" aria-pressed={usedTemplate === t.id} onClick={() => applyTemplate(t)}>
-                  + {t.name}
-                </button>
-              ),
-            )}
+            {templates.map((t) => (
+              <button key={t.id} type="button" className="chip" aria-pressed={usedTemplate === t.id} onClick={() => applyTemplate(t)}>
+                {t.color && <Swatch color={t.color} size={10} />}+ {t.emoji ? `${t.emoji} ` : ""}
+                {t.name}
+              </button>
+            ))}
           </div>
-          {managing && <p className="small muted">Tap one to remove it. To change one, use it, tweak it, and save it as a default with the same name.</p>}
-          {usedTemplate && !managing && <p className="small muted">Just pick the day and start time.</p>}
+          {usedTemplate && <p className="small muted">Just pick the day and start time. The end follows the preset&apos;s length.</p>}
         </div>
       )}
       <label className="field">
@@ -259,18 +251,19 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         <WhenPicker
           value={{ date, endDate, start, end, allDay }}
           onChange={(w) => {
+            // The picker keeps the length when the start moves.
             setDate(w.date);
             setAllDay(!!w.allDay);
             setStart(w.start || start);
-            // A default's length wins when only the start moved.
-            if (lengthMin !== null && !w.allDay && w.start && (w.start !== start || w.date !== date) && w.end === end) {
-              setEndFrom(w.date, w.start, lengthMin);
-            } else {
-              setEnd(w.end || end);
-              setEndDate(w.endDate ?? w.date);
-            }
+            setEnd(w.end || end);
+            setEndDate(w.endDate ?? w.date);
           }}
         />
+      </div>
+
+      <div className="field">
+        <span>Color marker (optional)</span>
+        <ColorPicker value={color} onChange={setColor} />
       </div>
 
       <label className="field">
@@ -331,44 +324,97 @@ const LENGTHS = [
   { v: 240, label: "4 hr" },
 ];
 
-/** Make a calendar default from scratch (＋ → Calendar → New preset). */
-export function EventPresetForm({ onDone }: { onDone: () => void }) {
+type Scope = "upcoming" | "all" | "new";
+
+/**
+ * Make or edit a calendar preset. Editing asks how far the change reaches:
+ * events already made from it that are still ahead, every one of them, or
+ * only ones added from now on.
+ */
+export function EventPresetForm({ initial, onDone }: { initial?: EventTemplate; onDone: () => void }) {
   const { meId, toast } = useApp();
-  const [name, setName] = useState("");
-  const [type, setType] = useState<EventType>("solo");
-  const [allDay, setAllDay] = useState(false);
-  const [length, setLength] = useState(60);
-  const [location, setLocation] = useState("");
-  const [notes, setNotes] = useState("");
-  const [reminder, setReminder] = useState("");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
+  const [type, setType] = useState<EventType>(initial?.type ?? "solo");
+  const [allDay, setAllDay] = useState(initial?.all_day ?? false);
+  const [length, setLength] = useState(initial?.duration_minutes && !initial.all_day ? initial.duration_minutes : 60);
+  const [location, setLocation] = useState(initial?.location ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [reminder, setReminder] = useState(initial?.reminder_lead_minutes?.toString() ?? "");
+  const [color, setColor] = useState<string | null>(initial?.color ?? null);
+  const [scope, setScope] = useState<Scope>("upcoming");
+  const [busy, setBusy] = useState(false);
   const reminderOptions = allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
+  const custom = !LENGTHS.some((l) => l.v === length);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    const { error } = await supabaseBrowser()
-      .from("event_templates")
-      .insert({
-        name: name.trim(),
-        title: name.trim(),
-        type,
-        all_day: allDay,
-        duration_minutes: allDay ? 1440 : length,
-        location: location.trim() || null,
-        notes: notes.trim() || null,
-        reminder_lead_minutes: reminder === "" || !reminderOptions.some((o) => o.v === reminder) ? null : Number(reminder),
-        created_by: meId,
-      });
-    if (error) return toast(error.message.includes("duplicate") ? "There's already a default with that name." : error.message);
+    setBusy(true);
+    const supabase = supabaseBrowser();
+    const row = {
+      name: name.trim(),
+      // What shows on the calendar: the name, unless it was saved from an event with its own title.
+      title: initial && initial.title !== initial.name && name.trim() === initial.name ? initial.title : name.trim(),
+      emoji: emoji.trim() || null,
+      type,
+      all_day: allDay,
+      duration_minutes: allDay ? 1440 : length,
+      location: location.trim() || null,
+      notes: notes.trim() || null,
+      reminder_lead_minutes: reminder === "" || !reminderOptions.some((o) => o.v === reminder) ? null : Number(reminder),
+      color,
+    };
+    const res = initial ? await supabase.from("event_templates").update(row).eq("id", initial.id) : await supabase.from("event_templates").insert({ ...row, created_by: meId });
+    if (res.error) {
+      setBusy(false);
+      return toast(res.error.message.includes("duplicate") ? "There's already a preset with that name." : res.error.message);
+    }
+
+    // Carry the change to events made from this preset.
+    let changed = 0;
+    if (initial && scope !== "new") {
+      let q = supabase.from("events").select("id, start_time, all_day, type").eq("template_id", initial.id);
+      if (scope === "upcoming") q = q.gte("start_time", new Date().toISOString());
+      const { data: evs } = await q;
+      const results = await Promise.all(
+        (evs ?? []).map((ev) => {
+          const fields: Record<string, unknown> = {
+            title: row.title,
+            location: row.location,
+            notes: row.notes,
+            reminder_lead_minutes: row.reminder_lead_minutes,
+            color: row.color,
+          };
+          // Answered asks keep their answer; only non-asks switch kind.
+          if (ev.type !== "ask" && row.type !== "ask") fields.type = row.type;
+          // Same start, the preset's length.
+          if (!ev.all_day && !row.all_day) fields.end_time = addMinutes(new Date(ev.start_time), row.duration_minutes).toISOString();
+          return supabase.from("events").update(fields).eq("id", ev.id);
+        }),
+      );
+      changed = results.filter((r) => !r.error).length;
+    }
+    setBusy(false);
     refreshAll();
-    toast(`Saved. "+ ${name.trim()}" is ready when you add an event.`);
+    toast(initial ? (changed ? `Saved, and updated ${changed} on the calendar` : "Saved") : `Saved. "+ ${name.trim()}" is ready when you add an event.`);
+    onDone();
+  }
+
+  async function remove() {
+    if (!initial || !confirm(`Remove the "${initial.name}" preset? Events already on the calendar stay as they are.`)) return;
+    await supabaseBrowser().from("event_templates").delete().eq("id", initial.id);
+    refreshAll();
     onDone();
   }
 
   return (
     <form className="stack" onSubmit={submit}>
-      <p className="small muted">A default fills everything in; you only pick the day and start time.</p>
-      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Therapy, vet visit, date night…" autoFocus required />
+      {!initial && <p className="small muted">A preset fills everything in; you only pick the day and start time.</p>}
+      <div className="row">
+        <input className="input" style={{ width: 64, textAlign: "center" }} value={emoji} onChange={(e) => setEmoji(e.target.value.slice(0, 4))} placeholder="🛋️" aria-label="Emoji (optional)" />
+        <input className="input grow" value={name} onChange={(e) => setName(e.target.value)} placeholder="Therapy, vet visit, date night…" autoFocus={!initial} required />
+      </div>
       <div className="field">
         <span>Kind of plan</span>
         <div className="chips" role="group">
@@ -397,8 +443,16 @@ export function EventPresetForm({ onDone }: { onDone: () => void }) {
               </button>
             ))}
           </div>
+          <div className="row small">
+            <input className="input" style={{ width: 90 }} inputMode="numeric" value={custom ? String(length) : ""} onChange={(e) => Number(e.target.value) > 0 && setLength(Number(e.target.value.replace(/\D/g, "")))} placeholder="50" aria-label="Minutes" />
+            minutes
+          </div>
         </div>
       )}
+      <div className="field">
+        <span>Color marker (optional)</span>
+        <ColorPicker value={color} onChange={setColor} />
+      </div>
       <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where (optional)" aria-label="Where" />
       <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional)" aria-label="Notes" />
       <label className="field">
@@ -411,9 +465,37 @@ export function EventPresetForm({ onDone }: { onDone: () => void }) {
           ))}
         </select>
       </label>
-      <button className="btn btn-primary btn-block" disabled={!name.trim()}>
-        Save default
-      </button>
+      {initial && (
+        <div className="field">
+          <span>Apply changes to</span>
+          <div className="stack-sm">
+            {(
+              [
+                ["upcoming", "Everything on the calendar that's still coming up"],
+                ["all", "Everything made with it, past ones too"],
+                ["new", "Only ones added from now on"],
+              ] as [Scope, string][]
+            ).map(([k, label]) => (
+              <label key={k} className="row small">
+                <input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="row-between">
+        {initial ? (
+          <button type="button" className="btn btn-ghost" onClick={remove}>
+            Remove
+          </button>
+        ) : (
+          <span />
+        )}
+        <button className="btn btn-primary" disabled={busy || !name.trim()}>
+          {initial ? "Save preset" : "Save preset"}
+        </button>
+      </div>
     </form>
   );
 }

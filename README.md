@@ -21,6 +21,7 @@ and photo storage, and Web Push for notifications.
 | `src/app/(app)/shopping` | Everything to buy; `shop_items.grocery` items also show in Eat → Groceries. Drag items between categories |
 | `src/app/(app)/dogs` | Dog profiles (`dogs` table: breed, weight, vet, meds, feeding…; `DogProfiles.tsx`), dog to-dos (which dog(s)), and a dog-only feed |
 | `src/app/(app)/goals` | Savings goals (`goals`, `goal_items`, `goal_logs`; math in `src/lib/goals.ts`). Private ones are owner-only in RLS; shared ones only log money when `track` is on. Archive first; delete only from Archived, typed-name confirm |
+| `src/app/(app)/presets` | Every preset in one place. Calendar presets (`event_templates`) link to the events they made (`events.template_id`); editing one can update upcoming / all / only new events. Calendar color markers (`events.color`, names in `calendar_colors`) are a stripe, separate from the kind of plan |
 | `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
 | `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |
 | `src/app/(app)/saved` | Private folders of saved photos |

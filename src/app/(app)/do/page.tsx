@@ -143,6 +143,8 @@ export default function DoSomethingPage() {
       const e = energyOf.get(a.participant);
       return e !== undefined && fits(a.energy_level, e);
     }
+    // Doesn't matter who: fits if it suits anyone who's checked in.
+    if (a.anyone) return [...energyOf.values()].some((e) => fits(a.energy_level, e));
     // Needs both: both must have checked in; the lower energy sets the bar.
     if (energyOf.size < 2) return false;
     const low = [...energyOf.values()].sort((x, y) => ENERGY_RANK[x] - ENERGY_RANK[y])[0];
@@ -245,12 +247,15 @@ export default function DoSomethingPage() {
             <div className="activity-grid">
               {results.map((a) => (
                 <div key={a.id} className="card activity-card">
-                  <div className="name">{a.name}</div>
+                  <div className="name">
+                    {a.emoji ? `${a.emoji} ` : ""}
+                    {a.name}
+                  </div>
                   <div className="row wrap" style={{ marginTop: "auto" }}>
                     <span className="sticker sage">
                       {ENERGY_EMOJI[a.energy_level]} {a.energy_level}
                     </span>
-                    <span className="sticker">{a.participant ? nameOf(a.participant) : "Both"}</span>
+                    <span className="sticker">{a.anyone ? "Either" : a.participant ? nameOf(a.participant) : "Both"}</span>
                     <Tags a={a} />
                   </div>
                   {!a.recurring && (
@@ -274,7 +279,7 @@ export default function DoSomethingPage() {
               )}
             </div>
           )}
-          {energyOf.size < 2 && partner && activities.some((a) => !a.participant) && (
+          {energyOf.size < 2 && partner && activities.some((a) => !a.participant && !a.anyone) && (
             <p className="small muted" style={{ marginTop: 10 }}>
               Ideas for both of you show up once {partner.display_name} checks in too.
             </p>
@@ -302,12 +307,12 @@ export default function DoSomethingPage() {
           {activities.length === 0 && <p className="muted">No ideas yet. Add things you like doing — low-key stuff counts.</p>}
           {active.filter((a) => matchesFilters(a, filters)).map((a) => (
             <div key={a.id} className="lib-item">
-              <span style={{ fontSize: "1.2rem" }}>{ENERGY_EMOJI[a.energy_level]}</span>
+              <span style={{ fontSize: "1.2rem" }}>{a.emoji || ENERGY_EMOJI[a.energy_level]}</span>
               <span className="grow" style={{ fontWeight: 700 }}>
                 {a.name}
                 <span className="small muted">
                   {" "}
-                  · {a.participant ? nameOf(a.participant) : "Both"}
+                  · {a.anyone ? "Either" : a.participant ? nameOf(a.participant) : "Both"}
                   {[labelOf(SETTING_OPTIONS, a.setting), labelOf(COST_OPTIONS, a.cost), labelOf(DURATION_OPTIONS, a.duration)]
                     .filter(Boolean)
                     .map((l) => ` · ${l}`)

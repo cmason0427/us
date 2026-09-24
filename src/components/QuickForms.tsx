@@ -72,7 +72,9 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
   const { meId, profiles, toast } = useApp();
   const [name, setName] = useState(initial?.name ?? "");
   const [energy, setEnergy] = useState<Energy>(initial?.energy_level ?? "low");
-  const [participant, setParticipant] = useState<string | null>(initial ? initial.participant : null);
+  // "both" = needs both of you · "anyone" = doesn't matter · else that person's id
+  const [who, setWho] = useState<string>(initial ? (initial.anyone ? "anyone" : (initial.participant ?? "both")) : "both");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
   const [setting, setSetting] = useState<Setting | null>(initial?.setting ?? null);
   const [cost, setCost] = useState<Cost | null>(initial?.cost ?? null);
   const [duration, setDuration] = useState<Duration | null>(initial?.duration ?? null);
@@ -84,7 +86,17 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
     if (!name.trim()) return;
     setBusy(true);
     const supabase = supabaseBrowser();
-    const row = { name: name.trim(), energy_level: energy, participant, setting, cost, duration, recurring };
+    const row = {
+      name: name.trim(),
+      emoji: emoji.trim() || null,
+      energy_level: energy,
+      participant: who === "both" || who === "anyone" ? null : who,
+      anyone: who === "anyone",
+      setting,
+      cost,
+      duration,
+      recurring,
+    };
     const { error } = initial
       ? await supabase.from("activities").update(row).eq("id", initial.id)
       : await supabase.from("activities").insert({ ...row, created_by: meId });
@@ -104,7 +116,10 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
 
   return (
     <form className="stack" onSubmit={submit}>
-      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Farmers market, puzzle, long walk…" autoFocus={!initial} required />
+      <div className="row">
+        <input className="input" style={{ width: 64, textAlign: "center" }} value={emoji} onChange={(e) => setEmoji(e.target.value.slice(0, 4))} placeholder="🧺" aria-label="Emoji (optional)" />
+        <input className="input grow" value={name} onChange={(e) => setName(e.target.value)} placeholder="Farmers market, puzzle, long walk…" autoFocus={!initial} required />
+      </div>
       <div className="field">
         <span>Energy it takes</span>
         <EnergyPicker value={energy} onChange={setEnergy} />
@@ -112,13 +127,16 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
       <div className="field">
         <span>Who it needs</span>
         <div className="seg" role="group">
+          <button type="button" aria-pressed={who === "both"} onClick={() => setWho("both")}>
+            Both
+          </button>
           {profiles.map((p) => (
-            <button key={p.id} type="button" aria-pressed={participant === p.id} onClick={() => setParticipant(p.id)}>
+            <button key={p.id} type="button" aria-pressed={who === p.id} onClick={() => setWho(p.id)}>
               {p.display_name}
             </button>
           ))}
-          <button type="button" aria-pressed={participant === null} onClick={() => setParticipant(null)}>
-            Both
+          <button type="button" aria-pressed={who === "anyone"} onClick={() => setWho("anyone")}>
+            Either
           </button>
         </div>
       </div>

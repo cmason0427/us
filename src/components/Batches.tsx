@@ -18,7 +18,7 @@ export function ActivityBatch({ onDone }: { onDone: () => void }) {
   const { meId, profiles, toast } = useApp();
   const columns: BatchColumn[] = [
     { key: "energy", label: "Energy", required: true, initial: "low", options: [{ v: "low", label: "🛋️ Low" }, { v: "medium", label: "🚶 Medium" }, { v: "high", label: "⚡ High" }] },
-    { key: "who", label: "Who", required: true, initial: "both", options: [{ v: "both", label: "Both" }, ...profiles.map((p) => ({ v: p.id, label: p.display_name }))] },
+    { key: "who", label: "Who", required: true, initial: "both", options: [{ v: "both", label: "Both" }, ...profiles.map((p) => ({ v: p.id, label: p.display_name })), { v: "anyone", label: "Either" }] },
     { key: "keep", label: "Keep it?", required: true, initial: "keep", options: KEEP_OPTIONS },
     { key: "setting", label: "Where", options: SETTING_OPTIONS },
     { key: "cost", label: "Cost", options: COST_OPTIONS },
@@ -31,7 +31,8 @@ export function ActivityBatch({ onDone }: { onDone: () => void }) {
         rows.map((r) => ({
           name: r.name,
           energy_level: one(r.values.energy),
-          participant: r.values.who === "both" ? null : one(r.values.who),
+          participant: r.values.who === "both" || r.values.who === "anyone" ? null : one(r.values.who),
+          anyone: r.values.who === "anyone",
           recurring: r.values.keep !== "once",
           setting: one(r.values.setting),
           cost: one(r.values.cost),

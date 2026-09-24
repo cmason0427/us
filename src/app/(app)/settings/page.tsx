@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -126,6 +127,16 @@ export default function SettingsPage() {
           </button>
         </form>
       </section>
+
+      <Link href="/presets" className="card row-between settings-link" style={{ marginTop: 16 }}>
+        <span>
+          <strong>Presets</strong>
+          <span className="small muted" style={{ display: "block" }}>
+            Calendar and to-do shortcuts, and what the calendar colors mean
+          </span>
+        </span>
+        <span aria-hidden>›</span>
+      </Link>
 
       <section className="card stack" style={{ marginTop: 16 }}>
         <h2>Notifications</h2>

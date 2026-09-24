@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
@@ -34,7 +35,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "event", emoji: "📅", label: "Event" },
       { kind: "requests", emoji: "💌", label: "Requests" },
-      { kind: "event-preset", emoji: "☆", label: "New preset" },
+      { kind: "event-preset", emoji: "☆", label: "Presets" },
     ],
   },
   {
@@ -78,7 +79,7 @@ const TITLES: Record<AddKind, string> = {
   shop: "Shopping list",
   "meal-suggest": "Suggest a meal",
   requests: "Requests",
-  "event-preset": "New calendar default",
+  "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
   vibe: "Vibe check",
@@ -143,7 +144,14 @@ export function AddSheet() {
       {addOpen === "shop" && <ShopAdd onDone={closeAdd} />}
       {addOpen === "goal" && <GoalForm onDone={closeAdd} />}
       {addOpen === "requests" && <RequestsList onDone={closeAdd} />}
-      {addOpen === "event-preset" && <EventPresetForm onDone={closeAdd} />}
+      {addOpen === "event-preset" && (
+        <div className="stack">
+          <Link href="/presets" className="btn btn-block" onClick={closeAdd}>
+            See and edit all presets
+          </Link>
+          <EventPresetForm onDone={closeAdd} />
+        </div>
+      )}
       {addOpen === "dog-preset" && <TaskPresetForm listType="dogs" onDone={closeAdd} />}
       {addOpen === "activity" && <OneOrMany one={<ActivityForm onDone={closeAdd} />} many={<ActivityBatch onDone={closeAdd} />} />}
       {addOpen === "meal" && <OneOrMany one={<MealForm onDone={closeAdd} />} many={<MealBatch onDone={closeAdd} />} />}
