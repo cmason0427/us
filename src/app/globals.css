@@ -363,6 +363,21 @@ p { margin: 0; }
 }
 .photos.n1 .photo { aspect-ratio: auto; max-height: 70vh; }
 .photo img { width: 100%; height: 100%; object-fit: cover; }
+.carousel-wrap { position: relative; margin-top: 10px; }
+.carousel {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: 14px;
+  scrollbar-width: none; background: var(--surface-sunk); overscroll-behavior-x: contain;
+}
+.carousel::-webkit-scrollbar { display: none; }
+.carousel-slide { flex: 0 0 100%; scroll-snap-align: center; display: block; }
+.carousel-slide img { width: 100%; height: 100%; object-fit: cover; }
+.carousel-count {
+  position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 650;
+  background: color-mix(in srgb, var(--plum) 60%, transparent); color: var(--surface);
+}
+.carousel-dots { display: flex; justify-content: center; gap: 5px; margin-top: 8px; }
+.carousel-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background 0.15s ease; }
+.carousel-dots span.on { background: var(--terracotta); }
 .photos.n1 .photo img { height: auto; max-height: 70vh; object-fit: contain; margin: 0 auto; }
 /* Dog profile photos. */
 .dog-avatars { display: inline-flex; align-items: center; flex-shrink: 0; }

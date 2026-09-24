@@ -20,6 +20,8 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   // Dog notes speak as the dog(s); only the person who wrote one can delete it.
   const asDog = post.as_dog && post.dogs.length > 0;
   const [saving, setSaving] = useState(false);
+  // Which photo of a carousel is showing; 🔖 saves just that one.
+  const [slide, setSlide] = useState(0);
   const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
   const n = photos.length;
   const created = new Date(post.created_at);
@@ -47,7 +49,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           <div className="small faint">{when}</div>
         </div>
         {n > 0 && (
-          <button className="icon-btn" onClick={() => setSaving(true)} aria-label="Save photos">
+          <button className="icon-btn" onClick={() => setSaving(true)} aria-label={n > 1 ? "Save this photo" : "Save photo"}>
             🔖
           </button>
         )}
@@ -63,22 +65,21 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           🌶️ Open your Spicy folder
         </Link>
       )}
-      {saving && <SaveSheet paths={photos.map((p) => p.storage_path)} onClose={() => setSaving(false)} />}
+      {saving && photos[slide] && <SaveSheet paths={[photos[slide].storage_path]} onClose={() => setSaving(false)} />}
       {post.event_id && (
         <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
           📅 Open in calendar
         </Link>
       )}
-      {n > 0 && (
-        <div className={`photos ${n === 1 ? "n1" : n === 2 ? "n2" : n === 3 ? "n3" : "nmany"}`}>
-          {photos.map((ph) => (
-            <a key={ph.id} className="photo" href={urls[ph.storage_path]} target="_blank" rel="noreferrer" style={n === 1 && ph.width && ph.height ? { aspectRatio: `${ph.width} / ${ph.height}` } : undefined}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {urls[ph.storage_path] && <img src={urls[ph.storage_path]} alt="" loading="lazy" />}
-            </a>
-          ))}
+      {n === 1 && (
+        <div className="photos n1">
+          <a className="photo" href={urls[photos[0].storage_path]} target="_blank" rel="noreferrer" style={photos[0].width && photos[0].height ? { aspectRatio: `${photos[0].width} / ${photos[0].height}` } : undefined}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {urls[photos[0].storage_path] && <img src={urls[photos[0].storage_path]} alt="" loading="lazy" />}
+          </a>
         </div>
       )}
+      {n > 1 && <Carousel photos={photos} urls={urls} slide={slide} onSlide={setSlide} />}
       {post.dogs.length > 0 && !asDog && (
         <div className="chips post-dogs">
           {post.dogs.map((d) => (
@@ -89,5 +90,49 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         </div>
       )}
     </article>
+  );
+}
+
+/** Swipe through a post's photos; dots show where you are. */
+function Carousel({
+  photos,
+  urls,
+  slide,
+  onSlide,
+}: {
+  photos: Post["post_photos"];
+  urls: Record<string, string>;
+  slide: number;
+  onSlide: (i: number) => void;
+}) {
+  // The tallest photo sets the frame so swiping doesn't jump; cap it like single photos.
+  const ratio = Math.min(...photos.map((p) => (p.width && p.height ? p.width / p.height : 1)), 1.25);
+  return (
+    <div className="carousel-wrap">
+      <div
+        className="carousel"
+        style={{ aspectRatio: `${Math.max(ratio, 0.75)}` }}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const i = Math.round(el.scrollLeft / el.clientWidth);
+          if (i !== slide) onSlide(i);
+        }}
+      >
+        {photos.map((ph) => (
+          <a key={ph.id} className="carousel-slide" href={urls[ph.storage_path]} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {urls[ph.storage_path] && <img src={urls[ph.storage_path]} alt="" loading="lazy" />}
+          </a>
+        ))}
+      </div>
+      <span className="carousel-count">
+        {slide + 1}/{photos.length}
+      </span>
+      <div className="carousel-dots" aria-hidden>
+        {photos.map((ph, i) => (
+          <span key={ph.id} className={i === slide ? "on" : ""} />
+        ))}
+      </div>
+    </div>
   );
 }

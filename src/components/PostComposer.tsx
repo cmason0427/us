@@ -11,7 +11,8 @@ import { useApp } from "./AppProvider";
 import { DogAvatar } from "./DogAvatar";
 import { IconCamera } from "./Art";
 
-const MAX_PHOTOS = 6;
+// Several photos post as one swipeable carousel.
+const MAX_PHOTOS = 10;
 
 /** Tap to tag which dog(s) something is about. */
 export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs: string[]) => void }) {
