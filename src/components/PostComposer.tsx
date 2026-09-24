@@ -6,13 +6,36 @@ import { shrinkImage } from "@/lib/image";
 import { refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
+import { DOGS } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
 import { IconCamera } from "./Art";
 
 const MAX_PHOTOS = 6;
 
-export function PostComposer({ onDone }: { onDone: () => void }) {
+/** Tap to tag which dog(s) something is about. */
+export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs: string[]) => void }) {
+  return (
+    <div className="chips" role="group" aria-label="Which dog">
+      {DOGS.map((d) => {
+        const on = value.includes(d.id);
+        return (
+          <button key={d.id} type="button" className="chip" aria-pressed={on} onClick={() => onChange(on ? value.filter((x) => x !== d.id) : [...value, d.id])}>
+            🐾 {d.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Updates for the feed. With `dogNote`, it's a note about the dogs: you pick
+ * which dog(s) it's about and it lands in the feed and the Dogs tab. Plain
+ * updates can be tagged with dogs too.
+ */
+export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { onDone: () => void; dogNote?: boolean; initialDogs?: string[] }) {
   const { meId, toast } = useApp();
+  const [dogs, setDogs] = useState<string[]>(initialDogs);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -24,6 +47,7 @@ export function PostComposer({ onDone }: { onDone: () => void }) {
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!text.trim() && !files.length) return;
+    if (dogNote && !dogs.length) return setError("Which dog is this about?");
     // Grab this now: React clears currentTarget once we await.
     const submitBtn = e.currentTarget.querySelector<HTMLElement>("button[type=submit]");
     setBusy(true);
@@ -33,7 +57,7 @@ export function PostComposer({ onDone }: { onDone: () => void }) {
     try {
       const { data: post, error: postErr } = await supabase
         .from("posts")
-        .insert({ author: meId, text: text.trim() || null })
+        .insert({ author: meId, text: text.trim() || null, dogs })
         .select("id")
         .single();
       if (postErr) throw postErr;
@@ -58,7 +82,7 @@ export function PostComposer({ onDone }: { onDone: () => void }) {
       notify({ kind: "post", id: post.id });
       refreshAll();
       celebrate(submitBtn);
-      toast("Posted 🌼");
+      toast(dogs.length ? "Noted 🐾" : "Posted 🌼");
       onDone();
     } catch (err) {
       // Don't leave a half-made post behind if a photo failed.
@@ -70,9 +94,10 @@ export function PostComposer({ onDone }: { onDone: () => void }) {
 
   return (
     <form className="stack" onSubmit={submit}>
+      {dogNote && <DogChips value={dogs} onChange={setDogs} />}
       <textarea
         className="textarea"
-        placeholder="What's the little update?"
+        placeholder={dogNote ? "Kodo had a runny poop, Wiley didn't eat breakfast…" : "What's the little update?"}
         value={text}
         onChange={(e) => setText(e.target.value)}
         autoFocus
@@ -103,13 +128,19 @@ export function PostComposer({ onDone }: { onDone: () => void }) {
           e.target.value = "";
         }}
       />
+      {!dogNote && (
+        <div className="field">
+          <span>About the dogs?</span>
+          <DogChips value={dogs} onChange={setDogs} />
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="row-between">
         <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_PHOTOS}>
           <IconCamera width={22} height={22} /> Photo
         </button>
         <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length)}>
-          {busy ? "Posting…" : "Share it"}
+          {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
         </button>
       </div>
     </form>

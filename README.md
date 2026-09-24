@@ -1,7 +1,8 @@
 # Us 🍄
 
 A private two-person app for Charlie and Parker: a shared calendar, a no-pressure
-update feed, a mood → activity matcher, to-dos, and the dogs' logs (Kodo and Wiley; the list is `src/lib/dogs.ts`). It's a
+update feed, a mood → activity matcher, to-dos, and dog notes (Kodo and Wiley; the list is `src/lib/dogs.ts`).
+Dog notes are feed posts tagged with dogs, so they show in the feed and the Dogs tab. It's a
 Next.js PWA hosted on Netlify (https://us-little-corner.netlify.app), with Supabase for the database, auth, realtime updates
 and photo storage, and Web Push for notifications.
 
@@ -9,10 +10,10 @@ and photo storage, and Web Push for notifications.
 
 | Path | What |
 | --- | --- |
-| `src/app/(app)/page.tsx` | Home feed: posts, photos, reactions |
+| `src/app/(app)/page.tsx` | Home feed: updates and dog notes, photos |
 | `src/app/(app)/calendar` | Day / Week / Month / List views, the four event types, Ask accept/decline |
-| `src/app/(app)/do` | Energy check-in + the activity library and matcher |
-| `src/app/(app)/lists` | Shared and personal to-dos, the dog logs (Kodo, Wiley), household items |
+| `src/app/(app)/do` | Energy check-in + the activity library and matcher (filter: at home / out) |
+| `src/app/(app)/lists` | To-dos (Ours collects shared, household and dog items), dog notes + dog to-dos, household |
 | `src/app/(app)/settings` | Display name, push on/off, per-kind notification toggles, change PIN, sign out |
 | `src/components/AddSheet.tsx` | The fast-entry sheet behind the + button |
 | `src/app/api/notify` | Event-triggered pushes (asks, answers, posts, energy pings) |

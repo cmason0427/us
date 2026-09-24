@@ -3,10 +3,7 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
-import { celebrate } from "@/lib/celebrate";
-import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
-import type { Activity, Energy, ListType, PottyKind, Urgency } from "@/lib/types";
-import { DOGS, type DogId } from "@/lib/dogs";
+import type { Activity, Energy, ListType, Setting, Urgency } from "@/lib/types";
 import { useApp } from "./AppProvider";
 
 const URGENCIES: Urgency[] = ["low", "medium", "high"];
@@ -47,7 +44,7 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
     setBusy(false);
     if (error) return toast(error.message);
     refreshAll();
-    toast(list === "personal" ? "Added to your list" : list === "household" ? "Added to household" : "Added to our list");
+    toast(list === "personal" ? "Added to your list" : list === "household" ? "Added to household" : list === "dogs" ? "Added to dog to-dos" : "Added to our list");
     onDone();
   }
 
@@ -66,13 +63,18 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
           <button type="button" aria-pressed={list === "household"} onClick={() => setList("household")}>
             Household
           </button>
+          <button type="button" aria-pressed={list === "dogs"} onClick={() => setList("dogs")}>
+            Dogs
+          </button>
         </div>
         <p className="small muted">
           {list === "personal"
             ? `Private — ${partner?.display_name ?? "they"} can't see this.`
             : list === "household"
-              ? "Needs doing at some point. No pressure."
-              : "Either of you can check it off."}
+              ? "Shows in Household and in Ours."
+              : list === "dogs"
+                ? "Shows in Dogs and in Ours."
+                : "Either of you can check it off."}
         </p>
       </div>
       <div className="field">
@@ -81,114 +83,6 @@ export function TaskForm({ listType: initialList = "shared", onDone }: { listTyp
       </div>
       <button className="btn btn-primary btn-block" disabled={busy || !title.trim()}>
         Add it
-      </button>
-    </form>
-  );
-}
-
-/* ─── Dogs ──────────────────────────────────────────────────────────────── */
-
-type DogTarget = DogId | "both";
-const dogsFor = (t: DogTarget): DogId[] => (t === "both" ? DOGS.map((d) => d.id) : [t]);
-
-/** Which dog(s) this is for. "Both" logs a row per dog (walked together). */
-function DogPicker({ value, onChange }: { value: DogTarget; onChange: (t: DogTarget) => void }) {
-  return (
-    <div className="seg" role="group" aria-label="Which dog">
-      {DOGS.map((d) => (
-        <button key={d.id} type="button" aria-pressed={value === d.id} onClick={() => onChange(d.id)}>
-          {d.name}
-        </button>
-      ))}
-      <button type="button" aria-pressed={value === "both"} onClick={() => onChange("both")}>
-        Both dogs
-      </button>
-    </div>
-  );
-}
-
-/** Pass `dog` to log for that dog; leave it out to ask which. */
-export function PottyForm({ dog, onDone }: { dog?: DogId; onDone: () => void }) {
-  const { meId, toast } = useApp();
-  const [target, setTarget] = useState<DogTarget>(dog ?? DOGS[0].id);
-  const [when, setWhen] = useState<"now" | "earlier">("now");
-  const now = new Date();
-  const [date, setDate] = useState(toDateInput(now));
-  const [time, setTime] = useState(toTimeInput(now));
-  const [busy, setBusy] = useState(false);
-
-  async function log(kind: PottyKind, el: HTMLElement) {
-    setBusy(true);
-    const occurred_at = when === "now" ? new Date().toISOString() : fromInputs(date, time).toISOString();
-    const { error } = await supabaseBrowser()
-      .from("kodo_logs")
-      .insert(dogsFor(target).map((d) => ({ dog: d, type: "potty", potty_kind: kind, occurred_at, created_by: meId })));
-    setBusy(false);
-    if (error) return toast(error.message);
-    refreshAll();
-    celebrate(el, ["🐾", "🦴", "🌼", "✨"]);
-    toast(kind === "pee" ? "Pee logged 💧" : kind === "poop" ? "Poop logged 💩" : "Both logged 🐾");
-    onDone();
-  }
-
-  return (
-    <div className="stack">
-      {!dog && <DogPicker value={target} onChange={setTarget} />}
-      <div className="seg" role="group" aria-label="When">
-        <button type="button" aria-pressed={when === "now"} onClick={() => setWhen("now")}>
-          Just now
-        </button>
-        <button type="button" aria-pressed={when === "earlier"} onClick={() => setWhen("earlier")}>
-          Earlier…
-        </button>
-      </div>
-      {when === "earlier" && (
-        <div className="grid-2">
-          <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-          <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time" />
-        </div>
-      )}
-      <div className="tiles">
-        <button className="tile" disabled={busy} onClick={(e) => log("pee", e.currentTarget)}>
-          <span className="tile-emoji">💧</span>Pee
-        </button>
-        <button className="tile" disabled={busy} onClick={(e) => log("poop", e.currentTarget)}>
-          <span className="tile-emoji">💩</span>Poop
-        </button>
-        <button className="tile" disabled={busy} onClick={(e) => log("both", e.currentTarget)}>
-          <span className="tile-emoji">🐾</span>Both
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function DogNoteForm({ dog, onDone }: { dog?: DogId; onDone: () => void }) {
-  const { meId, toast } = useApp();
-  const [target, setTarget] = useState<DogTarget>(dog ?? DOGS[0].id);
-  const [detail, setDetail] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!detail.trim()) return;
-    setBusy(true);
-    const { error } = await supabaseBrowser()
-      .from("kodo_logs")
-      .insert(dogsFor(target).map((d) => ({ dog: d, type: "note", detail: detail.trim(), created_by: meId })));
-    setBusy(false);
-    if (error) return toast(error.message);
-    refreshAll();
-    toast("Noted 🐾");
-    onDone();
-  }
-
-  return (
-    <form className="stack" onSubmit={submit}>
-      {!dog && <DogPicker value={target} onChange={setTarget} />}
-      <textarea className="textarea" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Upset tummy today, extra zoomies, ate grass again…" autoFocus={Boolean(dog)} rows={3} />
-      <button className="btn btn-primary btn-block" disabled={busy || !detail.trim()}>
-        Save note
       </button>
     </form>
   );
@@ -220,11 +114,30 @@ export function EnergyPicker({ value, onChange, big = false }: { value: Energy |
   );
 }
 
+export const SETTINGS: { v: Setting | null; label: string }[] = [
+  { v: "home", label: "🏡 At home" },
+  { v: "out", label: "🚗 Going out" },
+  { v: null, label: "Either" },
+];
+
+function SettingPicker({ value, onChange }: { value: Setting | null; onChange: (s: Setting | null) => void }) {
+  return (
+    <div className="seg" role="group" aria-label="Where">
+      {SETTINGS.map((o) => (
+        <button key={o.label} type="button" aria-pressed={value === o.v} onClick={() => onChange(o.v)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: () => void }) {
   const { meId, profiles, toast } = useApp();
   const [name, setName] = useState(initial?.name ?? "");
   const [energy, setEnergy] = useState<Energy>(initial?.energy_level ?? "low");
   const [participant, setParticipant] = useState<string | null>(initial ? initial.participant : null);
+  const [setting, setSetting] = useState<Setting | null>(initial?.setting ?? null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -232,7 +145,7 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
     if (!name.trim()) return;
     setBusy(true);
     const supabase = supabaseBrowser();
-    const row = { name: name.trim(), energy_level: energy, participant };
+    const row = { name: name.trim(), energy_level: energy, participant, setting };
     const { error } = initial
       ? await supabase.from("activities").update(row).eq("id", initial.id)
       : await supabase.from("activities").insert({ ...row, created_by: meId });
@@ -269,6 +182,10 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
             Both
           </button>
         </div>
+      </div>
+      <div className="field">
+        <span>Where</span>
+        <SettingPicker value={setting} onChange={setSetting} />
       </div>
       <div className="row-between">
         {initial ? (

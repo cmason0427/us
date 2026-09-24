@@ -2,8 +2,8 @@ export type EventType = "confirmed" | "solo" | "ask" | "radar";
 export type AskStatus = "pending" | "accepted" | "declined";
 export type Energy = "low" | "medium" | "high";
 export type Urgency = "low" | "medium" | "high";
-export type ListType = "personal" | "shared" | "household";
-export type PottyKind = "pee" | "poop" | "both";
+export type ListType = "personal" | "shared" | "household" | "dogs";
+export type Setting = "home" | "out";
 
 export interface Profile {
   id: string;
@@ -41,19 +41,14 @@ export interface PostPhoto {
   position: number;
 }
 
-export interface PostReaction {
-  post_id: string;
-  user_id: string;
-  emoji: string;
-}
-
 export interface Post {
   id: string;
   author: string;
   text: string | null;
+  /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
+  dogs: string[];
   created_at: string;
   post_photos: PostPhoto[];
-  post_reactions: PostReaction[];
 }
 
 export interface Activity {
@@ -62,6 +57,8 @@ export interface Activity {
   energy_level: Energy;
   /** null = needs both of you */
   participant: string | null;
+  /** null = works at home or out */
+  setting: Setting | null;
   created_by: string;
 }
 
@@ -83,16 +80,6 @@ export interface Task {
   done_by: string | null;
   created_by: string;
   created_at: string;
-}
-
-export interface KodoLog {
-  id: string;
-  dog: string;
-  type: "potty" | "note";
-  potty_kind: PottyKind | null;
-  detail: string | null;
-  occurred_at: string;
-  created_by: string;
 }
 
 /**

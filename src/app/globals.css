@@ -360,14 +360,15 @@ p { margin: 0; }
 .photos.n1 .photo { aspect-ratio: auto; max-height: 70vh; }
 .photo img { width: 100%; height: 100%; object-fit: cover; }
 .photos.n1 .photo img { height: auto; max-height: 70vh; object-fit: contain; margin: 0 auto; }
-.reactions { display: flex; gap: 6px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
-.react-btn {
-  appearance: none; cursor: pointer; border: 1.5px solid var(--line); background: var(--surface);
-  border-radius: 999px; min-height: 34px; padding: 3px 10px; font-size: 1rem;
+/* Toggle chips: dog tags, filters. */
+.chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.chip {
+  appearance: none; cursor: pointer; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 999px; min-height: 34px; padding: 3px 12px; font-size: 0.9rem;
   display: inline-flex; align-items: center; gap: 4px; font-weight: 800;
 }
-.react-btn[aria-pressed="true"] { border-color: var(--plum); background: color-mix(in srgb, var(--rose) 45%, var(--surface)); }
-.react-btn .who { font-size: 0.72rem; color: var(--ink-soft); }
+.chip[aria-pressed="true"] { border-color: var(--plum); background: color-mix(in srgb, var(--rose) 45%, var(--surface)); }
+.post-dogs { margin-top: 8px; }
 .photo-picks { display: flex; gap: 8px; flex-wrap: wrap; }
 .photo-pick { position: relative; width: 78px; height: 78px; border-radius: 12px; overflow: hidden; border: 2px solid var(--line); }
 .photo-pick img { width: 100%; height: 100%; object-fit: cover; }
@@ -463,6 +464,7 @@ p { margin: 0; }
 .check:checked { background: var(--sage); }
 .check:checked::after { content: ""; width: 12px; height: 7px; border-left: 3px solid var(--plum); border-bottom: 3px solid var(--plum); transform: rotate(-45deg) translate(1px, -1px); }
 .task-title { font-weight: 700; overflow-wrap: anywhere; }
+.task-edit { appearance: none; border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: text; }
 .urg {
   appearance: none; cursor: pointer; flex-shrink: 0;
   border: 1.5px solid var(--plum); border-radius: 999px;
@@ -475,8 +477,6 @@ p { margin: 0; }
 .quick-add { display: flex; gap: 8px; }
 .quick-add .input { min-height: 46px; }
 
-.kodo-hero { display: flex; align-items: center; gap: 14px; padding: 16px; }
-.kodo-hero .big { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; line-height: 1.05; }
 .timeline { position: relative; padding-left: 22px; }
 .timeline::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: repeating-linear-gradient(var(--rose) 0 6px, transparent 6px 11px); }
 .tl-item { position: relative; padding: 8px 0 12px; }

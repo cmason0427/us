@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { format, isToday, isYesterday } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { celebrate } from "@/lib/celebrate";
-import { ago } from "@/lib/dates";
-import { URGENCY_RANK, type KodoLog, type ListType, type PottyKind, type Task, type Urgency } from "@/lib/types";
+import { URGENCY_RANK, type ListType, type Post, type Task, type Urgency } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
-import { DogNoteForm, PottyForm } from "@/components/QuickForms";
-import { DOGS, dogName, type DogId } from "@/lib/dogs";
+import { PostComposer } from "@/components/PostComposer";
+import { PostCard, usePhotoUrls } from "@/components/PostCard";
+import { DOGS, type DogId } from "@/lib/dogs";
 import { IconTrash, Paw, Sprig, Teapot, Wavy } from "@/components/Art";
+
+// Ours also collects household and dog to-dos, so nothing hides in a side tab.
+const OURS: ListType[] = ["shared", "household", "dogs"];
+const LIST_TAG: Partial<Record<ListType, string>> = { household: "🧺 Household", dogs: "🐾 Dogs" };
 
 type Tab = "todo" | "dogs" | "household";
 const NEXT_URGENCY: Record<Urgency, Urgency> = { low: "medium", medium: "high", high: "low" };
@@ -23,7 +26,7 @@ export default function ListsPage() {
   const initialTab = params.get("tab");
   // "kodo" is the old name of the dogs tab; old links still land there.
   const [tab, setTab] = useState<Tab>(initialTab === "dogs" || initialTab === "kodo" ? "dogs" : initialTab === "household" ? "household" : "todo");
-  const initialDog = DOGS.find((d) => d.id === params.get("dog"))?.id ?? DOGS[0].id;
+  const initialDog = DOGS.find((d) => d.id === params.get("dog"))?.id ?? null;
   const pick = (t: Tab) => {
     setTab(t);
     window.history.replaceState(null, "", t === "todo" ? "/lists" : `/lists?tab=${t}`);
@@ -46,7 +49,7 @@ export default function ListsPage() {
       </div>
       {tab === "todo" && <Todos />}
       {tab === "dogs" && <Dogs initialDog={initialDog} />}
-      {tab === "household" && <TaskList listType="household" title="Around the house" hint="Needs doing at some point. No rush unless it's marked." />}
+      {tab === "household" && <TaskList listType="household" title="Around the house" hint="Also shows in Ours. No rush unless it's marked." />}
     </main>
   );
 }
@@ -57,7 +60,7 @@ function Todos() {
   const { partner } = useApp();
   return (
     <>
-      <TaskList listType="shared" title="Ours" hint="Either of you can add and check off." />
+      <TaskList listType="shared" show={OURS} title="Ours" hint="Everything shared, including household and dog to-dos. Tap an item to edit it." />
       <div className="checker" style={{ margin: "22px 0 4px" }} />
       <TaskList listType="personal" title="Just mine" hint={`Private — ${partner?.display_name ?? "they"} can't see these.`} />
     </>
@@ -68,7 +71,8 @@ function sortTasks(list: Task[]) {
   return [...list].sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] || a.created_at.localeCompare(b.created_at));
 }
 
-function TaskList({ listType, title, hint }: { listType: ListType; title: string; hint: string }) {
+/** `listType` is where new items go; `show` is which lists this view collects (defaults to just that one). */
+function TaskList({ listType, show = [listType], title, hint }: { listType: ListType; show?: ListType[]; title: string; hint: string }) {
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [draft, setDraft] = useState("");
@@ -76,11 +80,11 @@ function TaskList({ listType, title, hint }: { listType: ListType; title: string
   const [showDone, setShowDone] = useState(false);
 
   const { data: tasks = [] } = useLive<Task[]>(
-    `tasks:${listType}`,
+    `tasks:${show.join("+")}`,
     async () => {
       // RLS already hides the other person's personal list; the owner filter
       // is belt-and-braces.
-      let q = supabase.from("tasks").select("*").eq("list_type", listType);
+      let q = supabase.from("tasks").select("*").in("list_type", show);
       if (listType === "personal") q = q.eq("owner", meId);
       const { data, error } = await q.order("created_at");
       if (error) throw error;
@@ -123,6 +127,12 @@ function TaskList({ listType, title, hint }: { listType: ListType; title: string
     refreshAll();
   }
 
+  async function rename(t: Task, title: string) {
+    const { error } = await supabase.from("tasks").update({ title }).eq("id", t.id);
+    if (error) toast(error.message);
+    refreshAll();
+  }
+
   async function remove(t: Task) {
     await supabase.from("tasks").delete().eq("id", t.id);
     refreshAll();
@@ -158,7 +168,7 @@ function TaskList({ listType, title, hint }: { listType: ListType; title: string
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onRename={rename} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
 
@@ -177,7 +187,7 @@ function TaskList({ listType, title, hint }: { listType: ListType; title: string
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onRename={rename} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -189,26 +199,54 @@ function TaskList({ listType, title, hint }: { listType: ListType; title: string
 
 function TaskRow({
   t,
+  tag,
   showWho,
   onToggle,
   onBump,
+  onRename,
   onRemove,
   nameOf,
 }: {
   t: Task;
+  tag?: string;
   showWho: boolean;
   onToggle: (t: Task, el: HTMLElement) => void;
   onBump: (t: Task) => void;
+  onRename: (t: Task, title: string) => void;
   onRemove: (t: Task) => void;
   nameOf: (id: string | null) => string;
 }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const save = () => {
+    const title = editing?.trim();
+    setEditing(null);
+    if (title && title !== t.title) onRename(t, title);
+  };
   return (
     <div className={`task${t.done ? " done" : ""}`}>
       <input type="checkbox" className="check" checked={t.done} onChange={(e) => onToggle(t, e.currentTarget)} aria-label={`Done: ${t.title}`} />
       <div className="grow">
-        <div className="task-title">{t.title}</div>
+        {editing !== null ? (
+          <input
+            className="input"
+            value={editing}
+            onChange={(e) => setEditing(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setEditing(null);
+            }}
+            aria-label="Edit to-do"
+            autoFocus
+          />
+        ) : (
+          <button className="task-title task-edit" onClick={() => setEditing(t.title)} aria-label={`Edit ${t.title}`}>
+            {t.title}
+          </button>
+        )}
         {showWho && (
           <div className="small faint">
+            {tag && <span className="sticker" style={{ marginRight: 6 }}>{tag}</span>}
             {t.done && t.done_by ? `done by ${nameOf(t.done_by)}` : `added by ${nameOf(t.created_by)}`}
           </div>
         )}
@@ -228,158 +266,66 @@ function TaskRow({
 
 /* ─── Dogs ──────────────────────────────────────────────────────────────── */
 
-const POTTY_EMOJI: Record<PottyKind, string> = { pee: "💧", poop: "💩", both: "🐾" };
-
-function Dogs({ initialDog }: { initialDog: DogId }) {
-  const [dog, setDog] = useState<DogId>(initialDog);
-  const pickDog = (d: DogId) => {
-    setDog(d);
-    window.history.replaceState(null, "", `/lists?tab=dogs&dog=${d}`);
-  };
-  return (
-    <>
-      <div className="seg" role="group" aria-label="Which dog" style={{ marginBottom: 14 }}>
-        {DOGS.map((d) => (
-          <button key={d.id} aria-pressed={dog === d.id} onClick={() => pickDog(d.id)}>
-            {d.name}
-          </button>
-        ))}
-      </div>
-      <DogLog key={dog} dog={dog} />
-    </>
-  );
-}
-
-function DogLog({ dog }: { dog: DogId }) {
-  const name = dogName(dog);
-  const { meId, nameOf, toast } = useApp();
+// Dog notes are feed posts tagged with dogs; to-dos also show in Ours.
+function Dogs({ initialDog }: { initialDog: DogId | null }) {
   const supabase = supabaseBrowser();
-  const [sheet, setSheet] = useState<"potty" | "note" | null>(null);
-  const [, setTick] = useState(0);
+  const [filter, setFilter] = useState<DogId | null>(initialDog);
+  const [writing, setWriting] = useState(false);
+  const pickFilter = (d: DogId | null) => {
+    setFilter(d);
+    window.history.replaceState(null, "", d ? `/lists?tab=dogs&dog=${d}` : "/lists?tab=dogs");
+  };
 
-  // Keep "x min ago" honest while the screen is open.
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 60_000);
-    return () => clearInterval(t);
-  }, []);
-
-  const { data: logs = [] } = useLive<KodoLog[]>(
-    `dog:${dog}`,
+  const { data: notes = [] } = useLive<Post[]>(
+    `dog-notes:${filter ?? "all"}`,
     async () => {
-      const { data, error } = await supabase.from("kodo_logs").select("*").eq("dog", dog).order("occurred_at", { ascending: false }).limit(150);
+      let q = supabase.from("posts").select("*, post_photos(*)");
+      q = filter ? q.contains("dogs", [filter]) : q.overlaps("dogs", DOGS.map((d) => d.id));
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(50);
       if (error) throw error;
-      return data as KodoLog[];
+      return data as Post[];
     },
-    ["kodo_logs"],
+    ["posts", "post_photos"],
   );
-
-  const potties = logs.filter((l) => l.type === "potty");
-  const lastAny = potties[0];
-  const lastPee = potties.find((l) => l.potty_kind === "pee" || l.potty_kind === "both");
-  const lastPoop = potties.find((l) => l.potty_kind === "poop" || l.potty_kind === "both");
-
-  async function quick(kind: PottyKind, el: HTMLElement) {
-    const { error } = await supabase.from("kodo_logs").insert({ dog, type: "potty", potty_kind: kind, created_by: meId });
-    if (error) return toast(error.message);
-    celebrate(el, ["🐾", "🦴", "🌼"]);
-    refreshAll();
-  }
-
-  async function remove(l: KodoLog) {
-    if (!confirm("Delete this entry?")) return;
-    await supabase.from("kodo_logs").delete().eq("id", l.id);
-    refreshAll();
-  }
-
-  // Group by day for the timeline.
-  const groups: { label: string; items: KodoLog[] }[] = [];
-  for (const l of logs) {
-    const d = new Date(l.occurred_at);
-    const label = isToday(d) ? "Today" : isYesterday(d) ? "Yesterday" : format(d, "EEEE, MMM d");
-    const g = groups[groups.length - 1];
-    if (g?.label === label) g.items.push(l);
-    else groups.push({ label, items: [l] });
-  }
+  const urls = usePhotoUrls(notes.flatMap((p) => p.post_photos.map((ph) => ph.storage_path)));
 
   return (
     <>
-      <div className="card card-stitched kodo-hero">
-        <Paw width={52} height={52} style={{ color: "var(--terracotta)", flexShrink: 0 }} />
-        <div className="grow">
-          <div className="small muted" style={{ fontWeight: 800 }}>
-            Last potty break
-          </div>
-          <div className="big">{lastAny ? ago(lastAny.occurred_at) : "Nothing logged yet"}</div>
-          {lastAny && (
-            <div className="small muted">
-              💧 {lastPee ? ago(lastPee.occurred_at) : "—"} · 💩 {lastPoop ? ago(lastPoop.occurred_at) : "—"}
-            </div>
-          )}
-        </div>
-      </div>
+      <button className="card composer-prompt" onClick={() => setWriting(true)}>
+        <Paw width={34} height={34} style={{ color: "var(--terracotta)" }} />
+        <span>Add a dog note… it goes in the feed too</span>
+      </button>
 
-      <div className="tiles" style={{ marginTop: 14 }}>
-        <button className="tile" onClick={(e) => quick("pee", e.currentTarget)}>
-          <span className="tile-emoji">💧</span>Pee
-        </button>
-        <button className="tile" onClick={(e) => quick("poop", e.currentTarget)}>
-          <span className="tile-emoji">💩</span>Poop
-        </button>
-        <button className="tile" onClick={(e) => quick("both", e.currentTarget)}>
-          <span className="tile-emoji">🐾</span>Both
-        </button>
-      </div>
-      <div className="row" style={{ marginTop: 10, justifyContent: "center" }}>
-        <button className="btn btn-sm" onClick={() => setSheet("potty")}>
-          Log an earlier one
-        </button>
-        <button className="btn btn-sm btn-sage" onClick={() => setSheet("note")}>
-          📝 Health / mood note
-        </button>
+      <div style={{ marginTop: 18 }}>
+        <TaskList listType="dogs" title="Dog to-dos" hint="Also shows in Ours. Tap an item to edit it." />
       </div>
 
       <div className="section-title">
-        <Paw width={20} height={20} style={{ color: "var(--rose)" }} /> Timeline
+        <Paw width={20} height={20} style={{ color: "var(--rose)" }} /> Dog notes
       </div>
-      {logs.length === 0 ? (
-        <p className="muted">{name}&apos;s story starts with the first log.</p>
+      <div className="chips" role="group" aria-label="Show notes for" style={{ marginBottom: 12 }}>
+        <button className="chip" aria-pressed={filter === null} onClick={() => pickFilter(null)}>
+          Both
+        </button>
+        {DOGS.map((d) => (
+          <button key={d.id} className="chip" aria-pressed={filter === d.id} onClick={() => pickFilter(d.id)}>
+            🐾 {d.name}
+          </button>
+        ))}
+      </div>
+      {notes.length === 0 ? (
+        <p className="muted">No dog notes yet.</p>
       ) : (
-        <div className="timeline">
-          {groups.map((g) => (
-            <div key={g.label}>
-              <div className="tl-day">{g.label}</div>
-              {g.items.map((l) => (
-                <div key={l.id} className="tl-item" data-kind={l.type}>
-                  <div className="row-between" style={{ alignItems: "flex-start" }}>
-                    <div className="grow">
-                      <div style={{ fontWeight: 800 }}>
-                        {l.type === "potty" ? `${POTTY_EMOJI[l.potty_kind!]} ${l.potty_kind === "both" ? "Pee + poop" : l.potty_kind === "pee" ? "Pee" : "Poop"}` : "📝 Note"}
-                        <span className="small faint" style={{ fontWeight: 700 }}>
-                          {" "}
-                          · {format(new Date(l.occurred_at), "h:mm a")} · {nameOf(l.created_by)}
-                        </span>
-                      </div>
-                      {l.detail && <p style={{ whiteSpace: "pre-wrap", marginTop: 2 }}>{l.detail}</p>}
-                    </div>
-                    <button className="icon-btn" onClick={() => remove(l)} aria-label="Delete entry" style={{ width: 32, height: 32 }}>
-                      <IconTrash width={16} height={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="feed">
+          {notes.map((p) => (
+            <PostCard key={p.id} post={p} urls={urls} />
           ))}
         </div>
       )}
 
-      {sheet === "potty" && (
-        <Sheet title={`${name} went!`} onClose={() => setSheet(null)}>
-          <PottyForm dog={dog} onDone={() => setSheet(null)} />
-        </Sheet>
-      )}
-      {sheet === "note" && (
-        <Sheet title={`${name} note`} onClose={() => setSheet(null)}>
-          <DogNoteForm dog={dog} onDone={() => setSheet(null)} />
+      {writing && (
+        <Sheet title="Dog note" onClose={() => setWriting(false)}>
+          <PostComposer dogNote initialDogs={filter ? [filter] : []} onDone={() => setWriting(false)} />
         </Sheet>
       )}
     </>

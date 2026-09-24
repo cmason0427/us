@@ -4,13 +4,13 @@ import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
 import { EventForm } from "./EventForm";
-import { ActivityForm, DogNoteForm, PottyForm, TaskForm } from "./QuickForms";
+import { ActivityForm, TaskForm } from "./QuickForms";
 
 const MENU: { kind: AddKind; emoji: string; label: string }[] = [
   { kind: "post", emoji: "🌼", label: "Update" },
   { kind: "event", emoji: "📅", label: "Event" },
-  { kind: "potty", emoji: "🐾", label: "Dog potty" },
-  { kind: "dog-note", emoji: "📝", label: "Dog note" },
+  { kind: "dog-note", emoji: "🐾", label: "Dog note" },
+  { kind: "dog-task", emoji: "🦴", label: "Dog to-do" },
   { kind: "task", emoji: "✅", label: "To-do" },
   { kind: "household", emoji: "🧺", label: "Household" },
   { kind: "activity", emoji: "✨", label: "Activity idea" },
@@ -19,8 +19,8 @@ const MENU: { kind: AddKind; emoji: string; label: string }[] = [
 const TITLES: Record<AddKind, string> = {
   post: "A little update",
   event: "New plan",
-  potty: "Someone went!",
   "dog-note": "Dog note",
+  "dog-task": "Dog to-do",
   task: "To-do",
   household: "Household thing",
   activity: "Activity idea",
@@ -50,10 +50,10 @@ export function AddSheet() {
     <Sheet title={TITLES[addOpen]} onClose={closeAdd}>
       {addOpen === "post" && <PostComposer onDone={closeAdd} />}
       {addOpen === "event" && <EventForm onDone={closeAdd} />}
-      {addOpen === "potty" && <PottyForm onDone={closeAdd} />}
-      {addOpen === "dog-note" && <DogNoteForm onDone={closeAdd} />}
+      {addOpen === "dog-note" && <PostComposer dogNote onDone={closeAdd} />}
       {addOpen === "task" && <TaskForm listType="shared" onDone={closeAdd} />}
       {addOpen === "household" && <TaskForm listType="household" onDone={closeAdd} />}
+      {addOpen === "dog-task" && <TaskForm listType="dogs" onDone={closeAdd} />}
       {addOpen === "activity" && <ActivityForm onDone={closeAdd} />}
     </Sheet>
   );
