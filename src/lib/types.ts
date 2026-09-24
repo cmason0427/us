@@ -56,7 +56,9 @@ export interface Post {
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
   /** "post", a ⭐ "star", or a spicy "lunch_you" invite. */
-  kind: "post" | "star" | "lunch_you";
+  kind: "post" | "star" | "lunch_you" | "plan";
+  /** For "plan" posts: the time-block plan on the calendar. */
+  plan_id: string | null;
   /** Who a star / invite is for. */
   to_user: string | null;
   star_color: string | null;

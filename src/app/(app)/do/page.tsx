@@ -10,6 +10,8 @@ import { ago } from "@/lib/dates";
 import { ENERGY_RANK, type Activity, type Checkin, type Energy } from "@/lib/types";
 import { COST_OPTIONS, DURATION_OPTIONS, NO_FILTERS, SETTING_OPTIONS, isActive, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
 import { ActivityBatch } from "@/components/Batches";
+import { createPlan } from "@/components/Plans";
+import { useRouter } from "next/navigation";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
@@ -68,6 +70,7 @@ export default function DoSomethingPage() {
   const [enteringFor, setEnteringFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Activity | "new" | "batch" | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const router = useRouter();
   const [showLibrary, setShowLibrary] = useState(false);
   const [filters, setFilters] = useState<ActivityFilters>(NO_FILTERS);
 
@@ -317,6 +320,19 @@ export default function DoSomethingPage() {
                   ✅
                 </button>
               )}
+              <button
+                className="icon-btn"
+                onClick={async () => {
+                  try {
+                    router.push(`/calendar?plan=${await createPlan(meId, new Date(), a)}`);
+                  } catch (err) {
+                    toast((err as Error).message);
+                  }
+                }}
+                aria-label={`Plan ${a.name} in a time block`}
+              >
+                📅
+              </button>
               <button className="icon-btn" onClick={() => setEditing(a)} aria-label={`Edit ${a.name}`}>
                 <IconEdit />
               </button>

@@ -79,6 +79,11 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       )}
       {saving && photos[slide] && <SaveSheet paths={[photos[slide].storage_path]} onClose={() => setSaving(false)} />}
       {post.kind === "lunch_you" && <LunchYou post={post} />}
+      {post.plan_id && (
+        <Link className="btn btn-sm" href={`/calendar?plan=${post.plan_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
+          📅 Take a look
+        </Link>
+      )}
       {post.event_id && (
         <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
           📅 Open in calendar

@@ -26,6 +26,7 @@ import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { fromInputs, timeLabel, toDateInput, toTimeInput } from "@/lib/dates";
 import { eventWhen, postAskUpdate } from "@/lib/askFeed";
+import { PlanBlocks, PlanSheet, createPlan } from "@/components/Plans";
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
@@ -92,7 +93,10 @@ export default function CalendarPage() {
   const [agenda, setAgenda] = useState<AgendaRange>("week");
   const [cursor, setCursor] = useState(() => new Date());
   // Deep link from a push notification: /calendar?event=<id>
-  const [openId, setOpenId] = useState<string | null>(useSearchParams().get("event"));
+  const params = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(params.get("event"));
+  // ?plan=… (from the feed) opens that time-block plan on its day.
+  const [planId, setPlanId] = useState<string | null>(params.get("plan"));
   const [editing, setEditing] = useState<CalEvent | "new" | null>(null);
 
   const [from, to] = rangeFor(view, cursor, agenda);
@@ -112,7 +116,7 @@ export default function CalendarPage() {
   );
 
   // Pending asks waiting on me, regardless of the visible range.
-  const { meId } = useApp();
+  const { meId, toast } = useApp();
   const { data: waiting = [] } = useLive<CalEvent[]>(
     "events:waiting",
     async () => {
@@ -231,6 +235,28 @@ export default function CalendarPage() {
         />
       )}
       {view === "day" && <Day day={cursor} events={events} onOpen={open} />}
+      {(view === "day" || view === "month") && (
+        <PlanBlocks
+          day={cursor}
+          onOpen={setPlanId}
+          onNew={async () => {
+            try {
+              setPlanId(await createPlan(meId, cursor));
+            } catch (err) {
+              toast((err as Error).message);
+            }
+          }}
+        />
+      )}
+      {planId && (
+        <PlanSheet
+          id={planId}
+          onClose={() => {
+            setPlanId(null);
+            if (window.location.search) window.history.replaceState(null, "", "/calendar");
+          }}
+        />
+      )}
 
       <div className="row" style={{ justifyContent: "center", marginTop: 20 }}>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>

@@ -303,6 +303,8 @@ p { margin: 0; }
 .input:focus, .textarea:focus, .select:focus { outline: none; border-color: var(--terracotta); }
 .textarea { min-height: 96px; resize: vertical; line-height: 1.4; }
 .select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat; padding-right: 36px; }
+.grid-3 { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; }
+.plan-card { appearance: none; text-align: left; cursor: pointer; font: inherit; color: inherit; display: flex; flex-direction: column; gap: 4px; border-left: 4px solid var(--terracotta); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
 .switch { position: relative; width: 50px; height: 30px; flex-shrink: 0; }

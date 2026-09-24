@@ -18,6 +18,7 @@ type Body =
   | { kind: "spicy"; id: string }
   | { kind: "star"; id: string }
   | { kind: "spicy_item"; id: string }
+  | { kind: "plan"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -114,6 +115,13 @@ export async function POST(req: Request) {
     }[msg.kind];
     const note = (msg as LunchMsg).note;
     const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: note ? `${text} "${note}"` : text, url: "/", tag: `lunch-${msg.day}` });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "plan") {
+    const { data: post } = await supabase.from("posts").select("id, author, kind, plan_id, text").eq("id", body.id).single();
+    if (!post || post.author !== me.id || post.kind !== "plan") return NextResponse.json({ error: "not your plan note" }, { status: 400 });
+    const sent = await sendPushToUser(partner.id, { title: "📅 A new idea", body: `${myName} put an idea on your calendar. Look whenever.`, url: `/calendar?plan=${post.plan_id}`, tag: `plan-${post.plan_id}` });
     return NextResponse.json({ sent });
   }
 
