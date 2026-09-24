@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces } from "next/font/google";
+import { Fraunces, Fredoka } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -10,6 +10,9 @@ const fraunces = Fraunces({
   axes: ["SOFT", "WONK", "opsz"],
 });
 
+// Round and chunky like fridge-magnet letters; only for magnet titles.
+const fredoka = Fredoka({ variable: "--font-magnet", subsets: ["latin"], weight: ["600", "700"] });
+
 export const metadata: Metadata = {
   title: "Us",
   description: "Our little corner.",
@@ -18,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fcf0e9", // the boot script swaps it for the Sage theme
+  themeColor: "#fff0f5", // the boot script swaps it for the Sage theme
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -27,7 +30,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // The boot script sets data-theme before paint, so React shouldn't fight it.
-    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
+    <html lang="en" className={`${fraunces.variable} ${fredoka.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>

@@ -8,32 +8,45 @@
    The theme is set on <html data-theme> (Settings → Look; stored per device).
    ───────────────────────────────────────────────────────────────────────────── */
 :root, :root[data-theme="peach"] {
-  --cream: #fcf0e9;
-  --surface: #fffaf6;
-  --rose: #eab1a8;
-  --butter: #f8d9c2;
-  --terracotta: #4e7c56;
-  --sage: #b5cfa8;
-  --plum: #3e2a2f;
-  --on-accent: #fffaf6;
-  --on-soft: #22361f;
-  --on-butter: #5a3520;
-  --danger: #c0533d;
-  --theme-color: #fcf0e9;
+  /* Pink: blush base, bright green accents, pink pops */
+  --cream: #fff0f5;
+  --surface: #fffafc;
+  --rose: #ff9ec0;
+  --butter: #ffd6e5;
+  --terracotta: #1f9a57;
+  --sage: #9fe0b0;
+  --plum: #3b1f2e;
+  --on-accent: #ffffff;
+  --on-soft: #0f3a22;
+  --on-butter: #7a1f45;
+  --danger: #d8433f;
+  --theme-color: #fff0f5;
 }
 :root[data-theme="sage"] {
-  --cream: #edf2e8;
-  --surface: #f9fbf6;
-  --rose: #a9c39c;
-  --butter: #dbe7cc;
-  --terracotta: #b4546f;
-  --sage: #f0b9c4;
-  --plum: #25332a;
-  --on-accent: #fff8fa;
-  --on-soft: #4d1d2a;
-  --on-butter: #2e4027;
-  --danger: #c0533d;
-  --theme-color: #edf2e8;
+  /* Green: mint base, hot pink accents, green pops */
+  --cream: #eaf8ee;
+  --surface: #fbfffc;
+  --rose: #7fd49a;
+  --butter: #c9f0d4;
+  --terracotta: #e23d7b;
+  --sage: #ffb3cf;
+  --plum: #1e3326;
+  --on-accent: #ffffff;
+  --on-soft: #6b1238;
+  --on-butter: #145230;
+  --danger: #d8433f;
+  --theme-color: #eaf8ee;
+}
+
+/* Fridge-magnet pops: the same bright set in both themes. */
+:root {
+  --pop-red: #e5484d;
+  --pop-orange: #f07c2e;
+  --pop-yellow: #e9b10d;
+  --pop-green: #2fa352;
+  --pop-blue: #2a78d6;
+  --pop-purple: #7c56d0;
+  --pop-pink: #e84a8f;
 }
 
 :root {
@@ -644,3 +657,49 @@ div.dash-row { cursor: default; }
 .feed-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 24px 0 10px; }
 .feed-head .section-title { margin: 0; }
 .btn-link { appearance: none; background: none; border: 0; padding: 4px 2px; color: var(--accent); font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ─── Fridge magnets & pops ─────────────────────────────────────────────── */
+.magnet { display: inline-flex; flex-wrap: wrap; align-items: baseline; font-family: var(--font-magnet), var(--font-display); font-weight: 700; letter-spacing: 0.01em; }
+.magnet-letter {
+  display: inline-block;
+  /* a raised plastic letter: darker edge below, soft shadow on the fridge */
+  text-shadow: 0 1.5px 0 color-mix(in srgb, currentColor 60%, #000), 0 3px 5px color-mix(in srgb, var(--plum) 28%, transparent);
+}
+.magnet-gap { display: inline-block; width: 0.32em; }
+.page-head h1 { font-size: 2.15rem; }
+
+.page-head .eyebrow { color: var(--pop-pink); }
+:root[data-theme="sage"] .page-head .eyebrow { color: var(--pop-green); }
+
+/* Colored icon dots on the dashboard, cycling through the pops */
+.dash-icon {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 1.05rem;
+  background: color-mix(in srgb, var(--dot, var(--pop-pink)) 22%, var(--surface));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--dot, var(--pop-pink)) 55%, transparent);
+}
+.dash-row:nth-child(7n+1) { --dot: var(--pop-pink); }
+.dash-row:nth-child(7n+2) { --dot: var(--pop-green); }
+.dash-row:nth-child(7n+3) { --dot: var(--pop-yellow); }
+.dash-row:nth-child(7n+4) { --dot: var(--pop-blue); }
+.dash-row:nth-child(7n+5) { --dot: var(--pop-orange); }
+.dash-row:nth-child(7n+6) { --dot: var(--pop-purple); }
+.dash-row:nth-child(7n+7) { --dot: var(--pop-red); }
+.dash { border-top: 4px solid var(--rose); }
+
+/* Menu icons each get a pop */
+.drawer-item:nth-of-type(7n+1) svg { color: var(--pop-pink); }
+.drawer-item:nth-of-type(7n+2) svg { color: var(--pop-blue); }
+.drawer-item:nth-of-type(7n+3) svg { color: var(--pop-orange); }
+.drawer-item:nth-of-type(7n+4) svg { color: var(--pop-green); }
+.drawer-item:nth-of-type(7n+5) svg { color: var(--pop-purple); }
+.drawer-item:nth-of-type(7n+6) svg { color: var(--pop-yellow); }
+.drawer-item:nth-of-type(7n+7) svg { color: var(--pop-red); }
+.drawer-item[aria-current="page"] { background: var(--rose); color: var(--plum); }
+
+/* Primary actions pop a little more */
+.btn-primary { box-shadow: 0 3px 0 color-mix(in srgb, var(--terracotta) 60%, #000); }
+.btn-primary:active { box-shadow: none; transform: translateY(2px); }
+.fab { background: var(--terracotta); box-shadow: 0 4px 0 color-mix(in srgb, var(--terracotta) 60%, #000), var(--shadow-pop); border: 3px solid var(--surface); }
+.chip[aria-pressed="true"] { background: var(--rose); border-color: color-mix(in srgb, var(--rose) 60%, var(--plum)); color: var(--plum); }
+.section-title::after { content: ""; flex: 0 0 26px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--pop-pink), var(--pop-yellow), var(--pop-green)); margin-left: 4px; }
+.feed-head .section-title::after { display: none; }
