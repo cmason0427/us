@@ -28,6 +28,26 @@ import { FoodDetailSheet } from "./FoodDetail";
  */
 
 export type Meal = "breakfast" | "lunch" | "dinner";
+
+/**
+ * The meal worth thinking about right now, and which day it's for:
+ * 9am–1pm lunch, 1pm–9pm dinner, then breakfast (tomorrow's, after 9pm).
+ */
+export function currentMeal(now: Date): { meal: Meal; day: string } {
+  const h = now.getHours();
+  if (h >= 9 && h < 13) return { meal: "lunch", day: format(now, "yyyy-MM-dd") };
+  if (h >= 13 && h < 21) return { meal: "dinner", day: format(now, "yyyy-MM-dd") };
+  const d = new Date(now);
+  if (h >= 21) d.setDate(d.getDate() + 1);
+  return { meal: "breakfast", day: format(d, "yyyy-MM-dd") };
+}
+
+/** Breakfast suggested at night is for tomorrow morning. */
+export function dayFor(meal: Meal, now: Date) {
+  const d = new Date(now);
+  if (meal === "breakfast" && now.getHours() >= 21) d.setDate(d.getDate() + 1);
+  return format(d, "yyyy-MM-dd");
+}
 export const MEAL_LABEL: Record<Meal, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner" };
 
 type Picker =
@@ -228,7 +248,8 @@ export function MealPanel({ t }: { t: MealThreadState }) {
 /** Start a breakfast or dinner suggestion (from the ＋ menu). */
 export function MealStart({ onDone }: { onDone: () => void }) {
   const now = useNow();
-  const [meal, setMeal] = useState<Meal>(() => ((now?.getHours() ?? 12) < 11 ? "breakfast" : "dinner"));
+  const [picked, setMeal] = useState<Meal | null>(null);
+  const meal = picked ?? (now ? currentMeal(now).meal : "lunch");
   if (!now) return null;
   return (
     <div className="stack">
@@ -239,7 +260,7 @@ export function MealStart({ onDone }: { onDone: () => void }) {
           </button>
         ))}
       </div>
-      <MealStartFor key={meal} day={format(now, "yyyy-MM-dd")} meal={meal} onDone={onDone} />
+      <MealStartFor key={meal} day={dayFor(meal, now)} meal={meal} onDone={onDone} />
     </div>
   );
 }

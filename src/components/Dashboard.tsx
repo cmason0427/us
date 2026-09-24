@@ -10,7 +10,7 @@ import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { SleepControls, useSleepTonight } from "./Sleep";
 import { AnswerSheet, useVibe, vibeText } from "./Vibe";
-import { MEAL_LABEL, MealPanel, useMealThread, type Meal } from "./MealThread";
+import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
 
 /**
@@ -21,19 +21,22 @@ import { PlanSheet, planWhen, usePlans } from "./Plans";
 export function Dashboard() {
   const now = useNow();
   if (!now) return <section className="card dash" aria-busy />;
-  return <Today day={format(now, "yyyy-MM-dd")} />;
+  const { meal, day: mealDay } = currentMeal(now);
+  return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | null;
+type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | null;
 
-function Today({ day }: { day: string }) {
+const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
+
+function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: string }) {
   const { partner } = useApp();
   const [open, setOpen] = useState<Open>(null);
   const sleep = useSleepTonight();
   const vibe = useVibe();
-  const breakfast = useMealThread(day, "breakfast");
-  const lunch = useMealThread(day, "lunch");
-  const dinner = useMealThread(day, "dinner");
+  // One meal at a time, by the clock (see currentMeal).
+  const food = useMealThread(mealDay, meal);
+  const mealName = MEAL_LABEL[meal];
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
   const them = partner?.display_name ?? "Them";
@@ -47,19 +50,9 @@ function Today({ day }: { day: string }) {
         </Row>
       )}
 
-      {breakfast.msgs.length > 0 && (
-        <Row icon="🥞" label="Breakfast" onClick={() => setOpen({ kind: "meal", meal: "breakfast" })}>
-          {breakfast.summary}
-        </Row>
-      )}
-      <Row icon="🥪" label="Lunch" onClick={() => setOpen({ kind: "meal", meal: "lunch" })}>
-        {lunch.summary ?? <span className="muted">No lunch plans today. Any ideas?</span>}
+      <Row icon={MEAL_ICON[meal]} label={day === mealDay ? mealName : `${mealName} tomorrow`} onClick={() => setOpen({ kind: "meal" })}>
+        {food.summary ?? <span className="muted">No {mealName.toLowerCase()} plans yet. Any ideas?</span>}
       </Row>
-      {dinner.msgs.length > 0 && (
-        <Row icon="🍝" label="Dinner" onClick={() => setOpen({ kind: "meal", meal: "dinner" })}>
-          {dinner.summary}
-        </Row>
-      )}
 
       {plans.map((p) => (
         <Row key={p.id} icon="🗓️" label={planWhen(p)} onClick={() => setOpen({ kind: "plan", id: p.id })}>
@@ -95,8 +88,8 @@ function Today({ day }: { day: string }) {
         </Sheet>
       )}
       {open?.kind === "meal" && (
-        <Sheet title={`${MEAL_LABEL[open.meal]} today`} onClose={() => setOpen(null)}>
-          <MealPanel t={open.meal === "breakfast" ? breakfast : open.meal === "lunch" ? lunch : dinner} />
+        <Sheet title={day === mealDay ? `${mealName} today` : `${mealName} tomorrow`} onClose={() => setOpen(null)}>
+          <MealPanel t={food} />
         </Sheet>
       )}
       {open?.kind === "vibe" && vibe.incoming && <AnswerSheet check={vibe.incoming} onClose={() => setOpen(null)} />}
