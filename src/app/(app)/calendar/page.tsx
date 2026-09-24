@@ -357,6 +357,36 @@ function DeclineForm({ e, onSend }: { e: CalEvent; onSend: (d: Decline) => Promi
   );
 }
 
+/** After declining, the one note you can still leave or change. Goes to the feed. */
+function DeclineNote({ e }: { e: CalEvent }) {
+  const { meId, toast } = useApp();
+  const [note, setNote] = useState(e.decline_note ?? "");
+  const [busy, setBusy] = useState(false);
+  const changed = note.trim() !== (e.decline_note ?? "");
+
+  async function save() {
+    setBusy(true);
+    const { error } = await supabaseBrowser().from("events").update({ decline_note: note.trim() || null }).eq("id", e.id);
+    setBusy(false);
+    if (error) return toast(error.message);
+    if (note.trim()) await postAskUpdate(e, meId, { kind: "note", note: note.trim() });
+    refreshAll();
+    toast("Note saved");
+  }
+
+  return (
+    <div className="field">
+      <span>Your note</span>
+      <textarea className="textarea" rows={2} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="Why you can't make it…" />
+      {changed && (
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={busy} style={{ alignSelf: "flex-start" }}>
+          Save note
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** The asker takes the suggested time: move the event and ask again. */
 function TakeProposal({ e }: { e: CalEvent }) {
   const { meId, partner, toast } = useApp();
@@ -463,20 +493,23 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
           Added by {nameOf(e.created_by)}
           {e.type === "ask" && e.response_status !== "pending" && e.responded_at && ` · answered ${format(new Date(e.responded_at), "MMM d")}`}
         </p>
-        {e.type === "ask" && e.response_status === "declined" && e.decline_note && (
+        {e.type === "ask" && e.response_status === "declined" && e.decline_note && e.created_by === meId && (
           <p className="card" style={{ whiteSpace: "pre-wrap" }}>
-            <strong>{e.created_by === meId ? "Their note" : "Your note"}:</strong> {e.decline_note}
+            <strong>Their note:</strong> {e.decline_note}
           </p>
         )}
+        {e.type === "ask" && e.response_status === "declined" && e.created_by !== meId && <DeclineNote e={e} />}
         {e.type === "ask" && e.response_status === "declined" && e.proposed_start && e.created_by !== meId && (
           <p className="small muted">You suggested {eventWhen(e.proposed_start, e.all_day)}.</p>
         )}
         {e.type === "ask" && e.response_status === "declined" && e.created_by === meId && <TakeProposal e={e} />}
         {t === "ask" && e.created_by !== meId && <AskActions e={e} />}
-        {/* A pending ask is the asker's to change; the other side answers (or suggests a time). */}
-        {t === "ask" && e.created_by !== meId ? (
+        {/* Until it's accepted, an ask is the asker's plan; the other side answers or leaves a note. */}
+        {e.type === "ask" && e.created_by !== meId && e.response_status !== "accepted" ? (
           <p className="small muted" style={{ textAlign: "center" }}>
-            Only {nameOf(e.created_by)} can change this until you answer. Suggest a different time with &ldquo;Can&apos;t make it&rdquo;.
+            {e.response_status === "pending"
+              ? `Only ${nameOf(e.created_by)} can change this until you answer. Suggest a different time with "Can't make it".`
+              : `It's ${nameOf(e.created_by)}'s plan now.`}
           </p>
         ) : (
           <button className="btn btn-block" onClick={onEdit}>

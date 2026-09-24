@@ -9,6 +9,7 @@ import type { Post } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PostCard, usePhotoUrls } from "@/components/PostCard";
+import { DogTodos } from "@/components/DogTodos";
 import { Flower, Teapot, Wavy } from "@/components/Art";
 
 const PAGE = 30;
@@ -46,6 +47,8 @@ export default function HomePage() {
         <Flower width={36} height={36} />
         <span>Share a little update…</span>
       </button>
+
+      <DogTodos />
 
       <div className="checker" style={{ margin: "20px 0" }} />
 

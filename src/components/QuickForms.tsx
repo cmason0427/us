@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
-import type { Activity, Energy, ListType, Setting, Urgency } from "@/lib/types";
+import type { Activity, Cost, Duration, Energy, ListType, Setting, Urgency } from "@/lib/types";
+import { COST_OPTIONS, DURATION_OPTIONS, SETTING_OPTIONS } from "@/lib/activity";
 import type { Deadline } from "@/lib/deadline";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { useApp } from "./AppProvider";
@@ -122,17 +123,12 @@ export function EnergyPicker({ value, onChange, big = false }: { value: Energy |
   );
 }
 
-export const SETTINGS: { v: Setting | null; label: string }[] = [
-  { v: "home", label: "🏡 At home" },
-  { v: "out", label: "🚗 Going out" },
-  { v: null, label: "Either" },
-];
-
-function SettingPicker({ value, onChange }: { value: Setting | null; onChange: (s: Setting | null) => void }) {
+/** Pick one or leave it unset ("Any"). */
+function OptionalPicker<T extends string>({ label, options, value, onChange }: { label: string; options: { v: T; label: string }[]; value: T | null; onChange: (v: T | null) => void }) {
   return (
-    <div className="seg" role="group" aria-label="Where">
-      {SETTINGS.map((o) => (
-        <button key={o.label} type="button" aria-pressed={value === o.v} onClick={() => onChange(o.v)}>
+    <div className="chips" role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.v} type="button" className="chip" aria-pressed={value === o.v} onClick={() => onChange(value === o.v ? null : o.v)}>
           {o.label}
         </button>
       ))}
@@ -146,6 +142,8 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
   const [energy, setEnergy] = useState<Energy>(initial?.energy_level ?? "low");
   const [participant, setParticipant] = useState<string | null>(initial ? initial.participant : null);
   const [setting, setSetting] = useState<Setting | null>(initial?.setting ?? null);
+  const [cost, setCost] = useState<Cost | null>(initial?.cost ?? null);
+  const [duration, setDuration] = useState<Duration | null>(initial?.duration ?? null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -153,7 +151,7 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
     if (!name.trim()) return;
     setBusy(true);
     const supabase = supabaseBrowser();
-    const row = { name: name.trim(), energy_level: energy, participant, setting };
+    const row = { name: name.trim(), energy_level: energy, participant, setting, cost, duration };
     const { error } = initial
       ? await supabase.from("activities").update(row).eq("id", initial.id)
       : await supabase.from("activities").insert({ ...row, created_by: meId });
@@ -191,9 +189,18 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
           </button>
         </div>
       </div>
+      <p className="small muted">These are optional; tap again to clear. Unset ones match any filter.</p>
       <div className="field">
         <span>Where</span>
-        <SettingPicker value={setting} onChange={setSetting} />
+        <OptionalPicker label="Where" options={SETTING_OPTIONS} value={setting} onChange={setSetting} />
+      </div>
+      <div className="field">
+        <span>Cost</span>
+        <OptionalPicker label="Cost" options={COST_OPTIONS} value={cost} onChange={setCost} />
+      </div>
+      <div className="field">
+        <span>How long</span>
+        <OptionalPicker label="How long" options={DURATION_OPTIONS} value={duration} onChange={setDuration} />
       </div>
       <div className="row-between">
         {initial ? (

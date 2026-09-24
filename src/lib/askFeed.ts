@@ -10,7 +10,8 @@ type AskUpdate =
   | { kind: "sent" }
   | { kind: "accepted" }
   | { kind: "declined"; note: string | null; proposed: string | null }
-  | { kind: "moved" };
+  | { kind: "moved" }
+  | { kind: "note"; note: string };
 
 /**
  * Every step of an ask (sent, answered, moved) also lands in the feed, so the
@@ -26,6 +27,8 @@ export async function postAskUpdate(e: Pick<CalEvent, "id" | "title" | "start_ti
         ? `🎉 I'm in for ${what}`
         : u.kind === "moved"
           ? `🔁 Moved ${what}. Can you make it now?`
+          : u.kind === "note"
+            ? `📝 About ${what}:\n"${u.note}"`
           : [
               `😕 Can't make ${what}`,
               u.note ? `"${u.note}"` : null,

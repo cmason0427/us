@@ -4,6 +4,8 @@ export type Energy = "low" | "medium" | "high";
 export type Urgency = "low" | "medium" | "high";
 export type ListType = "personal" | "shared" | "household" | "dogs";
 export type Setting = "home" | "out";
+export type Cost = "free" | "cheap" | "splurge";
+export type Duration = "quick" | "few_hours" | "all_day";
 
 export interface Profile {
   id: string;
@@ -65,6 +67,9 @@ export interface Activity {
   participant: string | null;
   /** null = works at home or out */
   setting: Setting | null;
+  /** Optional; null = not set (passes any filter). */
+  cost: Cost | null;
+  duration: Duration | null;
   created_by: string;
 }
 

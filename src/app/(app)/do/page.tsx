@@ -6,7 +6,8 @@ import { useLive, refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { ago } from "@/lib/dates";
-import { ENERGY_RANK, type Activity, type Checkin, type Energy, type Setting } from "@/lib/types";
+import { ENERGY_RANK, type Activity, type Checkin, type Energy } from "@/lib/types";
+import { COST_OPTIONS, DURATION_OPTIONS, NO_FILTERS, SETTING_OPTIONS, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
@@ -16,23 +17,43 @@ import { IconEdit, IconPlus, Mushroom, Sprig, Wavy } from "@/components/Art";
 // A check-in counts as "right now" for this long.
 const FRESH_MS = 4 * 60 * 60 * 1000;
 const ENERGY_EMOJI: Record<Energy, string> = { low: "🛋️", medium: "🚶", high: "⚡" };
-const SETTING_LABEL: Record<Setting, string> = { home: "🏡 At home", out: "🚗 Out" };
-// Ideas with no setting work either way, so they pass both filters.
-const fitsWhere = (a: Activity, where: Setting | null) => !where || !a.setting || a.setting === where;
 
-function WhereFilter({ value, onChange }: { value: Setting | null; onChange: (w: Setting | null) => void }) {
+function FilterRow<T extends string>({ options, value, onChange }: { options: { v: T; label: string }[]; value: T | null; onChange: (v: T | null) => void }) {
   return (
-    <div className="chips" role="group" aria-label="Where" style={{ marginBottom: 12 }}>
-      <button className="chip" aria-pressed={value === null} onClick={() => onChange(null)}>
-        Anywhere
-      </button>
-      <button className="chip" aria-pressed={value === "home"} onClick={() => onChange("home")}>
-        🏡 Stay in
-      </button>
-      <button className="chip" aria-pressed={value === "out"} onClick={() => onChange("out")}>
-        🚗 Go out
-      </button>
+    <div className="chips">
+      {options.map((o) => (
+        <button key={o.v} className="chip" aria-pressed={value === o.v} onClick={() => onChange(value === o.v ? null : o.v)}>
+          {o.label}
+        </button>
+      ))}
     </div>
+  );
+}
+
+/** Optional filters: nothing picked = everything. Tap a chip again to clear it. */
+function Filters({ value, onChange }: { value: ActivityFilters; onChange: (f: ActivityFilters) => void }) {
+  const any = value.setting || value.cost || value.duration;
+  return (
+    <div className="stack-sm" style={{ marginBottom: 12 }}>
+      <FilterRow options={SETTING_OPTIONS.map((o) => ({ v: o.v, label: o.filter }))} value={value.setting} onChange={(setting) => onChange({ ...value, setting })} />
+      <FilterRow options={COST_OPTIONS} value={value.cost} onChange={(cost) => onChange({ ...value, cost })} />
+      <FilterRow options={DURATION_OPTIONS} value={value.duration} onChange={(duration) => onChange({ ...value, duration })} />
+      {any && (
+        <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => onChange(NO_FILTERS)}>
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Tags({ a }: { a: Activity }) {
+  return (
+    <>
+      {a.setting && <span className="sticker">{labelOf(SETTING_OPTIONS, a.setting)}</span>}
+      {a.cost && <span className="sticker">{labelOf(COST_OPTIONS, a.cost)}</span>}
+      {a.duration && <span className="sticker">{labelOf(DURATION_OPTIONS, a.duration)}</span>}
+    </>
   );
 }
 
@@ -45,7 +66,7 @@ export default function DoSomethingPage() {
   const [enteringFor, setEnteringFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Activity | "new" | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [where, setWhere] = useState<Setting | null>(null);
+  const [filters, setFilters] = useState<ActivityFilters>(NO_FILTERS);
 
   const { data: activities = [] } = useLive<Activity[]>(
     "activities",
@@ -96,7 +117,7 @@ export default function DoSomethingPage() {
   const fits = (need: Energy, have: Energy) => (match === "exact" ? need === have : ENERGY_RANK[need] <= ENERGY_RANK[have]);
 
   const results = activities.filter((a) => {
-    if (!fitsWhere(a, where)) return false;
+    if (!matchesFilters(a, filters)) return false;
     if (a.participant) {
       const e = energyOf.get(a.participant);
       return e !== undefined && fits(a.energy_level, e);
@@ -198,7 +219,7 @@ export default function DoSomethingPage() {
               That or less
             </button>
           </div>
-          <WhereFilter value={where} onChange={setWhere} />
+          <Filters value={filters} onChange={setFilters} />
           {results.length ? (
             <div className="activity-grid">
               {results.map((a) => (
@@ -209,7 +230,7 @@ export default function DoSomethingPage() {
                       {ENERGY_EMOJI[a.energy_level]} {a.energy_level}
                     </span>
                     <span className="sticker">{a.participant ? nameOf(a.participant) : "Both"}</span>
-                    {a.setting && <span className="sticker">{SETTING_LABEL[a.setting]}</span>}
+                    <Tags a={a} />
                   </div>
                 </div>
               ))}
@@ -244,11 +265,11 @@ export default function DoSomethingPage() {
           <IconPlus width={16} height={16} /> Add
         </button>
       </div>
-      {(showLibrary || activities.length === 0) && activities.length > 0 && <WhereFilter value={where} onChange={setWhere} />}
+      {(showLibrary || activities.length === 0) && activities.length > 0 && <Filters value={filters} onChange={setFilters} />}
       {(showLibrary || activities.length === 0) && (
         <div className="card">
           {activities.length === 0 && <p className="muted">No ideas yet. Add things you like doing — low-key stuff counts.</p>}
-          {activities.filter((a) => fitsWhere(a, where)).map((a) => (
+          {activities.filter((a) => matchesFilters(a, filters)).map((a) => (
             <div key={a.id} className="lib-item">
               <span style={{ fontSize: "1.2rem" }}>{ENERGY_EMOJI[a.energy_level]}</span>
               <span className="grow" style={{ fontWeight: 700 }}>
@@ -256,7 +277,10 @@ export default function DoSomethingPage() {
                 <span className="small muted">
                   {" "}
                   · {a.participant ? nameOf(a.participant) : "Both"}
-                  {a.setting && ` · ${SETTING_LABEL[a.setting]}`}
+                  {[labelOf(SETTING_OPTIONS, a.setting), labelOf(COST_OPTIONS, a.cost), labelOf(DURATION_OPTIONS, a.duration)]
+                    .filter(Boolean)
+                    .map((l) => ` · ${l}`)
+                    .join("")}
                 </span>
               </span>
               <button className="icon-btn" onClick={() => setEditing(a)} aria-label={`Edit ${a.name}`}>

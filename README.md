@@ -12,7 +12,7 @@ and photo storage, and Web Push for notifications.
 | --- | --- |
 | `src/app/(app)/page.tsx` | Home feed: updates and dog notes, photos |
 | `src/app/(app)/calendar` | Day / Week / Month / List views, the four event types, Ask accept/decline (note + suggested time); each ask step posts to the feed |
-| `src/app/(app)/do` | Energy check-in + the activity library and matcher (filter: at home / out) |
+| `src/app/(app)/do` | Energy check-in + the activity library and matcher (optional filters: in/out, cost, length) |
 | `src/app/(app)/lists` | To-dos with deadlines (overdue → top + high), Ours collects shared/household/dog items, dog notes + dog to-dos |
 | `src/app/(app)/settings` | Display name, push on/off, per-kind notification toggles, change PIN, sign out |
 | `src/components/AddSheet.tsx` | The fast-entry sheet behind the + button |
@@ -41,7 +41,8 @@ Names are never hardcoded. Each person's display name lives in `profiles` and ca
 - **Accounts:** create each user (admin API, `email_confirm: true`, `user_metadata.display_name`), then give them a PIN with
   `scripts/set-pin.mjs`. Sign-in is PIN only: the server HMACs the PIN with `PIN_PEPPER`, which both finds the account and is
   its real Supabase password, so a PIN can't be guessed against Supabase directly. Wrong guesses are capped at 5 per 15 minutes
-  and 20 per day across the whole app. Sessions last until you sign out, so you rarely need the PIN.
+  and 20 per day across the whole app. The app asks for the PIN on every entry (cold start, or back after a
+  minute away; `src/lib/lock.ts`), and each unlock is a fresh sign-in.
 
 ### On each phone
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen** → open Us from the home screen → sign in → Settings → turn on notifications (needs iOS 16.4 or later).
