@@ -7,6 +7,7 @@ import { refreshAll } from "@/lib/useLive";
 import { ago } from "@/lib/dates";
 import { dogName, dogVoice } from "@/lib/dogs";
 import { DogAvatar } from "./DogAvatar";
+import { PersonAvatar } from "./PersonAvatar";
 import type { Post } from "@/lib/types";
 import { useApp } from "./AppProvider";
 import { IconTrash } from "./Art";
@@ -36,9 +37,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         {asDog ? (
           <DogAvatar ids={post.dogs} photos={dogPhotos} />
         ) : (
-          <span className="avatar-btn" aria-hidden style={{ width: 34, height: 34, fontSize: "0.95rem", background: post.author === meId ? "var(--butter)" : "var(--rose)" }}>
-            {nameOf(post.author)[0]}
-          </span>
+          <PersonAvatar id={post.author} />
         )}
         <div className="grow">
           <div className="post-author">{asDog ? dogVoice(post.dogs) : nameOf(post.author)}</div>

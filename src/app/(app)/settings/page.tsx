@@ -10,6 +10,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PinPad } from "@/components/PinPad";
 import { DogPhotos } from "@/components/DogPhotos";
+import { MyPhoto } from "@/components/MyPhoto";
 import { THEMES, applyTheme, currentTheme, type Theme } from "@/lib/theme";
 import { Flower, Wavy } from "@/components/Art";
 
@@ -116,7 +117,8 @@ export default function SettingsPage() {
       <Wavy />
 
       <section className="card stack">
-        <h2>Your name</h2>
+        <h2>You</h2>
+        <MyPhoto />
         <form className="quick-add" onSubmit={saveName}>
           <input className="input grow" value={name} onChange={(e) => setName(e.target.value)} aria-label="Display name" />
           <button className="btn btn-primary" disabled={!name.trim() || name.trim() === me?.display_name}>

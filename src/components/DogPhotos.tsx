@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { shrinkImage } from "@/lib/image";
+import { removeOldAvatar, uploadAvatar } from "@/lib/avatarUpload";
 import { refreshAll } from "@/lib/useLive";
 import { DOGS, type DogId } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
@@ -19,16 +19,11 @@ export function DogPhotos() {
     setBusy(dog);
     const supabase = supabaseBrowser();
     try {
-      const { blob, ext } = await shrinkImage(file, 512);
-      // Storage rules only let you write under your own folder.
-      const path = `${meId}/dogs/${dog}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
-      if (upErr) throw upErr;
+      const path = await uploadAvatar(meId, `dog-${dog}`, file);
       const { data: old } = await supabase.from("dogs").select("photo_path").eq("id", dog).single();
       const { error } = await supabase.from("dogs").update({ photo_path: path, updated_at: new Date().toISOString() }).eq("id", dog);
       if (error) throw error;
-      // Tidy up the previous photo if it's one we can delete (ours).
-      if (old?.photo_path?.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([old.photo_path]);
+      await removeOldAvatar(meId, old?.photo_path);
       refreshAll();
       toast("Looking good 🐾");
     } catch (err) {

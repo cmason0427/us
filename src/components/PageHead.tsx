@@ -3,9 +3,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useApp } from "./AppProvider";
+import { PersonAvatar } from "./PersonAvatar";
 
 export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: ReactNode; art?: ReactNode }) {
-  const { me } = useApp();
+  const { meId } = useApp();
   return (
     <header className="page-head">
       <div>
@@ -15,8 +16,8 @@ export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: Rea
           {art}
         </h1>
       </div>
-      <Link href="/settings" className="avatar-btn" aria-label="Settings">
-        {me?.display_name?.[0]?.toUpperCase() ?? "·"}
+      <Link href="/settings" aria-label="Settings" style={{ textDecoration: "none" }}>
+        <PersonAvatar id={meId} size={40} />
       </Link>
     </header>
   );

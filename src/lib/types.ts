@@ -12,6 +12,8 @@ export interface Profile {
   display_name: string;
   timezone: string;
   notify_partner_posts: boolean;
+  /** Profile photo in the photos bucket. */
+  avatar_path: string | null;
   notify_reminders: boolean;
   notify_asks: boolean;
   notify_energy: boolean;
