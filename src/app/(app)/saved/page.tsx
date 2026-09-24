@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -11,6 +11,7 @@ import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { PostComposer } from "@/components/PostComposer";
 import { Wavy } from "@/components/Art";
+import { PinPad } from "@/components/PinPad";
 
 export default function SavedPage() {
   const { meId, partner, toast } = useApp();
@@ -31,7 +32,7 @@ export default function SavedPage() {
     refreshAll();
   }
 
-  if (open) return <FolderView folder={open} onBack={() => setOpenId("")} />;
+  if (open) return open.is_spicy ? <SpicyGate folder={open} onBack={() => setOpenId("")} /> : <FolderView folder={open} onBack={() => setOpenId("")} />;
 
   return (
     <main className="page">
@@ -48,7 +49,7 @@ export default function SavedPage() {
           <button key={f.id} className="card folder" onClick={() => setOpenId(f.id)}>
             <span style={{ fontSize: "1.6rem" }}>{f.is_spicy ? "🌶️" : "📁"}</span>
             <strong>{f.name}</strong>
-            <span className="small muted">{f.saves[0]?.count ?? 0}</span>
+            <span className="small muted">{f.is_spicy ? "🔒 PIN to open" : (f.saves[0]?.count ?? 0)}</span>
           </button>
         ))}
       </div>
@@ -64,6 +65,51 @@ export default function SavedPage() {
           <PostComposer initialSpicy onDone={() => setSendingSpicy(false)} />
         </Sheet>
       )}
+    </main>
+  );
+}
+
+/**
+ * Spicy asks for your PIN every time it's opened. The server checks it, and the
+ * database only returns Spicy saves for a few minutes after; leaving relocks.
+ */
+function SpicyGate({ folder, onBack }: { folder: Folder; onBack: () => void }) {
+  const [unlocked, setUnlocked] = useState(false);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    return () => {
+      fetch("/api/auth/pin/spicy", { method: "DELETE" }).catch(() => {});
+    };
+  }, [unlocked]);
+
+  async function check(pin: string) {
+    const res = await fetch("/api/auth/pin/spicy", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin }),
+    }).catch(() => null);
+    if (res?.ok) {
+      setUnlocked(true);
+      refreshAll();
+      return null;
+    }
+    const body = (await res?.json().catch(() => null)) as { error?: string } | null;
+    return body?.error ?? "Couldn't reach the server. Try again?";
+  }
+
+  if (unlocked) return <FolderView folder={folder} onBack={onBack} />;
+  return (
+    <main className="page">
+      <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 6 }}>
+        ← Saved
+      </button>
+      <div className="card" style={{ textAlign: "center", marginTop: 12 }}>
+        <div style={{ fontSize: "2rem" }}>🌶️</div>
+        <h2>Spicy</h2>
+        <p className="small muted">Enter your PIN to open.</p>
+        <PinPad onComplete={check} />
+      </div>
     </main>
   );
 }

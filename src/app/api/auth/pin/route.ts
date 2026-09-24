@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { PIN_RE, pinDigest } from "@/lib/pin";
-
-// A 4-digit PIN is only as good as its lockout. These are global (not per
-// IP or per person, since the PIN alone says who you are): at most 20 wrong
-// guesses a day, which puts brute-forcing either PIN at months, not minutes.
-const SHORT_WINDOW_MS = 15 * 60 * 1000;
-const SHORT_MAX_FAILS = 5;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DAY_MAX_FAILS = 20;
+import { LOCKED_OUT_MESSAGE, PIN_RE, pinDigest, pinLockedOut, recordPinAttempt } from "@/lib/pin";
 
 /** Sign in with a PIN. Sets the Supabase session cookie on success. */
 export async function POST(req: Request) {
@@ -29,19 +21,7 @@ export async function POST(req: Request) {
 
 async function signIn(req: Request) {
   const admin = supabaseAdmin();
-  const now = Date.now();
-
-  const fails = async (sinceMs: number) => {
-    const { count } = await admin
-      .from("pin_attempts")
-      .select("id", { count: "exact", head: true })
-      .eq("ok", false)
-      .gte("created_at", new Date(now - sinceMs).toISOString());
-    return count ?? 0;
-  };
-  if ((await fails(SHORT_WINDOW_MS)) >= SHORT_MAX_FAILS || (await fails(DAY_MS)) >= DAY_MAX_FAILS) {
-    return NextResponse.json({ error: "Too many wrong tries. Take a breather and try again later." }, { status: 429 });
-  }
+  if (await pinLockedOut(admin)) return NextResponse.json({ error: LOCKED_OUT_MESSAGE }, { status: 429 });
 
   const { pin } = (await req.json().catch(() => ({}))) as { pin?: string };
   if (typeof pin !== "string" || !PIN_RE.test(pin)) {
@@ -50,7 +30,7 @@ async function signIn(req: Request) {
 
   const digest = pinDigest(pin);
   const fail = async () => {
-    await admin.from("pin_attempts").insert({ ok: false });
+    await recordPinAttempt(admin, false);
     return NextResponse.json({ error: "Nope, that's not it." }, { status: 401 });
   };
 
@@ -63,8 +43,6 @@ async function signIn(req: Request) {
   const { error } = await supabase.auth.signInWithPassword({ email: user.user.email, password: digest });
   if (error) return fail();
 
-  await admin.from("pin_attempts").insert({ ok: true });
-  // Housekeeping: nothing older than the day window matters.
-  await admin.from("pin_attempts").delete().lt("created_at", new Date(now - 2 * DAY_MS).toISOString());
+  await recordPinAttempt(admin, true);
   return NextResponse.json({ ok: true });
 }

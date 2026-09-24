@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCalendar, IconFork, IconHome, IconList, IconPlus, IconSparkle } from "./Art";
+import { IconBookmark, IconCalendar, IconFork, IconHome, IconList, IconPlus, IconSparkle } from "./Art";
 import { useApp } from "./AppProvider";
 
 const TABS = [
@@ -12,6 +12,7 @@ const TABS = [
   null, // the + button sits in the middle
   { href: "/eat", label: "Eat", Icon: IconFork },
   { href: "/lists", label: "Lists", Icon: IconList },
+  { href: "/saved", label: "Saved", Icon: IconBookmark },
 ] as const;
 
 export function TabBar() {

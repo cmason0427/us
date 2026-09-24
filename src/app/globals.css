@@ -167,7 +167,7 @@ p { margin: 0; }
   border: 1.5px solid var(--line);
   border-radius: 999px;
   box-shadow: var(--shadow-pop);
-  display: grid; grid-template-columns: 1fr 1fr 1fr 64px 1fr 1fr; align-items: center;
+  display: grid; grid-template-columns: repeat(3, 1fr) 64px repeat(3, 1fr); align-items: center;
   padding: 0 6px;
 }
 .tab {
@@ -175,7 +175,7 @@ p { margin: 0; }
   height: 100%; text-decoration: none; color: var(--ink-soft);
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
 }
-.tab svg { width: 24px; height: 24px; }
+.tab svg { width: 23px; height: 23px; }
 .tab[aria-current="page"] { color: var(--terracotta); }
 .tab[aria-current="page"] svg { transform: translateY(-1px); }
 .fab {
