@@ -5,25 +5,15 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Pantry } from "@/components/Pantry";
 import { ShoppingList } from "@/components/Shopping";
-import { supabaseBrowser } from "@/lib/supabase/client";
-import { refreshAll } from "@/lib/useLive";
-import { CUISINE_OPTIONS, DISTANCE_OPTIONS, MEAL_OPTIONS, PRICE_OPTIONS, SERVICE_OPTIONS, type FoodFilters, type FoodPlace, type HomeMeal } from "@/lib/food";
-import { useApp } from "@/components/AppProvider";
+import { type FoodFilters, type FoodPlace, type HomeMeal } from "@/lib/food";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
-import { BatchAdd, type BatchColumn, type BatchRow } from "@/components/BatchAdd";
+import { MealBatch, PlaceBatch } from "@/components/Batches";
 import { FoodFilterPanel } from "@/components/FoodFilterPanel";
 import { FoodResults, useFoodMatches, type FoodPick } from "@/components/FoodResults";
 import { MealDetail, MealForm, PlaceForm } from "@/components/FoodForms";
 import { IconPlus, Wavy } from "@/components/Art";
 
-const PLACE_COLUMNS: BatchColumn[] = [
-  { key: "price", label: "Price", options: PRICE_OPTIONS },
-  { key: "cuisines", label: "Cuisine", options: CUISINE_OPTIONS, multi: true },
-  { key: "distance", label: "Distance", options: DISTANCE_OPTIONS },
-  { key: "service", label: "How", options: SERVICE_OPTIONS, multi: true },
-  { key: "meals", label: "Good for", options: MEAL_OPTIONS, multi: true },
-];
 
 type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "batch" } | null;
 
@@ -59,7 +49,6 @@ export default function EatPage() {
 }
 
 function PickFood() {
-  const { meId, toast } = useApp();
   const [filters, setFilters] = useState<FoodFilters>({ mode: "out" });
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
@@ -78,26 +67,6 @@ function PickFood() {
     setPicked(picks[Math.floor(Math.random() * picks.length)]);
   }
 
-  async function saveBatch(rows: BatchRow[]) {
-    const { error } = await supabaseBrowser()
-      .from("food_places")
-      .insert(
-        rows.map((r) => ({
-          name: r.name,
-          price: r.values.price,
-          cuisines: r.values.cuisines ?? [],
-          distance: r.values.distance,
-          service: r.values.service ?? [],
-          meals: r.values.meals ?? [],
-          created_by: meId,
-        })),
-      );
-    if (error) return error.message;
-    refreshAll();
-    toast(`Added ${rows.length} place${rows.length === 1 ? "" : "s"} 🍽️`);
-    setSheet(null);
-    return null;
-  }
 
   return (
     <>
@@ -127,11 +96,9 @@ function PickFood() {
           🎲 Pick for us
         </button>
         <div className="row">
-          {out && (
-            <button className="btn btn-sm btn-ghost" onClick={() => setSheet({ kind: "batch" })}>
-              Add several
-            </button>
-          )}
+          <button className="btn btn-sm btn-ghost" onClick={() => setSheet({ kind: "batch" })}>
+            Add several
+          </button>
           <button className="btn btn-sm" onClick={() => setSheet(out ? { kind: "place" } : { kind: "meal" })}>
             <IconPlus width={16} height={16} /> {out ? "Place" : "Meal"}
           </button>
@@ -161,8 +128,8 @@ function PickFood() {
       />
 
       {sheet?.kind === "batch" && (
-        <Sheet title="Add several places" onClose={() => setSheet(null)}>
-          <BatchAdd columns={PLACE_COLUMNS} placeholder="Place name" noun="places" onSave={saveBatch} />
+        <Sheet title={out ? "Add several places" : "Add several meals"} onClose={() => setSheet(null)}>
+          {out ? <PlaceBatch onDone={() => setSheet(null)} /> : <MealBatch onDone={() => setSheet(null)} />}
         </Sheet>
       )}
       {sheet?.kind === "place" && (

@@ -8,8 +8,8 @@ import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { ago } from "@/lib/dates";
 import { ENERGY_RANK, type Activity, type Checkin, type Energy } from "@/lib/types";
-import { COST_OPTIONS, DURATION_OPTIONS, KEEP_OPTIONS, NO_FILTERS, SETTING_OPTIONS, isActive, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
-import { BatchAdd, type BatchColumn, type BatchRow } from "@/components/BatchAdd";
+import { COST_OPTIONS, DURATION_OPTIONS, NO_FILTERS, SETTING_OPTIONS, isActive, labelOf, matchesFilters, type ActivityFilters } from "@/lib/activity";
+import { ActivityBatch } from "@/components/Batches";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
@@ -62,7 +62,7 @@ function Tags({ a }: { a: Activity }) {
 type Match = "exact" | "atOrBelow";
 
 export default function DoSomethingPage() {
-  const { meId, me, partner, profiles, nameOf, toast } = useApp();
+  const { meId, me, partner, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [match, setMatch] = useState<Match>("exact");
   const [enteringFor, setEnteringFor] = useState<string | null>(null);
@@ -132,34 +132,6 @@ export default function DoSomethingPage() {
     if (done && el) celebrate(el, ["✅", "✨", "🌿"]);
     refreshAll();
     toast(done ? `Done: ${a.name}` : "Back on the list");
-  }
-
-  const batchColumns: BatchColumn[] = [
-    { key: "energy", label: "Energy", required: true, initial: "low", options: [{ v: "low", label: "🛋️ Low" }, { v: "medium", label: "🚶 Medium" }, { v: "high", label: "⚡ High" }] },
-    { key: "who", label: "Who", required: true, initial: "both", options: [{ v: "both", label: "Both" }, ...profiles.map((p) => ({ v: p.id, label: p.display_name }))] },
-    { key: "keep", label: "Keep it?", required: true, initial: "keep", options: KEEP_OPTIONS },
-    { key: "setting", label: "Where", options: SETTING_OPTIONS },
-    { key: "cost", label: "Cost", options: COST_OPTIONS },
-    { key: "duration", label: "How long", options: DURATION_OPTIONS },
-  ];
-  async function saveBatch(rows: BatchRow[]) {
-    const { error } = await supabase.from("activities").insert(
-      rows.map((r) => ({
-        name: r.name,
-        energy_level: r.values.energy,
-        participant: r.values.who === "both" ? null : r.values.who,
-        recurring: r.values.keep !== "once",
-        setting: r.values.setting,
-        cost: r.values.cost,
-        duration: r.values.duration,
-        created_by: meId,
-      })),
-    );
-    if (error) return error.message;
-    refreshAll();
-    toast(`Added ${rows.length} idea${rows.length === 1 ? "" : "s"} ✨`);
-    setEditing(null);
-    return null;
   }
 
   const results = active.filter((a) => {
@@ -377,7 +349,7 @@ export default function DoSomethingPage() {
 
       {editing === "batch" && (
         <Sheet title="Add several ideas" onClose={() => setEditing(null)}>
-          <BatchAdd columns={batchColumns} placeholder="Farmers market, puzzle…" noun="ideas" onSave={saveBatch} />
+          <ActivityBatch onDone={() => setEditing(null)} />
         </Sheet>
       )}
       {editing && editing !== "batch" && (

@@ -6,7 +6,10 @@ import { useState } from "react";
 export interface BatchColumn {
   key: string;
   label: string;
+  /** Chips to pick from; leave empty with `text` for a free-text field. */
   options: { v: string; label: string }[];
+  /** A text field instead of chips (placeholder shown). */
+  text?: string;
   /** Required columns always have a value (start on `initial`); others can be left blank. */
   required?: boolean;
   initial?: string | null;
@@ -21,6 +24,8 @@ export interface BatchRow {
 }
 
 const blankValues = (cols: BatchColumn[]) => Object.fromEntries(cols.map((c) => [c.key, c.multi ? [] : (c.initial ?? null)]));
+// Text columns are per line (ingredients differ); chip columns carry over to the next line.
+const carryOver = (cols: BatchColumn[], v: Record<string, BatchValue>) => Object.fromEntries(cols.map((c) => [c.key, c.text !== undefined ? null : v[c.key]]));
 
 /**
  * Add a bunch at once, like a spreadsheet laid out as a form: each line gets a
@@ -90,6 +95,18 @@ export function BatchAdd({
           </div>
           {columns.map((c) => {
             const cur = r.values[c.key];
+            if (c.text !== undefined)
+              return (
+                <label key={c.key} className="batch-field">
+                  <span className="small muted">{c.label}</span>
+                  <input
+                    className="input"
+                    value={typeof cur === "string" ? cur : ""}
+                    onChange={(e) => setRows((rs) => rs.map((row, j) => (j === i ? { ...row, values: { ...row.values, [c.key]: e.target.value } } : row)))}
+                    placeholder={c.text}
+                  />
+                </label>
+              );
             return (
               <div key={c.key} className="batch-field">
                 <span className="small muted">{c.label}</span>
@@ -114,7 +131,7 @@ export function BatchAdd({
       <button
         type="button"
         className="btn btn-block"
-        onClick={() => setRows((rs) => [...rs, { name: "", values: { ...(rs[rs.length - 1]?.values ?? blankValues(columns)) } }])}
+        onClick={() => setRows((rs) => [...rs, { name: "", values: rs.length ? carryOver(columns, rs[rs.length - 1].values) : blankValues(columns) }])}
       >
         + Another line
       </button>
