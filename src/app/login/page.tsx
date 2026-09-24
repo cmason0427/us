@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Flower, Mushroom, Wavy } from "@/components/Art";
+import { Flower, DogArt, Wavy } from "@/components/Art";
 import { PinPad } from "@/components/PinPad";
 import { markUnlocked } from "@/lib/lock";
 
@@ -43,8 +43,8 @@ export default function LoginPage() {
       <div className="card card-stitched login-card">
         <div className="row" style={{ justifyContent: "center" }}>
           <Flower width={44} height={44} />
-          <Mushroom width={44} height={44} />
-          <Flower width={44} height={44} petal="#f3cf6b" />
+          <DogArt width={44} height={44} />
+          <Flower width={44} height={44} petal="var(--butter)" />
         </div>
         <h1>Us</h1>
         <p className="muted">our little corner</p>

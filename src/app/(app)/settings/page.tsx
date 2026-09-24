@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -10,7 +10,33 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { PinPad } from "@/components/PinPad";
 import { DogPhotos } from "@/components/DogPhotos";
+import { THEMES, applyTheme, currentTheme, type Theme } from "@/lib/theme";
 import { Flower, Wavy } from "@/components/Art";
+
+const noSubscribe = () => () => {};
+
+/** Peach or Sage. Per device; takes effect instantly. */
+function ThemePicker() {
+  const stored = useSyncExternalStore(noSubscribe, currentTheme, () => "peach" as Theme);
+  const [picked, setPicked] = useState<Theme | null>(null);
+  const theme = picked ?? stored;
+  return (
+    <div className="seg" role="group" aria-label="Color theme">
+      {THEMES.map((t) => (
+        <button
+          key={t.v}
+          aria-pressed={theme === t.v}
+          onClick={() => {
+            applyTheme(t.v);
+            setPicked(t.v);
+          }}
+        >
+          <span className="theme-swatch" data-swatch={t.v} /> {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { me, meId, partner, toast } = useApp();
@@ -152,6 +178,12 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="card stack" style={{ marginTop: 16 }}>
+        <h2>Look</h2>
+        <p className="small muted">Peach has green accents; Sage has pink ones. Just for this phone.</p>
+        <ThemePicker />
       </section>
 
       <section className="card stack" style={{ marginTop: 16 }}>

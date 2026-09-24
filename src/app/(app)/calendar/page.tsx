@@ -526,7 +526,7 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
 function Empty({ text }: { text: string }) {
   return (
     <div className="empty">
-      <Flower petal="#f3cf6b" />
+      <Flower petal="var(--butter)" />
       <p className="display">{text}</p>
     </div>
   );

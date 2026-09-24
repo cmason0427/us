@@ -58,7 +58,10 @@ npm run dev
 ```
 
 ## Design notes
-- There are six palette colors: cream, terracotta, butter, sage, dusty rose, and plum. Every other color is mixed from these with `color-mix()`.
-- Each event type has its own look: **plum** means both of you are going, **sage** is a solo FYI, **butter** is a pending Ask, and **dusty rose with a dashed border** is on the radar. An accepted Ask turns plum. A declined Ask turns into the creator's sage solo plan.
-- Dark mode can be added later by redefining the token block in `globals.css` under `prefers-color-scheme: dark`.
+- One serif for everything: Fraunces (variable), with the SOFT axis at ~50 and WONK off. No sans-serif anywhere.
+- Two themes, per device (Settings → Look): **Peach** (peach/pink base, green accents) and **Sage** (green base,
+  pink accents). Colors are role tokens in `globals.css` redefined under `:root[data-theme=…]`; a boot script in
+  `app/layout.tsx` applies the saved theme before first paint. Errors and overdue use `--danger` in both.
+- Flat and quiet: no textures, hairline dividers, soft shadows only.
+- `DogArt` in `components/Art.tsx` is a placeholder for the dog artwork; replace it there.
 - There are no animation libraries. The sticker pop in `lib/celebrate.ts` is about 60 lines of the Web Animations API, and it respects reduced-motion settings.

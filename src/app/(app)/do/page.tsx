@@ -12,7 +12,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
 import { ActivityForm, EnergyPicker } from "@/components/QuickForms";
-import { IconEdit, IconPlus, Mushroom, Sprig, Wavy } from "@/components/Art";
+import { IconEdit, IconPlus, DogArt, Sprig, Wavy } from "@/components/Art";
 
 // A check-in counts as "right now" for this long.
 const FRESH_MS = 4 * 60 * 60 * 1000;
@@ -132,7 +132,7 @@ export default function DoSomethingPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<Mushroom width={36} height={36} />} />
+      <PageHead eyebrow="Mood & activity matcher" title="Do Something" art={<DogArt width={36} height={36} />} />
       <Wavy className="terracotta" />
 
       {/* ─── Check-in ─── */}
@@ -237,7 +237,7 @@ export default function DoSomethingPage() {
             </div>
           ) : (
             <div className="empty">
-              <Mushroom />
+              <DogArt />
               <p className="display">Nothing matches that exactly.</p>
               {match === "exact" ? (
                 <button className="btn btn-sm" onClick={() => setMatch("atOrBelow")}>

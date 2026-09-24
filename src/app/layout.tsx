@@ -1,16 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Nunito } from "next/font/google";
+import { Fraunces } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
+// The one typeface: Fraunces, variable, with the soft axis (set in globals.css).
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
   axes: ["SOFT", "WONK", "opsz"],
-});
-
-const nunito = Nunito({
-  variable: "--font-nunito",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
@@ -21,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fbf3e4",
+  themeColor: "#fcf0e9", // the boot script swaps it for the Sage theme
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -29,7 +26,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${nunito.variable}`}>
+    // The boot script sets data-theme before paint, so React shouldn't fight it.
+    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );
