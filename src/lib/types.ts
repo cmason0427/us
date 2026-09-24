@@ -55,6 +55,8 @@ export interface Post {
   text: string | null;
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
+  /** The "🌶️ added something for you" note (the photos are in their Spicy folder). */
+  spicy: boolean;
   /** Written as a dog note: shown as from the dog(s), not the author. */
   as_dog: boolean;
   /** Set on the automatic posts for asks (sent, answered, moved). */

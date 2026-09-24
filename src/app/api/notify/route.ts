@@ -13,6 +13,7 @@ type Body =
   | { kind: "post"; id: string }
   | { kind: "lunch"; id: string }
   | { kind: "vibe"; id: string }
+  | { kind: "spicy"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -108,6 +109,13 @@ export async function POST(req: Request) {
       decided: `Lunch: ${list} ✅`,
     }[msg.kind];
     const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: text, url: "/", tag: `lunch-${msg.day}` });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "spicy") {
+    const { data: post } = await supabase.from("posts").select("id, author, spicy").eq("id", body.id).single();
+    if (!post || post.author !== me.id || !post.spicy) return NextResponse.json({ error: "not a spicy note" }, { status: 400 });
+    const sent = await sendPushToUser(partner.id, { title: "🌶️", body: `${myName} added something for you`, url: "/saved?folder=spicy", tag: `spicy-${post.id}` });
     return NextResponse.json({ sent });
   }
 

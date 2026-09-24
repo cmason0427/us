@@ -16,9 +16,14 @@ export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: Rea
           {art}
         </h1>
       </div>
-      <Link href="/settings" aria-label="Settings" style={{ textDecoration: "none" }}>
-        <PersonAvatar id={meId} size={40} />
-      </Link>
+      <div className="row" style={{ gap: 4 }}>
+        <Link href="/saved" className="icon-btn" aria-label="Saved" style={{ textDecoration: "none", fontSize: "1.2rem" }}>
+          🔖
+        </Link>
+        <Link href="/settings" aria-label="Settings" style={{ textDecoration: "none" }}>
+          <PersonAvatar id={meId} size={40} />
+        </Link>
+      </div>
     </header>
   );
 }

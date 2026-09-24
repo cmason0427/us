@@ -9,7 +9,9 @@ import { dogName, dogVoice } from "@/lib/dogs";
 import { DogAvatar } from "./DogAvatar";
 import { PersonAvatar } from "./PersonAvatar";
 import type { Post } from "@/lib/types";
+import { useState } from "react";
 import { useApp } from "./AppProvider";
+import { SaveSheet } from "./SaveSheet";
 import { IconTrash } from "./Art";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
@@ -17,6 +19,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   const { meId, nameOf, toast, dogPhotos } = useApp();
   // Dog notes speak as the dog(s); only the person who wrote one can delete it.
   const asDog = post.as_dog && post.dogs.length > 0;
+  const [saving, setSaving] = useState(false);
   const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
   const n = photos.length;
   const created = new Date(post.created_at);
@@ -43,6 +46,11 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           <div className="post-author">{asDog ? dogVoice(post.dogs) : nameOf(post.author)}</div>
           <div className="small faint">{when}</div>
         </div>
+        {n > 0 && (
+          <button className="icon-btn" onClick={() => setSaving(true)} aria-label="Save photos">
+            🔖
+          </button>
+        )}
         {post.author === meId && (
           <button className="icon-btn" onClick={remove} aria-label="Delete update">
             <IconTrash />
@@ -50,6 +58,12 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         )}
       </div>
       {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.text}</p>}
+      {post.spicy && post.author !== meId && (
+        <Link className="btn btn-sm" href="/saved?folder=spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
+          🌶️ Open your Spicy folder
+        </Link>
+      )}
+      {saving && <SaveSheet paths={photos.map((p) => p.storage_path)} onClose={() => setSaving(false)} />}
       {post.event_id && (
         <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
           📅 Open in calendar

@@ -33,8 +33,20 @@ export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs
  * which dog(s) it's about and it lands in the feed and the Dogs tab. Plain
  * updates can be tagged with dogs too.
  */
-export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { onDone: () => void; dogNote?: boolean; initialDogs?: string[] }) {
-  const { meId, toast } = useApp();
+export function PostComposer({
+  onDone,
+  dogNote = false,
+  initialDogs = [],
+  initialSpicy = false,
+}: {
+  onDone: () => void;
+  dogNote?: boolean;
+  initialDogs?: string[];
+  initialSpicy?: boolean;
+}) {
+  const { meId, partner, toast } = useApp();
+  // 🌶️: photos skip the feed and go to the other person's Spicy folder.
+  const [spicy, setSpicy] = useState(initialSpicy);
   const [dogs, setDogs] = useState<string[]>(initialDogs);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -44,10 +56,42 @@ export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { on
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
 
+  async function sendSpicy(btn: HTMLElement | null) {
+    if (!files.length) return setError("Add a photo for the spicy folder.");
+    if (!partner) return;
+    setBusy(true);
+    setError(null);
+    const supabase = supabaseBrowser();
+    const uploaded: string[] = [];
+    try {
+      for (const f of files) {
+        const { blob, ext } = await shrinkImage(f);
+        const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
+        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+        if (error) throw error;
+        uploaded.push(path);
+      }
+      const { error: rpcErr } = await supabase.rpc("send_spicy", { recipient: partner.id, paths: uploaded, caption: text.trim() || null });
+      if (rpcErr) throw rpcErr;
+      // The feed only gets a note that something's waiting; never the photos.
+      const { data: post } = await supabase.from("posts").insert({ author: meId, text: "🌶️ Added something for you", spicy: true }).select("id").single();
+      if (post) notify({ kind: "spicy", id: post.id });
+      refreshAll();
+      celebrate(btn, ["🌶️", "🔥", "💋"]);
+      toast(`Sent to ${partner.display_name}'s Spicy folder 🌶️`);
+      onDone();
+    } catch (err) {
+      if (uploaded.length) await supabase.storage.from("photos").remove(uploaded);
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!text.trim() && !files.length) return;
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
+    if (spicy) return sendSpicy(e.currentTarget.querySelector<HTMLElement>("button[type=submit]"));
     // Grab this now: React clears currentTarget once we await.
     const submitBtn = e.currentTarget.querySelector<HTMLElement>("button[type=submit]");
     setBusy(true);
@@ -128,7 +172,22 @@ export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { on
           e.target.value = "";
         }}
       />
-      {!dogNote && (
+      {!dogNote && partner && (
+        <label className="toggle-row">
+          <span>
+            <strong>🌶️ Spicy</strong>
+            <br />
+            <span className="small muted">
+              {spicy ? `Goes straight to ${partner.display_name}'s Spicy folder. The feed just says you added something.` : "Off: a normal update in the feed."}
+            </span>
+          </span>
+          <span className="switch">
+            <input type="checkbox" checked={spicy} onChange={(e) => setSpicy(e.target.checked)} />
+            <span />
+          </span>
+        </label>
+      )}
+      {!dogNote && !spicy && (
         <div className="field">
           <span>About the dogs?</span>
           <DogChips value={dogs} onChange={setDogs} />
@@ -140,7 +199,7 @@ export function PostComposer({ onDone, dogNote = false, initialDogs = [] }: { on
           <IconCamera width={22} height={22} /> Photo
         </button>
         <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length)}>
-          {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
+          {busy ? "Posting…" : spicy ? "Send 🌶️" : dogNote ? "Save note" : "Share it"}
         </button>
       </div>
     </form>
