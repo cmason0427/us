@@ -14,6 +14,7 @@ import { usePhotoUrls } from "@/lib/photos";
 import { DogTodos } from "@/components/DogTodos";
 import { LunchWidget } from "@/components/LunchWidget";
 import { VibeWidget } from "@/components/VibeWidget";
+import { SleepWidget } from "@/components/SleepWidget";
 import { Wavy } from "@/components/Art";
 
 const PAGE = 30;
@@ -55,6 +56,7 @@ export default function HomePage() {
         ⭐ Send a star
       </button>
 
+      <SleepWidget />
       <VibeWidget />
       <LunchWidget />
       <DogTodos />
