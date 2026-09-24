@@ -11,6 +11,7 @@ import { PageHead } from "@/components/PageHead";
 import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
 import { DogTodos } from "@/components/DogTodos";
+import { LunchWidget } from "@/components/LunchWidget";
 import { Flower, Teapot, Wavy } from "@/components/Art";
 
 const PAGE = 30;
@@ -49,6 +50,7 @@ export default function HomePage() {
         <span>Share a little update…</span>
       </button>
 
+      <LunchWidget />
       <DogTodos />
 
       <div className="checker" style={{ margin: "20px 0" }} />

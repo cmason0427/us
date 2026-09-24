@@ -44,14 +44,30 @@ export function useFoodMatches(filters: FoodFilters, search = "", opts: { takeou
   return { picks: list.map((item) => ({ kind: "meal", item }) as FoodPick), pantry, total: meals.length };
 }
 
-export function FoodResults({ picks, pantry, onPick, empty }: { picks: FoodPick[]; pantry: Map<string, boolean>; onPick: (p: FoodPick) => void; empty: string }) {
+/** `selected` (ids) turns it into a multi-select: picked cards show a check. */
+export function FoodResults({
+  picks,
+  pantry,
+  onPick,
+  empty,
+  selected,
+}: {
+  picks: FoodPick[];
+  pantry: Map<string, boolean>;
+  onPick: (p: FoodPick, el: HTMLElement) => void;
+  empty: string;
+  selected?: Set<string>;
+}) {
   if (!picks.length) return <p className="muted">{empty}</p>;
   return (
     <div className="stack-sm">
       {picks.map((p) =>
         p.kind === "place" ? (
-          <button key={p.item.id} className="card food-card" onClick={() => onPick(p)}>
-            <span className="name">{p.item.name}</span>
+          <button key={p.item.id} className="card food-card" aria-pressed={selected?.has(p.item.id)} onClick={(e) => onPick(p, e.currentTarget)}>
+            <span className="name">
+              {selected?.has(p.item.id) && "✓ "}
+              {p.item.name}
+            </span>
             <span className="chips">
               {placeTags(p.item).map((t) => (
                 <span key={t} className="sticker">
@@ -61,19 +77,22 @@ export function FoodResults({ picks, pantry, onPick, empty }: { picks: FoodPick[
             </span>
           </button>
         ) : (
-          <MealCard key={p.item.id} meal={p.item} pantry={pantry} onClick={() => onPick(p)} />
+          <MealCard key={p.item.id} meal={p.item} pantry={pantry} picked={selected?.has(p.item.id)} onClick={(el) => onPick(p, el)} />
         ),
       )}
     </div>
   );
 }
 
-function MealCard({ meal, pantry, onClick }: { meal: HomeMeal; pantry: Map<string, boolean>; onClick: () => void }) {
+function MealCard({ meal, pantry, picked, onClick }: { meal: HomeMeal; pantry: Map<string, boolean>; picked?: boolean; onClick: (el: HTMLElement) => void }) {
   const missing = missingFor(meal, pantry);
   const tags = [meal.safe ? "Safe food" : null, meal.fancy ? "✨ Fancy" : null, labelOf(METHOD_OPTIONS, meal.method), meal.size === "snack" ? "🍿 Snack" : null].filter(Boolean) as string[];
   return (
-    <button className="card food-card" onClick={onClick}>
-      <span className="name">{meal.name}</span>
+    <button className="card food-card" aria-pressed={picked} onClick={(e) => onClick(e.currentTarget)}>
+      <span className="name">
+        {picked && "✓ "}
+        {meal.name}
+      </span>
       <span className="chips">
         <span className={`sticker ${missing.length ? "butter" : "sage"}`}>
           {meal.meal_ingredients.length === 0 ? "no ingredients listed" : missing.length ? `missing ${missing.length}` : "have everything"}

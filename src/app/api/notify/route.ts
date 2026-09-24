@@ -3,11 +3,14 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { partnerOf, sendPushToUser } from "@/lib/push";
 import { formatWhen } from "@/lib/format";
 import { dogName, dogVoice } from "@/lib/dogs";
+import { describeFilters } from "@/lib/food";
+import type { LunchMsg } from "@/lib/lunch";
 
 type Body =
   | { kind: "ask"; id: string }
   | { kind: "ask_answered"; id: string }
   | { kind: "post"; id: string }
+  | { kind: "lunch"; id: string }
   | { kind: "energy_request" }
   | { kind: "test" };
 
@@ -80,6 +83,29 @@ export async function POST(req: Request) {
       url: dogs ? "/lists?tab=dogs" : "/",
       tag: dogs ? `dogs-${post.id}` : "feed", // plain updates collapse into one quiet notification
     });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "lunch") {
+    const { data: msg } = await supabase.from("lunch_msgs").select("*").eq("id", body.id).single<LunchMsg>();
+    if (!msg || msg.author !== me.id) return NextResponse.json({ error: "not your lunch message" }, { status: 400 });
+    // Lunch back-and-forth is a direct question, so it follows the asks setting.
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const ids = (k: string) => msg.refs.filter((r) => r.kind === k).map((r) => r.id);
+    const [{ data: ps }, { data: ms }] = await Promise.all([
+      ids("place").length ? supabase.from("food_places").select("id, name").in("id", ids("place")) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ids("meal").length ? supabase.from("home_meals").select("id, name").in("id", ids("meal")) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    ]);
+    const names = new Map([...(ps ?? []), ...(ms ?? [])].map((x) => [x.id, x.name]));
+    const list = msg.refs.map((r) => names.get(r.id) ?? "something").join(", ");
+    const text = {
+      propose: `${myName} suggests ${list}. Sound good?`,
+      filters: `${myName} is feeling: ${msg.filters ? describeFilters(msg.filters) : "anything"}. Pick something?`,
+      request: `${myName} wants some lunch options.`,
+      options: `${myName} sent options: ${list}. Pick one?`,
+      decided: `Lunch: ${list} ✅`,
+    }[msg.kind];
+    const sent = await sendPushToUser(partner.id, { title: "🍽️ Lunch", body: text, url: "/", tag: `lunch-${msg.day}` });
     return NextResponse.json({ sent });
   }
 
