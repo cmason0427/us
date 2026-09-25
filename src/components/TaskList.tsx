@@ -9,6 +9,8 @@ import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import Link from "next/link";
+import { useShopping, type ShopItem } from "./Shopping";
 import { TaskForm, TaskPresets, windowText } from "./TaskForm";
 import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
@@ -39,6 +41,8 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
+  const { items: shopItems } = useShopping();
+  const linkedTo = (t: Task) => shopItems.filter((i) => i.task_id === t.id);
   const [editing, setEditing] = useState<Task | null>(null);
   // 0 before hydration: nothing reads as overdue until the phone's clock is known.
   const now = useNow()?.getTime() ?? 0;
@@ -137,7 +141,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} linked={linkedTo(t)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
 
@@ -156,7 +160,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} linked={linkedTo(t)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -175,6 +179,7 @@ function TaskRow({
   onEdit,
   onClaim,
   onRemove,
+  linked,
   nameOf,
   meId,
   now,
@@ -188,6 +193,8 @@ function TaskRow({
   /** Shared lists only: claim or unclaim. */
   onClaim?: (t: Task) => void;
   onRemove: (t: Task) => void;
+  /** Shopping items on this to-do: it can't be checked until they're all bought or moved back. */
+  linked: ShopItem[];
   nameOf: (id: string | null) => string;
   meId: string;
   now: number;
@@ -196,13 +203,25 @@ function TaskRow({
   const d = deadlineOf(t);
   return (
     <div className={`task${t.done ? " done" : ""}`}>
-      <input type="checkbox" className="check" checked={t.done} onChange={(e) => onToggle(t, e.currentTarget)} aria-label={`Done: ${t.title}`} />
+      <input
+        type="checkbox"
+        className="check"
+        checked={t.done}
+        disabled={!t.done && linked.some((i) => !i.bought)}
+        onChange={(e) => onToggle(t, e.currentTarget)}
+        aria-label={`Done: ${t.title}`}
+      />
       <div className="grow">
         <button className="task-title task-edit" onClick={() => onEdit(t)} aria-label={`Edit ${t.title}`}>
           {t.title}
         </button>
         {t.dogs?.length > 0 && <span className="sticker" style={{ marginLeft: 6 }}>🐾 {dogVoice(t.dogs)}</span>}
         {t.notes && <div className="small muted">{t.notes}</div>}
+        {linked.length > 0 && !t.done && (
+          <Link href="/shopping" className="small muted task-shop">
+            🛒 {linked.filter((i) => i.bought).length} of {linked.length} bought: {linked.map((i) => `${i.name}${i.bought ? " ✓" : ""}`).join(" · ")}
+          </Link>
+        )}
         {d && !t.done && (
           <div className={`small due${overdue ? " overdue" : ""}`}>
             {overdue ? "⏰ Overdue · " : "⏳ "}

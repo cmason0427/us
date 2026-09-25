@@ -30,3 +30,15 @@ What that means when designing a feature:
 
 The user (Charlie) is direct and wants blunt, honest feedback and to be asked
 when a decision is genuinely theirs to make.
+
+# Deploying (Netlify credits cost real money)
+
+Every push to `claude/festive-pasteur-p3rnc7` is a paid Netlify production
+build. Charlie already had to move to a paid plan, so:
+
+- **One push per request.** Finish everything asked, check it locally
+  (`npx tsc --noEmit`, `npm run lint`, `next build`, screenshots), then push once.
+- **Small follow-ups wait** for the next batch, or ask "live now or with the
+  next batch?" first. No speculative "let's see if this fixes it" pushes.
+- Database migrations are applied directly (Supabase Management API) and don't
+  need a deploy on their own.

@@ -13,6 +13,7 @@ import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { useGoalCheckins } from "./Goals";
+import { usePartnerStatus } from "./Status";
 
 /**
  * Today at a glance. Everything here is read-only until you tap it; the
@@ -41,10 +42,18 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
   const checkins = useGoalCheckins();
+  const status = usePartnerStatus();
+  const { openAdd } = useApp();
   const them = partner?.display_name ?? "Them";
 
   return (
     <section className="card dash">
+      {status && (
+        <Row icon="🚗" label={them} onClick={() => openAdd("status")}>
+          {status.text}
+          <span className="small faint"> · {ago(status.updated_at)}</span>
+        </Row>
+      )}
       {sleep.ready && (
         <Row icon="🌙" label="Tonight" onClick={() => setOpen({ kind: "sleep" })}>
           {them} {sleep.label(sleep.theirs)}

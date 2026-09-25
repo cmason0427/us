@@ -36,6 +36,8 @@ export interface ShopItem {
   claimed_by: string | null;
   bought: boolean;
   grocery: boolean;
+  /** On a to-do: that to-do can't be checked off until this is bought or moved back. */
+  task_id: string | null;
   created_by: string;
 }
 
@@ -401,17 +403,24 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     refreshAll();
   }
 
+  // One to-do for the whole trip. The items stay here, linked; the to-do
+  // finishes once each is bought or moved back.
   async function sendToTodos() {
     const chosen = items.filter((i) => picked.has(i.id));
-    const { error } = await supabase
-      .from("tasks")
-      .insert(chosen.map((i) => ({ title: `Buy ${i.name}${i.detail ? ` (${i.detail})` : ""}`, list_type: "shared", created_by: meId, claimed_by: i.claimed_by, notes: i.note })));
+    const names = chosen.map((i) => i.name);
+    const title = names.length === 1 ? `Buy ${names[0]}` : `Shopping: ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` +${names.length - 3}` : ""}`;
+    const { data: task, error } = await supabase.from("tasks").insert({ title, list_type: "shared", created_by: meId }).select("id").single();
     if (error) return toast(error.message);
-    await supabase.from("shop_items").delete().in("id", [...picked]);
+    await supabase.from("shop_items").update({ task_id: task.id }).in("id", [...picked]);
     setPicked(new Set());
     setSelecting(false);
     refreshAll();
-    toast(`Moved ${chosen.length} to our to-dos`);
+    toast(`On our to-dos. Check them off here as you get them.`);
+  }
+
+  async function moveBack(i: ShopItem) {
+    await supabase.from("shop_items").update({ task_id: null }).eq("id", i.id);
+    refreshAll();
   }
 
   async function clearBought() {
@@ -461,6 +470,14 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
           </div>
         )}
         {i.note && <div className="small shop-note">📝 {i.note}</div>}
+        {i.task_id && !i.bought && (
+          <div className="small muted row" style={{ gap: 6 }}>
+            📋 On a to-do
+            <button className="btn-link small" onClick={() => moveBack(i)}>
+              Move back
+            </button>
+          </div>
+        )}
         {!i.bought && !selecting && (
           <button className={`claim${i.claimed_by ? " claimed" : ""}`} onClick={() => claim(i)} aria-pressed={i.claimed_by === meId}>
             {i.claimed_by === meId ? "🙋 You've got this" : i.claimed_by ? `🙋 ${nameOf(i.claimed_by)}'s got this` : "🙋 I got this"}
@@ -484,7 +501,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
         </button>
         {items.length > 0 && (
           <button className="btn btn-sm" aria-pressed={selecting} onClick={() => (setSelecting((s) => !s), setPicked(new Set()))}>
-            {selecting ? "Cancel" : "Select → to-dos"}
+            {selecting ? "Cancel" : "Move selected to to-dos"}
           </button>
         )}
         {!selecting && (cats.length > 1 || stores.length > 1) && (
@@ -579,7 +596,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
 
       {selecting && (
         <button className="btn btn-primary btn-block" disabled={!picked.size} onClick={sendToTodos}>
-          Add {picked.size || ""} to our to-dos
+          Make {picked.size ? `${picked.size} ` : ""}into one to-do
         </button>
       )}
       {!selecting && bought.length > 0 && (

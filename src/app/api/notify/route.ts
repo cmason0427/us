@@ -20,6 +20,7 @@ type Body =
   | { kind: "spicy_item"; id: string }
   | { kind: "plan"; id: string }
   | { kind: "energy_request" }
+  | { kind: "status" }
   | { kind: "test" };
 
 /**
@@ -171,6 +172,14 @@ export async function POST(req: Request) {
       url: "/",
       tag: `vibe-${v.id}`,
     });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "status") {
+    // "On my way" is a direct little heads-up, so it follows the asks setting.
+    const { data: st } = await supabase.from("statuses").select("text").eq("user_id", me.id).single();
+    if (!st || !partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const sent = await sendPushToUser(partner.id, { title: `🚗 ${myName}`, body: st.text, url: "/", tag: `status-${me.id}` });
     return NextResponse.json({ sent });
   }
 

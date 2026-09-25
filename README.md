@@ -22,6 +22,10 @@ and photo storage, and Web Push for notifications.
 | `src/app/(app)/dogs` | Dog profiles (`dogs` table: breed, weight, vet, meds, feeding…; `DogProfiles.tsx`), dog to-dos (which dog(s)), and a dog-only feed |
 | `src/app/(app)/goals` | Savings goals (`goals`, `goal_items`, `goal_logs`; math in `src/lib/goals.ts`). Private ones are owner-only in RLS; shared ones only log money when `track` is on. Archive first; delete only from Archived, typed-name confirm |
 | `src/app/(app)/presets` | Every preset in one place. Calendar presets (`event_templates`) link to the events they made (`events.template_id`); editing one can update upcoming / all / only new events. Calendar color markers (`events.color`, names in `calendar_colors`) are a stripe, separate from the kind of plan |
+| `src/lib/series.ts` | Repeating events: every occurrence is its own `events` row sharing `series_id`; edit or delete one, or it and all later |
+| `src/components/DailyRoutines.tsx` | To-do presets marked daily add themselves each day (unique `template_id`+`for_day`); yesterday's unchecked ones clear |
+| `src/components/Status.tsx` | "On my way": one line per person (`statuses`), a quiet push, shown on Home for 3 hours |
+| `src/app/(app)/little` | Little things about each other (shared facts) and gift ideas (author-only in RLS). Linked quietly from the drawer |
 | `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
 | `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |
 | `src/app/(app)/saved` | Private folders of saved photos |

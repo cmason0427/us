@@ -23,6 +23,8 @@ export interface TaskPreset {
   /** "Between 7 and 10 am": HH:mm:ss, both or neither. */
   window_start: string | null;
   window_end: string | null;
+  /** Adds itself every day (see DailyRoutines). */
+  daily: boolean;
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
@@ -64,7 +66,7 @@ export function useTaskPresets() {
 }
 
 export const presetLabel = (p: TaskPreset) =>
-  `${p.emoji ? `${p.emoji} ` : ""}${p.title}${p.dogs.length ? ` · ${dogVoice(p.dogs)}` : ""}${p.window_start && p.window_end ? ` · ${windowText(p.window_start, p.window_end)}` : ""}`;
+  `${p.daily ? "🔁 " : ""}${p.emoji ? `${p.emoji} ` : ""}${p.title}${p.dogs.length ? ` · ${dogVoice(p.dogs)}` : ""}${p.window_start && p.window_end ? ` · ${windowText(p.window_start, p.window_end)}` : ""}`;
 
 /** Which dog(s) it's for. Tap to toggle; "Both" picks everyone. */
 export function DogPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
@@ -298,6 +300,7 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
   const [winStart, setWinStart] = useState(initial?.window_start ? hhmm(initial.window_start) : "");
   const [winEnd, setWinEnd] = useState(initial?.window_end ? hhmm(initial.window_end) : "");
   const [useWindow, setUseWindow] = useState(!!initial?.window_start);
+  const [daily, setDaily] = useState(initial?.daily ?? false);
   const windowOk = !useWindow || (winStart && winEnd && winEnd > winStart);
 
   async function submit(e: React.FormEvent) {
@@ -312,6 +315,7 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
       notes: notes.trim() || null,
       window_start: useWindow ? winStart : null,
       window_end: useWindow ? winEnd : null,
+      daily,
     };
     const supabase = supabaseBrowser();
     const { error } = initial ? await supabase.from("task_templates").update(row).eq("id", initial.id) : await supabase.from("task_templates").insert({ ...row, created_by: meId });
@@ -373,6 +377,14 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
           </p>
         </div>
       )}
+      <div className="toggle-row">
+        <span className="label">Add it every day by itself</span>
+        <label className="switch">
+          <input type="checkbox" checked={daily} onChange={(e) => setDaily(e.target.checked)} />
+          <span />
+        </label>
+      </div>
+      {daily && <p className="small muted">It shows up each morning{useWindow ? " (skipped if the window's already over)" : ""}. Unchecked ones clear themselves the next day.</p>}
       <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="A note (optional): 1 cup + fish oil" aria-label="Note" />
       <div className="row-between">
         {initial ? (

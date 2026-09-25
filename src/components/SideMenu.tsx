@@ -68,6 +68,10 @@ export function SideMenu() {
             <span>{s.label}</span>
           </Link>
         ))}
+        {/* Tucked away on purpose: there when you want it, never a to-do. */}
+        <Link href="/little" className="drawer-quiet" aria-current={isHere(path, "/little") ? "page" : undefined}>
+          💝 Little things
+        </Link>
       </nav>
     </>
   );

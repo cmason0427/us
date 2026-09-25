@@ -806,3 +806,5 @@ div.dash-row { cursor: default; }
 /* Month view: each thing is a bar in its who-color, with its color marker as a cap on the left. */
 .mcell .mdot { height: 7px; }
 .mdot.ev[data-color] { background: linear-gradient(90deg, var(--mark) 0 38%, var(--c) 38%); padding-left: 0; box-shadow: none; }
+.drawer-quiet { margin-top: auto; padding: 10px; font-size: 0.9rem; color: var(--ink-soft); text-decoration: none; }
+.task-shop { display: block; text-decoration: none; }

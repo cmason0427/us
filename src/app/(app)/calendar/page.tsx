@@ -596,6 +596,7 @@ function EventCard({ e, onOpen, showDate = false }: { e: CalEvent; onOpen: (e: C
           <div className="ev-meta">
             {showDate && `${format(startOf(e), "EEE, MMM d")} · `}
             {whenText(e)}
+            {e.series_id && " · 🔁"}
             {e.location && ` · ${e.location}`}
           </div>
         </div>

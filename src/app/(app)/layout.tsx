@@ -4,6 +4,7 @@ import { AppProvider } from "@/components/AppProvider";
 import { TabBar } from "@/components/TabBar";
 import { AddSheet } from "@/components/AddSheet";
 import { SideMenu } from "@/components/SideMenu";
+import { DailyRoutines } from "@/components/DailyRoutines";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const supabase = await supabaseServer();
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <TabBar />
       <SideMenu />
       <AddSheet />
+      <DailyRoutines />
     </AppProvider>
   );
 }

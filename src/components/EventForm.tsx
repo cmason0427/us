@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { addHours, addMinutes, differenceInMinutes } from "date-fns";
+import { addHours, addMinutes, addMonths, differenceInMinutes } from "date-fns";
+import { FREQ_LABEL, occurrences, weekdayOrdinal, type Freq } from "@/lib/series";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
 import { refreshAll, useLive } from "@/lib/useLive";
@@ -81,6 +82,10 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [reminder, setReminder] = useState(initial?.reminder_lead_minutes?.toString() ?? "");
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
+  // Repeating (new events only) and, when editing one, how far the edit reaches.
+  const [repeat, setRepeat] = useState<Freq | "none">("none");
+  const [until, setUntil] = useState(toDateInput(addMonths(seedStart, 3)));
+  const [scope, setScope] = useState<"one" | "later">("one");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const templates = useTemplates();
@@ -178,6 +183,52 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
     };
 
     const supabase = supabaseBrowser();
+
+    // A new repeating event: every occurrence is its own row in one series.
+    if (!initial && repeat !== "none" && type !== "ask") {
+      const { data: series, error: sErr } = await supabase.from("event_series").insert({ freq: repeat, until, created_by: meId }).select("id").single();
+      if (sErr) {
+        setError(sErr.message);
+        setBusy(false);
+        return;
+      }
+      const length = endAt.getTime() - startAt.getTime();
+      const starts = occurrences(startAt, repeat, fromInputs(until));
+      const { error: oErr } = await supabase.from("events").insert(
+        starts.map((s0) => ({ ...row, start_time: s0.toISOString(), end_time: new Date(s0.getTime() + length).toISOString(), series_id: series.id, created_by: meId })),
+      );
+      setBusy(false);
+      if (oErr) return setError(oErr.message);
+      refreshAll();
+      celebrate(submitBtn);
+      toast(`Added ${starts.length} on the calendar ✨`);
+      return onDone();
+    }
+
+    // Editing one of a series, "this and later": same changes, same shift, to every later one.
+    if (initial?.series_id && scope === "later") {
+      const { data: later } = await supabase.from("events").select("id, start_time, end_time, type").eq("series_id", initial.series_id).gte("start_time", initial.start_time);
+      const shift = startAt.getTime() - new Date(initial.start_time).getTime();
+      const length = endAt.getTime() - startAt.getTime();
+      const { reminder_sent_at: _r, response_status: _s, responded_at: _ra, decline_note: _d, proposed_start: _p, ...shared } = row as typeof row & Record<string, unknown>;
+      void _r; void _s; void _ra; void _d; void _p;
+      const results = await Promise.all(
+        (later ?? []).map((ev) => {
+          const s0 = new Date(new Date(ev.start_time).getTime() + shift);
+          return supabase
+            .from("events")
+            .update({ ...shared, type: ev.type === "ask" ? ev.type : row.type, start_time: s0.toISOString(), end_time: new Date(s0.getTime() + length).toISOString(), reminder_sent_at: null })
+            .eq("id", ev.id);
+        }),
+      );
+      setBusy(false);
+      const failed = results.find((x) => x.error);
+      if (failed?.error) return setError(failed.error.message);
+      refreshAll();
+      toast(`Updated ${results.length}`);
+      return onDone();
+    }
+
     const res = initial
       ? await supabase.from("events").update(row).eq("id", initial.id).select("id").single()
       : await supabase.from("events").insert({ ...row, created_by: meId }).select("id").single();
@@ -200,9 +251,11 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
     onDone();
   }
 
-  async function remove() {
-    if (!initial || !confirm(`Delete "${initial.title}"?`)) return;
-    await supabaseBrowser().from("events").delete().eq("id", initial.id);
+  async function remove(later = false) {
+    if (!initial || !confirm(later ? `Delete "${initial.title}" and every one after it?` : `Delete "${initial.title}"?`)) return;
+    const supabase = supabaseBrowser();
+    if (later && initial.series_id) await supabase.from("events").delete().eq("series_id", initial.series_id).gte("start_time", initial.start_time);
+    else await supabase.from("events").delete().eq("id", initial.id);
     refreshAll();
     toast("Deleted");
     onDone();
@@ -262,6 +315,45 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         />
       </div>
 
+      {!initial && (
+        <div className="field">
+          <span>Repeat</span>
+          <div className="chips">
+            <button type="button" className="chip chip-sm" aria-pressed={repeat === "none"} onClick={() => setRepeat("none")}>
+              Just once
+            </button>
+            {(Object.keys(FREQ_LABEL) as Freq[]).map((f) => (
+              <button key={f} type="button" className="chip chip-sm" aria-pressed={repeat === f} onClick={() => setRepeat(f)} disabled={type === "ask"}>
+                {f === "monthly_weekday" ? `Every month (${weekdayOrdinal(fromInputs(date))})` : FREQ_LABEL[f]}
+              </button>
+            ))}
+          </div>
+          {type === "ask" && <p className="small muted">Asks go one at a time, so they don&apos;t repeat.</p>}
+          {repeat !== "none" && type !== "ask" && (
+            <>
+              <span className="small muted">Until</span>
+              <WhenPicker mode="day" allowAllDay={false} value={{ date: until }} onChange={(w) => setUntil(w.date)} />
+              <p className="small muted">
+                {occurrences(allDay ? fromInputs(date) : fromInputs(date, start), repeat, fromInputs(until)).length} on the calendar. Change or delete one later, or all the ones after it.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+      {initial?.series_id && (
+        <div className="field">
+          <span>This repeats. Save changes to</span>
+          <div className="seg" role="group">
+            <button type="button" aria-pressed={scope === "one"} onClick={() => setScope("one")}>
+              Just this one
+            </button>
+            <button type="button" aria-pressed={scope === "later"} onClick={() => setScope("later")}>
+              This &amp; later ones
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <span>Color marker (optional)</span>
         <ColorPicker value={color} onChange={setColor} />
@@ -294,9 +386,16 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
       {error && <p className="error">{error}</p>}
       <div className="row-between">
         {initial ? (
-          <button type="button" className="btn btn-ghost" onClick={remove}>
-            Delete
-          </button>
+          <div className="row wrap" style={{ gap: 4 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => remove(false)}>
+              Delete{initial.series_id ? " this one" : ""}
+            </button>
+            {initial.series_id && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => remove(true)}>
+                …and later ones
+              </button>
+            )}
+          </div>
         ) : (
           <span />
         )}

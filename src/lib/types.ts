@@ -42,6 +42,8 @@ export interface CalEvent {
   color: string | null;
   /** The preset it was made from, if any. */
   template_id: string | null;
+  /** Repeating events share a series. */
+  series_id: string | null;
   created_by: string;
   created_at: string;
 }
