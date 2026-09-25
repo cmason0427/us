@@ -65,6 +65,8 @@ export function BatchAdd({
       }),
     );
 
+  const addLine = () => setRows((rs) => [...rs, { name: "", values: rs.length ? carryOver(columns, rs[rs.length - 1].values) : blankValues(columns) }]);
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -83,6 +85,13 @@ export function BatchAdd({
               className="input grow"
               value={r.name}
               onChange={(e) => update(i, { name: e.target.value })}
+              onKeyDown={(e) => {
+                // Enter on the last line starts the next one, so a list is type, enter, type, enter.
+                if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                if (i === rows.length - 1 && r.name.trim()) addLine();
+              }}
+              enterKeyHint="next"
               placeholder={placeholder}
               aria-label={`Name ${i + 1}`}
               autoFocus={i === rows.length - 1 && i > 0}
@@ -131,7 +140,7 @@ export function BatchAdd({
       <button
         type="button"
         className="btn btn-block"
-        onClick={() => setRows((rs) => [...rs, { name: "", values: rs.length ? carryOver(columns, rs[rs.length - 1].values) : blankValues(columns) }])}
+        onClick={addLine}
       >
         + Another line
       </button>

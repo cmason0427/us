@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import { BatchAdd, type BatchRow } from "./BatchAdd";
 
 interface Watch {
   id: string;
@@ -45,6 +46,7 @@ export function Theater() {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [watched, setWatched] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [several, setSeveral] = useState(false);
 
   const allTags = [...new Set([...SUGGESTED, ...items.flatMap((i) => i.tags)])];
   const q = search.trim().toLowerCase();
@@ -85,6 +87,9 @@ export function Theater() {
             📺 Show
           </button>
         </div>
+        <button type="button" className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setSeveral(true)}>
+          + Add several at once
+        </button>
       </form>
 
       <div className="row">
@@ -152,6 +157,28 @@ export function Theater() {
         </div>
       )}
 
+      {several && (
+        <Sheet title="🍿 Add several" onClose={() => setSeveral(false)}>
+          <BatchAdd
+            placeholder="Title"
+            noun="titles"
+            columns={[
+              { key: "kind", label: "Movie or show", options: [{ v: "movie", label: "🎬 Movie" }, { v: "show", label: "📺 Show" }], required: true, initial: kind },
+              { key: "tags", label: "Tags (optional)", options: allTags.map((t) => ({ v: t, label: t })), multi: true },
+            ]}
+            onSave={async (rows: BatchRow[]) => {
+              const { error } = await supabase
+                .from("watchlist")
+                .insert(rows.map((r) => ({ title: r.name, kind: r.values.kind as Watch["kind"], tags: (r.values.tags as string[]) ?? [], added_by: meId })));
+              if (error) return error.message;
+              refreshAll();
+              toast(`Added ${rows.length} 🍿`);
+              setSeveral(false);
+              return null;
+            }}
+          />
+        </Sheet>
+      )}
       {openItem && <WatchSheet item={openItem} allTags={allTags} onClose={() => setOpen(null)} />}
     </div>
   );

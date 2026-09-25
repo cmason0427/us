@@ -10,6 +10,7 @@ import { Sheet } from "@/components/Sheet";
 import { Sticker } from "@/components/Sticker";
 import { WhenPicker } from "@/components/WhenPicker";
 import { Wavy } from "@/components/Art";
+import { BatchAdd, type BatchRow } from "@/components/BatchAdd";
 
 interface Item {
   id: string;
@@ -99,7 +100,7 @@ export default function GardenPage() {
       <Wavy />
       <div className="row wrap">
         <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
-          ＋ Log a buy
+          ＋ Add
         </button>
         {items.length > 1 && (
           <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || !!kind} onClick={() => setShowFilters((f) => !f)}>
@@ -135,7 +136,7 @@ export default function GardenPage() {
       )}
 
       <div className="garden-grid">
-        {shown.length === 0 && <p className="muted">{items.length ? "Nothing matches." : "Nothing logged yet. Next time you pick something up, log it here."}</p>}
+        {shown.length === 0 && <p className="muted">{items.length ? "Nothing matches." : "Nothing here yet. Next time you pick something up, add it."}</p>}
         {shown.map((i) => {
           const rs = reviewsOf(i.id);
           const h = avgHigh(i.id);
@@ -155,8 +156,8 @@ export default function GardenPage() {
       </div>
 
       {adding && (
-        <Sheet title="🌿 Log a buy" onClose={() => setAdding(false)}>
-          <ItemForm onDone={() => setAdding(false)} />
+        <Sheet title="🌿 Add to the garden" onClose={() => setAdding(false)}>
+          <AddSeveral onDone={() => setAdding(false)} />
         </Sheet>
       )}
       {openItem && <ItemSheet item={openItem} reviews={reviewsOf(openItem.id)} onClose={() => setOpen(null)} />}
@@ -293,6 +294,50 @@ function ReviewForm({ item, initial, onDone }: { item: Item; initial?: Review; o
   );
 }
 
+/**
+ * Add one or a whole haul: a line per product (enter starts the next), with
+ * kind, type and price. Brand, shop, THC and the rest live on the item itself.
+ */
+function AddSeveral({ onDone }: { onDone: () => void }) {
+  const { meId, toast } = useApp();
+  async function save(rows: BatchRow[]) {
+    const today = format(new Date(), "yyyy-MM-dd");
+    const { error } = await supabaseBrowser()
+      .from("garden_items")
+      .insert(
+        rows.map((r) => {
+          const price = typeof r.values.price === "string" ? r.values.price.replace(/[^\d.]/g, "") : "";
+          return {
+            name: r.name,
+            kind: (r.values.kind as string | null) ?? null,
+            strain_type: (r.values.strain_type as string | null) ?? null,
+            price: price ? Number(price) : null,
+            bought_on: today,
+            bought_by: meId,
+            created_by: meId,
+          };
+        }),
+      );
+    if (error) return error.message;
+    refreshAll();
+    toast(rows.length > 1 ? `Added ${rows.length} 🌿 Tap one to add details` : "Added 🌿");
+    onDone();
+    return null;
+  }
+  return (
+    <BatchAdd
+      placeholder="Blue Dream 3.5g, gummies…"
+      noun="things"
+      columns={[
+        { key: "kind", label: "Kind", options: KINDS },
+        { key: "strain_type", label: "Type", options: STRAIN_TYPES },
+        { key: "price", label: "Price", options: [], text: "$ (optional)" },
+      ]}
+      onSave={save}
+    />
+  );
+}
+
 function ItemForm({ initial, onDone, onDeleted }: { initial?: Item; onDone: () => void; onDeleted?: () => void }) {
   const { meId, toast } = useApp();
   const [f, setF] = useState({
@@ -330,7 +375,7 @@ function ItemForm({ initial, onDone, onDeleted }: { initial?: Item; onDone: () =
     const { error } = initial ? await supabase.from("garden_items").update(row).eq("id", initial.id) : await supabase.from("garden_items").insert({ ...row, bought_by: meId, created_by: meId });
     if (error) return toast(error.message);
     refreshAll();
-    toast(initial ? "Saved" : "Logged 🌿");
+    toast(initial ? "Saved" : "Added 🌿");
     onDone();
   }
   async function remove() {
@@ -389,7 +434,7 @@ function ItemForm({ initial, onDone, onDeleted }: { initial?: Item; onDone: () =
           <span />
         )}
         <button className="btn btn-primary" disabled={!f.name.trim()}>
-          {initial ? "Save" : "Log it"}
+          {initial ? "Save" : "Add"}
         </button>
       </div>
     </form>
