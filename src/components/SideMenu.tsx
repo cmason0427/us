@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
-import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconList, IconPaw, IconSparkle } from "./Art";
+import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconKey, IconList, IconPaw, IconSparkle } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
 type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -72,6 +72,9 @@ export function SideMenu() {
           <strong className="grow">{me?.display_name ?? ""}</strong>
           <Link href="/saved" className="icon-btn" aria-label="Saved" aria-current={isHere(path, "/saved") ? "page" : undefined}>
             <IconBookmark />
+          </Link>
+          <Link href="/keys" className="icon-btn" aria-label="Keys" aria-current={isHere(path, "/keys") ? "page" : undefined}>
+            <IconKey />
           </Link>
           <Link href="/settings" className="icon-btn" aria-label="Settings" aria-current={isHere(path, "/settings") ? "page" : undefined}>
             <IconGear />

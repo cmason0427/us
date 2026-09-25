@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Pantry } from "@/components/Pantry";
+import { LunchLog } from "@/components/LunchLog";
 import { ShoppingList } from "@/components/Shopping";
 import { type FoodFilters, type FoodPlace, type HomeMeal } from "@/lib/food";
 import { PageHead } from "@/components/PageHead";
@@ -18,11 +19,11 @@ import { IconPlus, Wavy } from "@/components/Art";
 
 type Sheetish = { kind: "place"; item?: FoodPlace } | { kind: "meal"; item?: HomeMeal } | { kind: "meal-detail"; item: HomeMeal } | { kind: "place-detail"; item: FoodPlace } | { kind: "batch" } | null;
 
-type Section = "pick" | "pantry" | "groceries";
+type Section = "pick" | "lunches" | "pantry" | "groceries";
 
 export default function EatPage() {
   const initial = useSearchParams().get("tab");
-  const [section, setSection] = useState<Section>(initial === "pantry" || initial === "groceries" ? initial : "pick");
+  const [section, setSection] = useState<Section>(initial === "pantry" || initial === "groceries" || initial === "lunches" ? initial : "pick");
   const pick = (s: Section) => {
     setSection(s);
     window.history.replaceState(null, "", s === "pick" ? "/eat" : `/eat?tab=${s}`);
@@ -35,14 +36,18 @@ export default function EatPage() {
         <button aria-pressed={section === "pick"} onClick={() => pick("pick")}>
           Pick food
         </button>
+        <button aria-pressed={section === "lunches"} onClick={() => pick("lunches")}>
+          Lunches
+        </button>
         <button aria-pressed={section === "pantry"} onClick={() => pick("pantry")}>
           Pantry
         </button>
         <button aria-pressed={section === "groceries"} onClick={() => pick("groceries")}>
-          🛒 Groceries
+          Groceries
         </button>
       </div>
       {section === "pick" && <PickFood />}
+      {section === "lunches" && <LunchLog />}
       {section === "pantry" && <Pantry />}
       {section === "groceries" && <ShoppingList groceries />}
     </main>

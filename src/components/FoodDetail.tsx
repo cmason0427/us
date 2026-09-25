@@ -9,6 +9,7 @@ import type { LunchRef } from "@/lib/lunch";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { MealDetail, MealForm, PlaceForm } from "./FoodForms";
+import { FoodRating } from "./FoodRating";
 
 type Order = { place_id: string; person_id: string; text: string };
 
@@ -42,6 +43,7 @@ export function PlaceDetail({ place, onEdit }: { place: FoodPlace; onEdit: () =>
 
   return (
     <div className="stack">
+      <FoodRating kind="place" id={place.id} />
       <div className="field">
         <span>The usual</span>
         {people.map((p) => (

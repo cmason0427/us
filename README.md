@@ -17,7 +17,7 @@ and photo storage, and Web Push for notifications.
 | `src/components/Plans.tsx` | Time-block plans: a slot on a day, activities in order (drag), notes; both edit; "Send" leaves one feed note. Shown faded behind events in every calendar view |
 | `src/app/(app)/do` | Energy check-in + the activity library and matcher (optional filters: in/out, cost, length) |
 | `src/components/SideMenu.tsx` | The ☰ drawer; add new sections to `SECTIONS` |
-| `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us, each person's usual order) and home meals with a shared pantry and the grocery list |
+| `src/app/(app)/eat` | Places to eat (filters, search, batch add, pick for us, each person's usual order, 1–10 `food_ratings` per person), a lunch tracker (`lunch_log`: what was packed, the eater's verdict) and home meals with a shared pantry and the grocery list |
 | `src/app/(app)/shopping` | Everything to buy; `shop_items.grocery` items also show in Eat → Groceries. Drag items between categories |
 | `src/app/(app)/dogs` | Dog profiles (`dogs` table: breed, weight, vet, meds, feeding…; `DogProfiles.tsx`), dog to-dos (which dog(s)), and a dog-only feed |
 | `src/app/(app)/goals` | Savings goals (`goals`, `goal_items`, `goal_logs`; math in `src/lib/goals.ts`). Private ones are owner-only in RLS; shared ones only log money when `track` is on. Archive first; delete only from Archived, typed-name confirm |
@@ -25,9 +25,10 @@ and photo storage, and Web Push for notifications.
 | `src/lib/series.ts` | Repeating events: every occurrence is its own `events` row sharing `series_id`; edit or delete one, or it and all later |
 | `src/components/DailyRoutines.tsx` | To-do presets marked daily add themselves each day (unique `template_id`+`for_day`); yesterday's unchecked ones clear |
 | `src/components/Status.tsx` | "On my way": one line per person (`statuses`), a quiet push, shown on Home for 3 hours |
-| `src/app/(app)/little` | A cute profile per person: sections (`little_things.section`) you add to one thing at a time, each with an optional heading and longer note and gift ideas (author-only in RLS). Linked quietly from the drawer |
+| `src/app/(app)/little` | A cute profile per person: an about card up top (`AboutCard.tsx`, `section = 'about'`: birthday → star sign + countdown + optional yearly calendar event, height, prompts), sections edited on one screen (several per heading), gift ideas (author-only in RLS). 💞 Us tab (`UsShared.tsx`): `us_dates` with note threads and `people` with contact info; either can go on the calendar every year (`src/lib/annual.ts`, `event_series.freq = 'yearly'`) |
+| `src/app/(app)/keys` | Keys (🔑 in the drawer): each person's logins/PINs. Only `/api/vault` touches them: AES-GCM with a key derived from `PIN_PEPPER`, ciphertext columns aren't grantable to the browser. Both see key names; asking → owner shares → recipient sees it once, then it's wiped. Rotating `PIN_PEPPER` makes saved keys unreadable |
 | `src/app/(app)/nerd` | Nerd dungeon: fixed hobby tabs in `HOBBIES` (add one = a component + a line). 🃏 Decks (`Decks.tsx`: MTG shelves, chase lists, game night calls) and 🎬 Theater (`Theater.tsx`: `watchlist`, movie/show, tags, search) |
-| `src/app/(app)/garden` | Garden: products bought (`garden_items`) and each person's own rating (`garden_reviews`: high, worth it, effects) |
+| `src/app/(app)/garden` | Garden: products bought (`garden_items`) and each person's own rating (`garden_reviews`: high, flavor, worth it, effects). Brand, THC, terps; add one or several; sort & filter by brand/type/terps |
 | `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
 | `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |
 | `src/app/(app)/saved` | Private folders of saved photos |

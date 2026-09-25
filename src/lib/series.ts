@@ -1,12 +1,13 @@
-import { addDays, addMonths, addWeeks, differenceInCalendarDays, getDate, getDay, startOfMonth } from "date-fns";
+import { addDays, addMonths, addWeeks, addYears, differenceInCalendarDays, getDate, getDay, startOfMonth } from "date-fns";
 
-export type Freq = "weekly" | "biweekly" | "monthly_date" | "monthly_weekday";
+export type Freq = "weekly" | "biweekly" | "monthly_date" | "monthly_weekday" | "yearly";
 
 export const FREQ_LABEL: Record<Freq, string> = {
   weekly: "Every week",
   biweekly: "Every 2 weeks",
   monthly_date: "Every month (same date)",
   monthly_weekday: "Every month (same weekday)",
+  yearly: "Every year",
 };
 
 const ORD = ["1st", "2nd", "3rd", "4th", "last"];
@@ -33,6 +34,9 @@ export function occurrences(start: Date, freq: Freq, until: Date): Date[] {
     else if (freq === "monthly_date") {
       d = addMonths(start, i);
       if (getDate(d) !== getDate(start)) continue; // no 31st this month
+    } else if (freq === "yearly") {
+      d = addYears(start, i);
+      if (getDate(d) !== getDate(start)) continue; // Feb 29 only on leap years
     } else {
       const m = nthWeekday(addMonths(startOfMonth(start), i), getDay(start), n);
       d = m ? setTime(m, start) : null;

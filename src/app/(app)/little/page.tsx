@@ -5,10 +5,11 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
-import { PersonAvatar } from "@/components/PersonAvatar";
 import { Sheet } from "@/components/Sheet";
 import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
+import { AboutCard } from "@/components/AboutCard";
+import { UsShared } from "@/components/UsShared";
 
 interface Thing {
   id: string;
@@ -19,6 +20,7 @@ interface Thing {
   label: string | null;
   text: string;
   note: string | null;
+  series_id: string | null;
   created_at: string;
 }
 
@@ -52,7 +54,7 @@ const PH: Record<string, string> = { Shirt: "M", Pants: "32x30", Shoes: "10", Ri
 
 export default function LittleThingsPage() {
   const { meId, partner, profiles, toast } = useApp();
-  const [about, setAbout] = useState<"them" | "me">("them");
+  const [about, setAbout] = useState<"them" | "me" | "us">("them");
   const [editing, setEditing] = useState<Editing | null>(null);
   const supabase = supabaseBrowser();
   const { data: things = [] } = useLive<Thing[]>(
@@ -68,7 +70,8 @@ export default function LittleThingsPage() {
   const person = profiles.find((p) => p.id === whoId);
   if (!partner || !person) return <main className="page" />;
 
-  const facts = things.filter((t) => t.kind === "fact" && t.about_user === person.id);
+  const facts = things.filter((t) => t.kind === "fact" && t.about_user === person.id && t.section !== "about");
+  const aboutFacts = things.filter((t) => t.kind === "fact" && t.about_user === person.id && t.section === "about");
   const inSection = (key: string) => facts.filter((f) => (f.section ?? "misc") === key);
   const gifts = things.filter((t) => t.kind === "gift" && t.about_user === partner.id && t.author === meId);
 
@@ -158,17 +161,19 @@ export default function LittleThingsPage() {
         <button aria-pressed={about === "me"} onClick={() => setAbout("me")}>
           Me
         </button>
+        <button aria-pressed={about === "us"} onClick={() => setAbout("us")}>
+          💞 Us
+        </button>
       </div>
 
-      <div className="lt-hero">
-        <div className="lt-polaroid">
-          <PersonAvatar id={person.id} size={86} />
-          <span className="lt-caption">{person.id === meId ? "me!" : person.display_name}</span>
+      {about === "us" ? (
+        <div style={{ marginTop: 10 }}>
+          <UsShared />
         </div>
-        <p className="small muted">
-          {person.id === meId ? `What ${partner.display_name} should know. Either of you can add to it.` : `The little stuff about ${partner.display_name}. You can both add to it.`}
-        </p>
-      </div>
+      ) : (
+        <>
+
+      <AboutCard key={person.id} personId={person.id} facts={aboutFacts} />
 
       {SECTIONS.map((s) => {
         const list = inSection(s.key);
@@ -212,6 +217,8 @@ export default function LittleThingsPage() {
             </button>
           )}
         </section>
+      )}
+        </>
       )}
 
       {editing && (

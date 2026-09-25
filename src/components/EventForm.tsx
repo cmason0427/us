@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { addHours, addMinutes, addMonths, differenceInMinutes } from "date-fns";
+import { addHours, addMinutes, addMonths, addYears, differenceInMinutes } from "date-fns";
 import { FREQ_LABEL, occurrences, weekdayOrdinal, type Freq } from "@/lib/series";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { fromInputs, toDateInput, toTimeInput } from "@/lib/dates";
@@ -323,7 +323,7 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
               Just once
             </button>
             {(Object.keys(FREQ_LABEL) as Freq[]).map((f) => (
-              <button key={f} type="button" className="chip chip-sm" aria-pressed={repeat === f} onClick={() => setRepeat(f)} disabled={type === "ask"}>
+              <button key={f} type="button" className="chip chip-sm" aria-pressed={repeat === f} onClick={() => (setRepeat(f), f === "yearly" && setUntil(toDateInput(addYears(fromInputs(date), 30))))} disabled={type === "ask"}>
                 {f === "monthly_weekday" ? `Every month (${weekdayOrdinal(fromInputs(date))})` : FREQ_LABEL[f]}
               </button>
             ))}

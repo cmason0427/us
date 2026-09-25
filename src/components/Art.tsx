@@ -29,6 +29,9 @@ export const IconList = (p: P) => (
 export const IconBookmark = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.5-6.5 4.5v-16a1 1 0 0 1 1-1z" /></svg>
 );
+export const IconKey = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><circle cx="8" cy="15" r="4" /><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2" /></svg>
+);
 export const IconFork = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M7 3v7a2 2 0 0 0 2 2v9M11 3v7a2 2 0 0 1-2 2M9 3v6" /><path d="M17 21V3c-2 1-3.5 3.5-3.5 7v3H17" /></svg>
 );

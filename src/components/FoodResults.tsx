@@ -8,6 +8,7 @@ import {
   type HomeMeal,
 } from "@/lib/food";
 import { useMeals, usePantry, usePlaces } from "@/lib/foodData";
+import { RatingBadge } from "./FoodRating";
 
 export type FoodPick = { kind: "place"; item: FoodPlace } | { kind: "meal"; item: HomeMeal };
 
@@ -52,6 +53,7 @@ export function FoodResults({
               {selected?.has(p.item.id) && "✓ "}
               {p.item.name}
             </span>
+            <RatingBadge kind="place" id={p.item.id} />
           </button>
         ) : (
           <MealCard key={p.item.id} meal={p.item} picked={selected?.has(p.item.id)} onClick={(el) => onPick(p, el)} />
@@ -68,6 +70,7 @@ function MealCard({ meal, picked, onClick }: { meal: HomeMeal; picked?: boolean;
         {picked && "✓ "}
         {meal.name}
       </span>
+      <RatingBadge kind="meal" id={meal.id} />
     </button>
   );
 }

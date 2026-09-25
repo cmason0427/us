@@ -51,3 +51,30 @@ export async function setHave(name: string, have: boolean) {
     // Restocked or used up either way, it's no longer "almost out".
     .upsert({ name: name.trim().toLowerCase(), have, low: false, updated_at: new Date().toISOString() });
 }
+
+export interface FoodRating {
+  kind: "place" | "meal";
+  ref_id: string;
+  user_id: string;
+  score: number;
+}
+/** Everyone's 1-10 scores, keyed "kind:id". */
+export function useFoodRatings() {
+  const { data = [] } = useLive<FoodRating[]>(
+    "food_ratings",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("food_ratings").select("kind, ref_id, user_id, score");
+      if (error) throw error;
+      return data as FoodRating[];
+    },
+    ["food_ratings"],
+  );
+  return useMemo(() => {
+    const m = new Map<string, FoodRating[]>();
+    for (const r of data) {
+      const k = `${r.kind}:${r.ref_id}`;
+      m.set(k, [...(m.get(k) ?? []), r]);
+    }
+    return m;
+  }, [data]);
+}
