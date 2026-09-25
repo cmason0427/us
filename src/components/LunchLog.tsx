@@ -234,49 +234,47 @@ export const scoreWord = (n: number) =>
  * the score also lands on it in Food, so planning meals remembers.
  */
 function LunchScores({ lunch, scores }: { lunch: Lunch; scores: Score[] }) {
-  const { meId, profiles, toast } = useApp();
-  const mine = scores.find((r) => r.user_id === meId)?.score;
+  const { meId, profiles } = useApp();
+  // Me first; either of you can set or fix either score.
+  const people = [...profiles].sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : 0));
+  return (
+    <div className="lunch-scores">
+      {people.map((p) => (
+        <ScoreSlider key={p.id} lunch={lunch} who={p.id} label={p.id === meId ? "you" : p.display_name} score={scores.find((r) => r.user_id === p.id)?.score} />
+      ))}
+    </div>
+  );
+}
+
+function ScoreSlider({ lunch, who, label, score }: { lunch: Lunch; who: string; label: string; score?: number }) {
+  const { toast } = useApp();
   const [draft, setDraft] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
-  const shown = draft ?? mine ?? 4;
+  const shown = draft ?? score ?? 4;
   async function save(n: number) {
     const supabase = supabaseBrowser();
-    const { error } = await supabase.from("lunch_ratings").upsert({ lunch_id: lunch.id, user_id: meId, score: n, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("lunch_ratings").upsert({ lunch_id: lunch.id, user_id: who, score: n, updated_at: new Date().toISOString() });
     if (error) return toast(error.message);
+    // One of our meals or places? The score lands on it in Food too.
     const target = lunch.meal_id ? { kind: "meal", ref_id: lunch.meal_id } : lunch.place_id ? { kind: "place", ref_id: lunch.place_id } : null;
-    if (target) await supabase.from("food_ratings").upsert({ ...target, user_id: meId, score: n, updated_at: new Date().toISOString() });
+    if (target) await supabase.from("food_ratings").upsert({ ...target, user_id: who, score: n, updated_at: new Date().toISOString() });
     setDraft(null);
     setEditing(false);
     refreshAll();
   }
-  const others = profiles.filter((p) => p.id !== meId);
+  if (editing)
+    return (
+      <label className="feel-row lunch-slider">
+        <span className="feel-name">
+          {label} {shown}
+        </span>
+        <input type="range" min={1} max={10} value={shown} onChange={(e) => setDraft(Number(e.target.value))} onPointerUp={() => save(shown)} onKeyUp={() => save(shown)} aria-label={`How much ${label} liked it`} />
+        <span className="small muted">{scoreWord(shown)}</span>
+      </label>
+    );
   return (
-    <div className="lunch-scores">
-      {others.map((p) => {
-        const r = scores.find((x) => x.user_id === p.id);
-        return (
-          <span key={p.id} className="small muted">
-            {p.display_name}: {r ? `${r.score}/10 · ${scoreWord(r.score)}` : "not rated"}
-          </span>
-        );
-      })}
-      {editing || mine == null ? (
-        editing ? (
-          <label className="feel-row lunch-slider">
-            <span className="feel-name">{shown}/10</span>
-            <input type="range" min={1} max={10} value={shown} onChange={(e) => setDraft(Number(e.target.value))} onPointerUp={() => save(shown)} onKeyUp={() => save(shown)} aria-label="How much you liked it" />
-            <span className="small muted">{scoreWord(shown)}</span>
-          </label>
-        ) : (
-          <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0 }} onClick={() => setEditing(true)}>
-            rate it 1–10
-          </button>
-        )
-      ) : (
-        <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0, textDecoration: "none" }} onClick={() => setEditing(true)}>
-          you: {mine}/10 · {scoreWord(mine)}
-        </button>
-      )}
-    </div>
+    <button className="btn-link small lunch-score" onClick={() => setEditing(true)}>
+      {label}: {score ? `${score}/10 · ${scoreWord(score)}` : "rate 1–10"}
+    </button>
   );
 }

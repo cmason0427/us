@@ -106,7 +106,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
-  font-size: 15.5px;
+  font-size: 14px;
   line-height: 1.4;
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
@@ -1061,7 +1061,7 @@ a.pantry-chip { text-decoration: none; display: inline-flex; align-items: center
 .board-item.k-link a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-item.k-ink svg { overflow: visible; }
 .board-item.sel { outline: 2px dashed var(--terracotta); outline-offset: 3px; }
-.board-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.95rem; line-height: 1.3; display: block; }
+.board-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.82rem; line-height: 1.3; display: block; }
 .board-edit { width: 100%; height: 100%; border: 0; background: transparent; resize: none; font: inherit; font-size: 16px; outline: none; }
 .board-by { position: absolute; bottom: 2px; right: 6px; font-size: 0.62rem; font-weight: 700; color: color-mix(in srgb, var(--ink) 45%, transparent); }
 .board-resize { position: absolute; right: -12px; bottom: -12px; width: 26px; height: 26px; border-radius: 50%; background: var(--terracotta); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); touch-action: none; }
@@ -1142,3 +1142,15 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .board-item.k-link a { display: block; max-width: 100%; }
 .fold-pinned { background: color-mix(in srgb, var(--butter) 22%, var(--surface)); }
 .spend-edit { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.food-face { width: 20px; text-align: center; flex: none; }
+.lunch-score { text-decoration: none; align-self: flex-start; padding: 0; }
+
+/* Sans text is smaller now (body 14px); bold carries the scan-worthy bits. */
+.task-title, .pantry-name, .shop-name, .book-name, .mini-list strong, .lunch-log strong, .food-card .name, .theater-item strong, .idea-row .task-title { font-weight: 650; }
+.small { font-size: 0.82rem; }
+.input, .textarea, .select { font-size: 16px; } /* never smaller: iOS zooms */
+/* Little labels inside profile sections (color, show, pants…) in the serif, normal case. */
+.lt-tile-label { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "WONK" 0; text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+.about-prompts dt { font-family: var(--font-display); text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; }
+.dash-label { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "WONK" 0; font-size: 0.8rem; }
+.deck-ghost { will-change: transform; }

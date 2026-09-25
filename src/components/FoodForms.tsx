@@ -233,6 +233,7 @@ export function MealForm({ initial, onDone }: { initial?: HomeMeal; onDone: () =
 /** A meal's ingredients with have/need checkboxes (shared pantry), plus "add missing to shopping". */
 export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: Map<string, boolean>; onEdit: () => void }) {
   const { meId, toast } = useApp();
+  const [showIngs, setShowIngs] = useState(false);
   const ings = [...meal.meal_ingredients].sort((a, b) => a.position - b.position);
   const missing = missingFor(meal, pantry);
 
@@ -252,7 +253,12 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
   return (
     <div className="stack">
       <FoodRating kind="meal" id={meal.id} />
-      {ings.length === 0 ? (
+      {ings.length > 0 && (
+        <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setShowIngs((v) => !v)}>
+          {showIngs ? "hide ingredients" : `see ingredients (${ings.length}${missing.length ? `, ${missing.length} missing` : ""})`}
+        </button>
+      )}
+      {!showIngs ? null : ings.length === 0 ? (
         <p className="muted">No ingredients listed.</p>
       ) : (
         <div className="card" style={{ padding: "4px 14px" }}>
@@ -268,7 +274,7 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
           })}
         </div>
       )}
-      <p className="small muted">Checking something off here counts for every meal that uses it.</p>
+      {showIngs && <p className="small muted">Checking something off here counts for every meal that uses it.</p>}
       {missing.length > 0 && (
         <button className="btn btn-sage" onClick={addMissing}>
           🛒 Add {missing.length} missing to groceries

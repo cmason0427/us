@@ -8,7 +8,7 @@ import {
   DEFAULT_SETTINGS,
   balanceNow,
   buildPlan,
-  fromBalance,
+  floorPlan,
   categoryStatus,
   iso,
   money,
@@ -16,7 +16,6 @@ import {
   monthlyBills,
   monthlyIncome,
   monthlyIncomeMax,
-  safeToSpend,
   spendingDays,
   type Balance,
   type Bill,
@@ -64,13 +63,20 @@ export function useBudget() {
   const balance = balances[balances.length - 1];
   const paid = new Set(paidRows.map((p) => `${p.bill_id}:${p.due_on}`));
   const plan = buildPlan({ incomes, paychecks, bills, paid, categories, settings, oneoffs });
-  const tracked = safeToSpend(plan.current, spends, Number(settings.cushion));
-  const real = fromBalance(balance, plan.current, spends, Number(settings.cushion));
-  // A recent balance check-in beats the tracked math.
-  const safe = real ? { ...real, funSpent: tracked?.funSpent ?? 0 } : tracked;
   const cats = categoryStatus(categories, spends);
   const bal = balanceNow({ balance, spends, incomes, paychecks, oneoffs });
-  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, real, tracked, oneoffs, bal };
+  // The floor plan decides what's safe; the per-paycheck breakdowns follow it.
+  const fp = floorPlan({ plan, incomes, paychecks, oneoffs, spends, categories, settings, balance: bal });
+  if (fp)
+    for (const p of plan.periods) {
+      const fun = fp.funByPeriod.get(iso(p.start)) ?? 0;
+      const rest = p.income - p.billTotal - p.savings - p.budgets - fun;
+      p.free = fun;
+      p.setAside = Math.max(0, Math.round(rest));
+      p.fromEarlier = Math.max(0, Math.round(-rest));
+    }
+  const safe = fp ? { left: fp.left, perDay: fp.perDay, daysLeft: fp.daysLeft } : null;
+  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, oneoffs, bal, fp };
 }
 
 const db = () => supabaseBrowser();
@@ -202,19 +208,20 @@ export function MoneyView() {
               and everything starts from real money.
             </span>
           )}
-          {cur && b.real && (
+          {cur && b.fp && (
             <span>
-              Why {money(b.real.left)} is safe: {money(b.bal?.now ?? 0)} now − {money(b.real.billsLeft)} bills still due before payday
-              {b.real.setAside ? ` − ${money(b.real.setAside)} to put aside for later bills` : ""}
-              {b.real.budgetsLeft ? ` − ${money(b.real.budgetsLeft)} left in your category budgets` : ""}
-              {Number(b.settings.cushion) ? ` − ${money(Number(b.settings.cushion))} cushion` : ""}. That lasts until payday {d(cur.end)}; the next check only counts once it lands.
+              Why {money(b.fp.left)} is safe: starting from {money(b.fp.start)} {b.fp.fromBalance ? "in your account" : "left from this paycheck"}, then adding each paycheck the day it lands and taking out
+              bills, savings and category budgets on their dates, the tightest spot ahead is {b.fp.low ? `${money(b.fp.low.amount)} on ${d(b.fp.low.at)} (after ${b.fp.low.after})` : "today"}.
+              Spending {money(b.fp.left)} before payday {d(cur.end)} keeps you above your {money(Number(b.settings.cushion))} floor the whole way, with the same kind of room left for the paychecks after.{" "}
+              <button className="btn-link small" onClick={() => setSheet("settings")}>
+                set my floor
+              </button>
             </span>
           )}
-          {cur && !b.real && b.tracked && (
+          {b.fp && (b.fp.comingThisMonth.paychecks > 0 || b.fp.comingThisMonth.extra > 0) && (
             <span>
-              Why {money(b.tracked.left)} is safe: this paycheck ({money(cur.income)}) − bills before {d(cur.end)} ({money(cur.billTotal)}) − savings ({money(cur.savings)})
-              {cur.budgets ? ` − category budgets (${money(cur.budgets)})` : ""}
-              {cur.setAside ? ` − put aside for later (${money(cur.setAside)})` : ""} − what you&apos;ve spent ({money(b.tracked.funSpent)}).
+              Coming in this month: <strong>{money(b.fp.comingThisMonth.paychecks + b.fp.comingThisMonth.extra)}</strong> = {money(b.fp.comingThisMonth.paychecks)} from paychecks
+              {b.fp.comingThisMonth.extra ? ` + ${money(b.fp.comingThisMonth.extra)} extra (${b.fp.comingThisMonth.items.filter((x) => x.extra).map((x) => x.name).join(", ")})` : ""}.
             </span>
           )}
         <span>
@@ -226,8 +233,7 @@ export function MoneyView() {
               You tend to spend on {pattern.days.join(" and ")} ({pattern.share}% of spending). Fun money stretches further if those days get a little extra.
             </span>
           )}
-          {cur && cur.held > 0 && <span>After this paycheck you&apos;ll have {money(cur.held)} set aside for upcoming bills. Leave it be.</span>}
-        </section>
+          </section>
       </details>
       {cur && b.safe && (
         <section className="money-hero">
@@ -237,9 +243,9 @@ export function MoneyView() {
             until payday {d(cur.end)} · about {money(b.safe.perDay)}/day for {b.safe.daysLeft} day{b.safe.daysLeft === 1 ? "" : "s"}
           </span>
           <span className="small money-basis">
-            {b.real ? `from your balance (${format(b.real.asOf, "EEE h:mm a")})` : "from what you've logged"} ·{" "}
+            {b.fp?.fromBalance && b.bal ? `from your balance (${format(b.bal.asOf, "EEE h:mm a")})` : "from what you've logged"} ·{" "}
             <button className="btn-link small" onClick={() => setSheet("balance")}>
-              🏦 {b.real ? "update balance" : "check in my balance"}
+              🏦 {b.fp?.fromBalance ? "update balance" : "check in my balance"}
             </button>
           </span>
           <button className="btn btn-sm money-spend" onClick={() => setSheet("spend")}>
@@ -286,13 +292,13 @@ export function MoneyView() {
             )}
             {cur.setAside > 0 && (
               <li className="strong">
-                <span>📦 Put aside for later bills</span>
+                <span>📦 Stays in the account for later</span>
                 <span>{money(cur.setAside)}</span>
               </li>
             )}
             {cur.fromEarlier > 0 && (
               <li>
-                <span>📦 Use from what you set aside</span>
+                <span>📦 Uses money already in the account</span>
                 <span>{money(cur.fromEarlier)}</span>
               </li>
             )}
@@ -376,8 +382,8 @@ export function MoneyView() {
                 <span className="pantry-meta">
                   {" "}
                   bills {money(p.billTotal)}
-                  {p.setAside ? ` · put aside ${money(p.setAside)}` : ""}
-                  {p.fromEarlier ? ` · use ${money(p.fromEarlier)} set aside` : ""}
+                  {p.setAside ? ` · keeps ${money(p.setAside)}` : ""}
+                  {p.fromEarlier ? ` · uses ${money(p.fromEarlier)} already there` : ""}
                 </span>
               </button>
               <span className="small">🎈 {money(p.free)}</span>
@@ -431,7 +437,7 @@ export function MoneyView() {
           )}
           <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setSheet("settings")}>
             🐷 Savings: {b.settings.save_pct}%{Number(b.settings.save_fixed) ? ` + ${money(Number(b.settings.save_fixed))}` : ""} of each paycheck
-            {Number(b.settings.cushion) ? ` · keep ${money(Number(b.settings.cushion))} cushion` : ""}
+            {Number(b.settings.cushion) ? ` · floor ${money(Number(b.settings.cushion))}` : ""}
           </button>
         </div>
       )}
@@ -443,14 +449,8 @@ export function MoneyView() {
       )}
       {sheet === "balance" && (
         <Sheet title="🏦 What's in your account right now?" onClose={() => setSheet(null)}>
-          <BalanceForm tracked={b.tracked?.left ?? null} onDone={() => setSheet(null)} />
+          <BalanceForm tracked={null} onDone={() => setSheet(null)} />
         </Sheet>
-      )}
-      {b.real && b.tracked && Math.abs(b.real.left - b.tracked.left) >= 25 && (
-        <p className="small muted">
-          Your balance says {money(b.real.left)} is safe; your logged spending said {money(b.tracked.left)}.{" "}
-          {b.real.left < b.tracked.left ? "Probably a few purchases that didn't get logged. No big deal: the balance wins." : "You've got a bit more than the plan thought."}
-        </p>
       )}
       {sheet === "spend" && (
         <Sheet title="💸 I spent" onClose={() => setSheet(null)}>
@@ -473,7 +473,7 @@ export function MoneyView() {
         </Sheet>
       )}
       {sheet === "settings" && (
-        <Sheet title="🐷 Savings & cushion" onClose={() => setSheet(null)}>
+        <Sheet title="🐷 Savings & floor" onClose={() => setSheet(null)}>
           <SettingsForm initial={b.settings} onDone={() => setSheet(null)} />
         </Sheet>
       )}
@@ -503,13 +503,13 @@ export function MoneyView() {
               </li>
               {period.setAside > 0 && (
                 <li>
-                  <span>📦 Put aside</span>
+                  <span>📦 Stays in the account</span>
                   <span>{money(period.setAside)}</span>
                 </li>
               )}
               {period.fromEarlier > 0 && (
                 <li>
-                  <span>📦 Use set-aside</span>
+                  <span>📦 Uses what&apos;s there</span>
                   <span>{money(period.fromEarlier)}</span>
                 </li>
               )}
@@ -805,10 +805,10 @@ function SettingsForm({ initial, onDone }: { initial: Settings; onDone: () => vo
         </div>
         <div className="money-input">
           <span>$</span>
-          <input className="input input-sm" inputMode="decimal" value={f.cushion} onChange={(e) => setF({ ...f, cushion: e.target.value.replace(/[^\d.]/g, "") })} placeholder="cushion" />
+          <input className="input input-sm" inputMode="decimal" value={f.cushion} onChange={(e) => setF({ ...f, cushion: e.target.value.replace(/[^\d.]/g, "") })} placeholder="lowest I want to go" />
         </div>
       </div>
-      <p className="small faint">The cushion is a little buffer that never counts as spendable. 10% savings is a good default; lower it on tight months, no guilt.</p>
+      <p className="small faint">The floor is the lowest you want your account to ever get; the plan never lets you dip under it. 10% savings is a good default; lower it on tight months, no guilt.</p>
       <button className="btn btn-primary btn-sm">Save</button>
     </form>
   );

@@ -170,6 +170,7 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
   const [owner, setOwner] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const ghost = useRef<HTMLDivElement>(null);
   const supabase = supabaseBrowser();
 
   const allTags = [...new Set(decks.flatMap((d) => d.tags))].sort();
@@ -221,7 +222,8 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
   }
   function onMove(e: React.PointerEvent) {
     if (gesture.hold && !drag && Math.hypot(e.clientX - gesture.hold.x, e.clientY - gesture.hold.y) > 8) cancelHold();
-    if (drag) setDrag({ ...drag, x: e.clientX, y: e.clientY });
+    // Move the floating copy directly (no re-render per frame): much smoother.
+    if (drag && ghost.current) ghost.current.style.transform = `translate(${e.clientX - drag.x}px, ${e.clientY - drag.y}px)`;
   }
   async function onUp(e: React.PointerEvent) {
     cancelHold();
@@ -348,7 +350,7 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
         ))
       )}
       {dragging && drag && (
-        <div className="deck-box deck-ghost" style={{ ["--deck" as string]: hexOf(dragging.color), left: drag.x - 36, top: drag.y - 50 }}>
+        <div ref={ghost} className="deck-box deck-ghost" style={{ ["--deck" as string]: hexOf(dragging.color), left: drag.x - 36, top: drag.y - 50 }}>
           <span className="deck-name">{dragging.name}</span>
         </div>
       )}

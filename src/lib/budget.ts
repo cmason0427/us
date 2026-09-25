@@ -317,3 +317,147 @@ export function balanceNow(opts: { balance: Balance | undefined; spends: Spend[]
   landed += opts.oneoffs.filter((o) => o.kind === "in" && o.on_date > iso(asOf) && o.on_date <= iso(today)).reduce((a, o) => a + Number(o.amount), 0);
   return { now: Number(balance.amount) - spent + landed, checked: Number(balance.amount), asOf, spent, landed };
 }
+
+export interface FloorPlan {
+  start: number; // where the projection starts (real balance, or this paycheck minus spending)
+  fromBalance: boolean;
+  left: number; // safe to spend before the next payday
+  perDay: number;
+  daysLeft: number;
+  nextPay: Date | null;
+  low: { at: Date; amount: number; after: string } | null; // the tightest spot ahead
+  funByPeriod: Map<string, number>; // payday → fun money for that paycheck
+  comingThisMonth: { paychecks: number; extra: number; items: { name: string; amount: number; on: Date; extra: boolean }[] };
+}
+
+/**
+ * The balance-floor plan: walk the account forward day by day (what's there
+ * now, + each paycheck and extra money on the day it lands, − each bill and
+ * surprise bill on its due date, − savings and category budgets as each
+ * paycheck arrives). Safe to spend now is how far the lowest point ahead sits
+ * above your floor, so you never dip below it, and money that hasn't landed
+ * is only counted from the day it lands. Each later paycheck gets the same
+ * treatment after earlier fun money is taken out.
+ */
+export function floorPlan(opts: {
+  plan: Plan;
+  incomes: Income[];
+  paychecks: Paycheck[];
+  oneoffs: OneOff[];
+  spends: Spend[];
+  categories: Category[];
+  settings: Settings;
+  balance: ReturnType<typeof balanceNow>;
+  today?: Date;
+}): FloorPlan | null {
+  const { plan } = opts;
+  const cur = plan.current;
+  if (!cur) return null;
+  const today = startOfDay(opts.today ?? new Date());
+  const t = iso(today);
+  const floor = Number(opts.settings.cushion) || 0;
+
+  // Starting point: a real balance if you've checked one in since this paycheck, else this paycheck minus what's gone out.
+  let start: number;
+  let fromBalance = false;
+  if (opts.balance && opts.balance.asOf >= cur.start) {
+    start = opts.balance.now;
+    fromBalance = true;
+  } else {
+    const spent = opts.spends.filter((s) => s.spent_on >= iso(cur.start) && s.spent_on <= t).reduce((a, s) => a + Number(s.amount), 0);
+    const paidBills = cur.bills.filter((b) => iso(b.due) < t || b.paid).reduce((a, b) => a + Number(b.bill.amount), 0);
+    // Extra money only counts once it's landed.
+    const extraIn = cur.paychecks.filter((p) => p.name.startsWith("➕")).reduce((a, p) => a + p.amount, 0);
+    const extraLanded = opts.oneoffs.filter((o) => o.kind === "in" && o.on_date >= iso(cur.start) && o.on_date <= t).reduce((a, o) => a + Number(o.amount), 0);
+    start = cur.income - extraIn + extraLanded - spent - paidBills - cur.savings;
+  }
+
+  // Everything that moves money from today on, in date order.
+  type Ev = { on: string; amount: number; label: string; payday?: boolean };
+  const evs: Ev[] = [];
+  for (const [n, p] of plan.periods.entries()) {
+    const pay = iso(p.start);
+    if (n > 0) {
+      for (const pc of p.paychecks) if (!pc.name.startsWith("➕")) evs.push({ on: pay, amount: pc.amount, label: pc.name, payday: true });
+      evs.push({ on: pay, amount: -p.savings, label: "savings" });
+      if (p.budgets) evs.push({ on: pay, amount: -p.budgets, label: "category budgets" });
+    }
+    for (const b of p.bills) {
+      if (b.paid) continue;
+      const on = iso(b.due) < t ? t : iso(b.due);
+      if (n === 0 && !fromBalance && iso(b.due) < t) continue; // already counted as paid above
+      evs.push({ on, amount: -Number(b.bill.amount), label: b.bill.name });
+    }
+  }
+  for (const o of opts.oneoffs) {
+    if (o.kind === "in" && o.on_date > t) evs.push({ on: o.on_date, amount: Number(o.amount), label: o.name, payday: true });
+  }
+  // What's left of this month's category budgets is spoken for too.
+  const monthStart = iso(startOfMonth(today));
+  const catLeft = opts.categories.reduce((a, c) => {
+    if (c.ceiling == null) return a;
+    const used = opts.spends.filter((s) => s.category_id === c.id && s.spent_on >= monthStart).reduce((x, s) => x + Number(s.amount), 0);
+    return a + Math.max(0, Number(c.ceiling) - used);
+  }, 0);
+  if (catLeft) evs.push({ on: t, amount: -catLeft, label: "category budgets" });
+  // Same day: money in lands before money goes out.
+  evs.sort((a, b) => a.on.localeCompare(b.on) || b.amount - a.amount);
+
+  // Running balance after each event; the fun money for a paycheck is the
+  // lowest point from its payday on, minus the floor, minus earlier fun money.
+  const points: { on: string; bal: number; after: string }[] = [{ on: t, bal: start, after: "today" }];
+  let bal = start;
+  for (const e of evs) {
+    bal += e.amount;
+    points.push({ on: e.on, bal, after: e.label });
+  }
+  const paydays = [t, ...plan.periods.slice(1).map((p) => iso(p.start))];
+  const minFrom = (pd: string) => {
+    const ahead = points.filter((p) => p.on >= pd);
+    return ahead.length ? ahead.reduce((m, p) => (p.bal < m.bal ? p : m)) : null;
+  };
+  // Even it out: each paycheck gets the most it can while leaving every later
+  // paycheck the same share before each tight spot (a rent week doesn't get 0
+  // just because the weeks before spent it all). Unspent money rolls forward.
+  const funByPeriod = new Map<string, number>();
+  let taken = 0;
+  let low: FloorPlan["low"] = null;
+  const mins = paydays.map((pd) => minFrom(pd));
+  paydays.forEach((pd, k) => {
+    const here = mins[k];
+    if (!here) return;
+    let fun = Infinity;
+    let binding = here;
+    for (let j = k; j < paydays.length; j++) {
+      const m = mins[j];
+      if (!m) continue;
+      const share = Math.max(0, m.bal - taken - floor) / (j - k + 1);
+      if (share < fun) {
+        fun = share;
+        binding = m;
+      }
+    }
+    fun = Math.floor(Number.isFinite(fun) ? fun : 0);
+    // The tight spot that decided today's number, for the "why".
+    if (k === 0) low = { at: parseISO(binding.on), amount: binding.bal, after: binding.after };
+    funByPeriod.set(k === 0 ? iso(cur.start) : pd, fun);
+    taken += fun;
+  });
+  const left = funByPeriod.get(iso(cur.start)) ?? 0;
+  const daysLeft = Math.max(1, differenceInCalendarDays(cur.end, today));
+
+  // What comes in this calendar month (landed or not), paychecks vs extra.
+  const mEnd = iso(endOfMonth(today));
+  const mStart = iso(startOfMonth(today));
+  const items: FloorPlan["comingThisMonth"]["items"] = [];
+  for (const i of opts.incomes)
+    for (const d of payDates(i, startOfMonth(today), parseISO(mEnd))) {
+      const actual = opts.paychecks.find((p) => p.income_id === i.id && p.paid_on === iso(d));
+      items.push({ name: i.name, amount: actual ? Number(actual.amount) : Number(i.amount), on: d, extra: false });
+    }
+  for (const o of opts.oneoffs) if (o.kind === "in" && o.on_date >= mStart && o.on_date <= mEnd) items.push({ name: o.name, amount: Number(o.amount), on: parseISO(o.on_date), extra: true });
+  items.sort((a, b) => a.on.getTime() - b.on.getTime());
+  const comingThisMonth = { paychecks: items.filter((x) => !x.extra).reduce((a, x) => a + x.amount, 0), extra: items.filter((x) => x.extra).reduce((a, x) => a + x.amount, 0), items };
+
+  return { start, fromBalance, left, perDay: left / daysLeft, daysLeft, nextPay: cur.end, low, funByPeriod, comingThisMonth };
+}

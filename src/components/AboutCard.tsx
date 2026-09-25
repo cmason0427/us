@@ -18,6 +18,11 @@ export interface AboutFact {
 }
 
 /** The quick-glance bits, dating-profile style. Birthday is a real date so it can count down. */
+/** Names beyond the one we use every day. */
+const NAMES = [
+  { label: "Full / legal name", ph: "As it is on the ID" },
+  { label: "Middle name", ph: "" },
+];
 const BASICS = [
   { label: "Height", icon: "📏", ph: `5'10"` },
   { label: "Star sign", icon: "✨", ph: "Worked out from the birthday" },
@@ -71,6 +76,12 @@ export function AboutCard({ personId, facts }: { personId: string; facts: AboutF
         <PersonAvatar id={personId} size={52} />
         <div className="grow">
           <div className="about-name">{isMe ? "Me" : nameOf(personId)}</div>
+          {(val(facts, "Full / legal name") || val(facts, "Middle name")) && (
+            <div className="small muted keep-name">
+              {val(facts, "Full / legal name")}
+              {val(facts, "Middle name") && !val(facts, "Full / legal name").includes(val(facts, "Middle name")) ? `${val(facts, "Full / legal name") ? " · " : ""}middle: ${val(facts, "Middle name")}` : ""}
+            </div>
+          )}
           {bday ? (
             <div className="small">
               🎂 {format(parseISO(bday), "MMM d")}
@@ -123,7 +134,7 @@ export function AboutCard({ personId, facts }: { personId: string; facts: AboutF
 
 function AboutForm({ personId, facts, onDone }: { personId: string; facts: AboutFact[]; onDone: () => void }) {
   const { meId, nameOf, toast } = useApp();
-  const labels = ["Birthday", ...BASICS.map((b) => b.label), ...PROMPTS.map((p) => p.label)];
+  const labels = [...NAMES.map((n) => n.label), "Birthday", ...BASICS.map((b) => b.label), ...PROMPTS.map((p) => p.label)];
   const [v, setV] = useState<Record<string, string>>(() => Object.fromEntries(labels.map((l) => [l, val(facts, l)])));
   const bdayFact = facts.find((f) => f.label === "Birthday");
   const [onCal, setOnCal] = useState(bdayFact ? !!bdayFact.series_id : true);
@@ -167,6 +178,7 @@ function AboutForm({ personId, facts, onDone }: { personId: string; facts: About
   );
   return (
     <form className="stack" onSubmit={save}>
+      <div className="lt-form">{NAMES.map((n) => input(n.label, n.ph))}</div>
       <div className="lt-form">
         <label className="field">
           <span>Birthday</span>

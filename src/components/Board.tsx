@@ -30,17 +30,17 @@ interface Item {
 }
 type Box = { x: number; y: number; w: number; h: number; rot: number };
 
-const BOARD_W = 700;
-const BOARD_H = 900;
+const BOARD_W = 470;
+const BOARD_H = 600;
 const STICKY = ["#fff3a8", "#ffd1dc", "#c8f0c8", "#cfe3ff", "#ffd9b3", "#e6d4ff"];
 const PENS = ["#3b2a2a", "#e0457b", "#2f9a55", "#3f86d4", "#e69b1a"];
-const SIZE: Record<Item["kind"], [number, number]> = { note: [240, 110], sticky: [170, 160], photo: [240, 240], link: [240, 64], ink: [100, 100] };
+const SIZE: Record<Item["kind"], [number, number]> = { note: [170, 80], sticky: [120, 110], photo: [170, 170], link: [170, 48], ink: [100, 100] };
 
 /** Where an item sits; older items (from before boards) get a tidy spot. */
 function boxOf(i: Item, index: number): Box {
   const [w, h] = SIZE[i.kind];
   if (i.x != null && i.y != null) return { x: i.x, y: i.y, w: i.w ?? w, h: i.h ?? h, rot: i.rot ?? 0 };
-  return { x: 16 + (index % 2) * 260, y: 16 + Math.floor(index / 2) * 250, w, h, rot: i.rot ?? 0 };
+  return { x: 12 + (index % 2) * 180, y: 12 + Math.floor(index / 2) * 180, w, h, rot: i.rot ?? 0 };
 }
 
 /**
@@ -133,8 +133,8 @@ export function Board({ thread }: { thread: Thread }) {
         toast(error.message);
         continue;
       }
-      const w = 240;
-      const h = width && height ? Math.round((240 * height) / width) : 240;
+      const w = 170;
+      const h = width && height ? Math.round((170 * height) / width) : 170;
       await add("photo", { photo_path: path, w, h });
     }
   }
