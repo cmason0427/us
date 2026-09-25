@@ -25,8 +25,8 @@ and photo storage, and Web Push for notifications.
 | `src/lib/series.ts` | Repeating events: every occurrence is its own `events` row sharing `series_id`; edit or delete one, or it and all later |
 | `src/components/DailyRoutines.tsx` | To-do presets marked daily add themselves each day (unique `template_id`+`for_day`); yesterday's unchecked ones clear |
 | `src/components/Status.tsx` | "On my way": one line per person (`statuses`), a quiet push, shown on Home for 3 hours |
-| `src/app/(app)/little` | A cute profile per person (sizes, favorites, preferences as `little_things` rows labelled `field:<key>`, plus misc) and gift ideas (author-only in RLS). Linked quietly from the drawer |
-| `src/app/(app)/nerd` + `src/components/Decks.tsx` | Nerd dungeon rooms: MTG decks built in (room_id null); any other hobby is a `nerd_rooms` row (its own words, optional subtitle and 1–10 meter) reusing shelves, covers, tags, wishlist. "Game night" deck calls are MTG only |
+| `src/app/(app)/little` | A cute profile per person: sections (`little_things.section`) you add to one thing at a time, each with an optional heading and longer note and gift ideas (author-only in RLS). Linked quietly from the drawer |
+| `src/app/(app)/nerd` | Nerd dungeon: fixed hobby tabs in `HOBBIES` (add one = a component + a line). 🃏 Decks (`Decks.tsx`: MTG shelves, chase lists, game night calls) and 🎬 Theater (`Theater.tsx`: `watchlist`, movie/show, tags, search) |
 | `src/app/(app)/garden` | Garden: products bought (`garden_items`) and each person's own rating (`garden_reviews`: high, worth it, effects) |
 | `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
 | `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |

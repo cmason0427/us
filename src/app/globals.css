@@ -893,4 +893,10 @@ div.dash-row { cursor: default; }
 .garden-review { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
 .garden-star-pick { display: flex; gap: 4px; }
 .garden-star-pick button { background: none; border: 0; font-size: 2rem; line-height: 1; color: #c9971c; cursor: pointer; padding: 0 2px; }
-.room-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+
+/* ─── Theater ───────────────────────────────────────────────────────────── */
+.theater-list { display: flex; flex-direction: column; gap: 8px; }
+.theater-item { display: flex; align-items: flex-start; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 12px 14px; }
+.theater-kind { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 1.15rem; background: color-mix(in srgb, #8f6ccf 16%, var(--surface)); flex-shrink: 0; }
+.lt-tile { border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.lt-tile-note { font-size: 0.82rem; color: var(--ink-soft); white-space: pre-wrap; margin-top: 2px; }

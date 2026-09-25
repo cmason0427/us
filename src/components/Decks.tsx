@@ -32,9 +32,8 @@ interface Shelf {
 }
 
 /**
- * A room in the dungeon. MTG decks are built in (id null); every other hobby
- * is a row in nerd_rooms, with its own words for things. Adding a hobby is
- * just making a room: shelves, covers, tags, wishlist and meter all come along.
+ * The words a shelf-of-things hobby uses. Only MTG decks exist today; a future
+ * shelf hobby (board games, minis…) can reuse DeckShelves with its own words.
  */
 export interface Room {
   id: string | null;
@@ -111,16 +110,7 @@ export function useNerd() {
     },
     ["deck_calls"],
   );
-  const { data: rooms = [] } = useLive<Room[]>(
-    "nerd_rooms",
-    async () => {
-      const { data, error } = await supabase.from("nerd_rooms").select("*").order("position").order("created_at");
-      if (error) throw error;
-      return data as Room[];
-    },
-    ["nerd_rooms"],
-  );
-  return { decks, shelves, calls, rooms };
+  return { decks, shelves, calls };
 }
 
 /** 😈 7/10 as ten little pips. */
@@ -681,88 +671,5 @@ function CallForm({ decks, onSend }: { decks: Deck[]; onSend: (deck: string | nu
         Send
       </button>
     </div>
-  );
-}
-
-/* ─── new rooms ─────────────────────────────────────────────────────────── */
-
-const ROOM_IDEAS: Omit<Room, "id">[] = [
-  { name: "D&D", emoji: "🐉", item_word: "character", meter_label: "Level", subtitle_label: "Class & race" },
-  { name: "Board games", emoji: "🎲", item_word: "game", meter_label: "How much we love it", subtitle_label: "Players" },
-  { name: "Video games", emoji: "🎮", item_word: "game", meter_label: "How much we love it", subtitle_label: "Platform" },
-  { name: "Minis", emoji: "⚔️", item_word: "mini", meter_label: "Painted", subtitle_label: "Army" },
-  { name: "Books", emoji: "📚", item_word: "book", meter_label: "Rating", subtitle_label: "Author" },
-];
-
-/** Make a new hobby room: pick an idea to fill it in, or name your own. */
-export function RoomForm({ initial, onDone }: { initial?: Room; onDone: (id?: string) => void }) {
-  const { meId, toast } = useApp();
-  const [f, setF] = useState<Omit<Room, "id">>(initial ?? { name: "", emoji: "", item_word: "", meter_label: "", subtitle_label: "" });
-  const set = (k: keyof Omit<Room, "id">, v: string) => setF({ ...f, [k]: v });
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!f.name.trim()) return;
-    const row = {
-      name: f.name.trim(),
-      emoji: f.emoji?.trim() || null,
-      item_word: f.item_word.trim().toLowerCase() || "item",
-      meter_label: f.meter_label?.trim() || null,
-      subtitle_label: f.subtitle_label?.trim() || null,
-    };
-    const supabase = supabaseBrowser();
-    const res = initial?.id
-      ? await supabase.from("nerd_rooms").update(row).eq("id", initial.id).select("id").single()
-      : await supabase.from("nerd_rooms").insert({ ...row, created_by: meId, position: 99 }).select("id").single();
-    if (res.error) return toast(res.error.message);
-    refreshAll();
-    onDone(res.data.id);
-  }
-  async function remove() {
-    if (!initial?.id || !confirm(`Delete the "${initial.name}" room and everything in it?`)) return;
-    await supabaseBrowser().from("nerd_rooms").delete().eq("id", initial.id);
-    refreshAll();
-    onDone();
-  }
-  return (
-    <form className="stack" onSubmit={submit}>
-      {!initial && (
-        <div className="chips">
-          {ROOM_IDEAS.map((r) => (
-            <button key={r.name} type="button" className="chip chip-sm" onClick={() => setF({ ...r })}>
-              {r.emoji} {r.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="row">
-        <input className="input" style={{ width: 64, textAlign: "center" }} value={f.emoji ?? ""} onChange={(e) => set("emoji", e.target.value.slice(0, 4))} placeholder="🐉" aria-label="Emoji" />
-        <input className="input grow" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Room name (D&D, Board games…)" required />
-      </div>
-      <label className="field">
-        <span>Each thing in it is a…</span>
-        <input className="input" value={f.item_word} onChange={(e) => set("item_word", e.target.value)} placeholder="character, game, book…" />
-      </label>
-      <label className="field">
-        <span>A line under the name (optional)</span>
-        <input className="input" value={f.subtitle_label ?? ""} onChange={(e) => set("subtitle_label", e.target.value)} placeholder="Class, Author, Platform…" />
-      </label>
-      <label className="field">
-        <span>A 1–10 meter (optional)</span>
-        <input className="input" value={f.meter_label ?? ""} onChange={(e) => set("meter_label", e.target.value)} placeholder="Level, How much we love it…" />
-      </label>
-      <p className="small muted">Every room gets shelves, covers, colors, tags and a wishlist.</p>
-      <div className="row-between">
-        {initial?.id ? (
-          <button type="button" className="btn btn-ghost" onClick={remove}>
-            Delete room
-          </button>
-        ) : (
-          <span />
-        )}
-        <button className="btn btn-primary" disabled={!f.name.trim()}>
-          {initial ? "Save" : "Make the room"}
-        </button>
-      </div>
-    </form>
   );
 }
