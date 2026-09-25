@@ -25,7 +25,7 @@ interface DateNote {
   text: string;
   created_at: string;
 }
-interface Person {
+export interface Person {
   id: string;
   name: string;
   relation: string | null;
@@ -142,7 +142,12 @@ export function UsShared() {
                     <strong>{p.name}</strong>
                     {p.relation && <span className="small muted"> · {p.relation}</span>}
                   </span>
-                  {p.birthday && <span className="small faint">🎂 {untilText(daysUntil(p.birthday))}</span>}
+                  {p.birthday && (
+                    <span className="small faint">
+                      🎂 {yearsAtNext(p.birthday) > 0 && Number(p.birthday.slice(0, 4)) > 1900 ? `turns ${yearsAtNext(p.birthday)} ` : ""}
+                      {untilText(daysUntil(p.birthday))}
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
@@ -300,7 +305,7 @@ function DateSheet({ date, notes, onDone }: { date?: UsDate; notes: DateNote[]; 
   );
 }
 
-function PersonSheet({ person, onDone }: { person?: Person; onDone: () => void }) {
+export function PersonSheet({ person, onDone }: { person?: Person; onDone: () => void }) {
   const { meId, toast } = useApp();
   const supabase = supabaseBrowser();
   const [editing, setEditing] = useState(!person);
@@ -387,7 +392,10 @@ function PersonSheet({ person, onDone }: { person?: Person; onDone: () => void }
             <div>
               <dt>Birthday</dt>
               <dd>
-                {format(parseISO(person.birthday), "MMM d, yyyy")} <span className="muted">· {untilText(daysUntil(person.birthday))}</span>
+                {format(parseISO(person.birthday), "MMM d, yyyy")}{" "}
+                <span className="muted">
+                  · {yearsAtNext(person.birthday) - 1 > 0 ? `${yearsAtNext(person.birthday) - (daysUntil(person.birthday) === 0 ? 0 : 1)} now, ` : ""}turns {yearsAtNext(person.birthday)} {untilText(daysUntil(person.birthday))}
+                </span>
                 {person.series_id && <span className="faint"> · 📅</span>}
               </dd>
             </div>

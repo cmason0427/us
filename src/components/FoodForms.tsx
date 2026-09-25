@@ -1,6 +1,6 @@
 "use client";
 
-import { FoodNotes, FoodRating } from "./FoodRating";
+import { FoodRating } from "./FoodRating";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -252,7 +252,6 @@ export function MealDetail({ meal, pantry, onEdit }: { meal: HomeMeal; pantry: M
   return (
     <div className="stack">
       <FoodRating kind="meal" id={meal.id} />
-      <FoodNotes kind="meal" id={meal.id} />
       {ings.length === 0 ? (
         <p className="muted">No ingredients listed.</p>
       ) : (

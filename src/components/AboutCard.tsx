@@ -56,7 +56,12 @@ export function AboutCard({ personId, facts }: { personId: string; facts: AboutF
   const isMe = personId === meId;
   const bday = val(facts, "Birthday");
   const sign = val(facts, "Star sign") || (bday ? starSign(bday) : "");
-  const basics = BASICS.map((b) => ({ ...b, v: b.label === "Star sign" ? sign : val(facts, b.label) })).filter((b) => b.v);
+  // Age from the birthday, then the rest of the quick facts.
+  const age = bday ? yearsAtNext(bday) - (daysUntil(bday) === 0 ? 0 : 1) : null;
+  const basics = [
+    ...(age != null && age > 0 ? [{ label: "Age", icon: "🎈", ph: "", v: String(age) }] : []),
+    ...BASICS.map((b) => ({ ...b, v: b.label === "Star sign" ? sign : val(facts, b.label) })).filter((b) => b.v),
+  ];
   const prompts = PROMPTS.map((p) => ({ ...p, v: val(facts, p.label) })).filter((p) => p.v);
   const days = bday ? daysUntil(bday) : null;
 

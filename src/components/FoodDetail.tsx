@@ -9,7 +9,7 @@ import type { LunchRef } from "@/lib/lunch";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { MealDetail, MealForm, PlaceForm } from "./FoodForms";
-import { FoodNotes, FoodRating } from "./FoodRating";
+import { FoodRating } from "./FoodRating";
 
 type Order = { place_id: string; person_id: string; text: string };
 
@@ -61,7 +61,6 @@ export function PlaceDetail({ place, onEdit }: { place: FoodPlace; onEdit: () =>
         ))}
       </div>
       {place.notes && <p className="card" style={{ whiteSpace: "pre-wrap" }}>{place.notes}</p>}
-      <FoodNotes kind="place" id={place.id} />
       <button className="btn btn-block" onClick={onEdit}>
         Edit place
       </button>

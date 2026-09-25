@@ -44,10 +44,10 @@ interface Review {
 const KINDS: { v: string; label: string }[] = [
   { v: "flower", label: "🌿 Flower" },
   { v: "preroll", label: "🚬 Pre-roll" },
-  { v: "vape", label: "💨 Vape" },
+  { v: "cart", label: "🔋 Cart" },
+  { v: "dispo", label: "💨 Dispo" },
+  { v: "dab", label: "🍯 Dab" },
   { v: "edible", label: "🍬 Edible" },
-  { v: "concentrate", label: "🍯 Concentrate" },
-  { v: "tincture", label: "💧 Tincture" },
   { v: "other", label: "✨ Other" },
 ];
 const STRAIN_TYPES: { v: string; label: string }[] = [

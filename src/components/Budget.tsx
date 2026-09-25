@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import {
   DEFAULT_SETTINGS,
+  balanceNow,
   buildPlan,
   fromBalance,
   categoryStatus,
@@ -68,7 +69,8 @@ export function useBudget() {
   // A recent balance check-in beats the tracked math.
   const safe = real ? { ...real, funSpent: tracked?.funSpent ?? 0 } : tracked;
   const cats = categoryStatus(categories, spends);
-  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, real, tracked, oneoffs };
+  const bal = balanceNow({ balance, spends, incomes, paychecks, oneoffs });
+  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, real, tracked, oneoffs, bal };
 }
 
 const db = () => supabaseBrowser();
@@ -175,6 +177,58 @@ export function MoneyView() {
 
   return (
     <div className="stack">
+      {/* Pinned first: where the number comes from, starting with your real balance. */}
+      <details className="fold fold-pinned">
+        <summary>
+          💡 The big picture
+          {b.bal && <span className="small muted" style={{ fontWeight: 500 }}> · 🏦 {money(b.bal.now)} now</span>}
+        </summary>
+        <section className="small stack-sm money-facts">
+          {b.bal ? (
+            <span>
+              🏦 <strong>{money(b.bal.now)}</strong> in your account now: you checked in {money(b.bal.checked)} on {format(b.bal.asOf, "EEE M/d h:mm a")}
+              {b.bal.spent ? `, minus ${money(b.bal.spent)} logged since` : ""}
+              {b.bal.landed ? `, plus ${money(b.bal.landed)} that's landed since` : ""}. Money that hasn&apos;t arrived yet isn&apos;t counted.{" "}
+              <button className="btn-link small" onClick={() => setSheet("balance")}>
+                update
+              </button>
+            </span>
+          ) : (
+            <span>
+              🏦 No balance yet.{" "}
+              <button className="btn-link small" onClick={() => setSheet("balance")}>
+                Check in what&apos;s in your account
+              </button>{" "}
+              and everything starts from real money.
+            </span>
+          )}
+          {cur && b.real && (
+            <span>
+              Why {money(b.real.left)} is safe: {money(b.bal?.now ?? 0)} now − {money(b.real.billsLeft)} bills still due before payday
+              {b.real.setAside ? ` − ${money(b.real.setAside)} to put aside for later bills` : ""}
+              {b.real.budgetsLeft ? ` − ${money(b.real.budgetsLeft)} left in your category budgets` : ""}
+              {Number(b.settings.cushion) ? ` − ${money(Number(b.settings.cushion))} cushion` : ""}. That lasts until payday {d(cur.end)}; the next check only counts once it lands.
+            </span>
+          )}
+          {cur && !b.real && b.tracked && (
+            <span>
+              Why {money(b.tracked.left)} is safe: this paycheck ({money(cur.income)}) − bills before {d(cur.end)} ({money(cur.billTotal)}) − savings ({money(cur.savings)})
+              {cur.budgets ? ` − category budgets (${money(cur.budgets)})` : ""}
+              {cur.setAside ? ` − put aside for later (${money(cur.setAside)})` : ""} − what you&apos;ve spent ({money(b.tracked.funSpent)}).
+            </span>
+          )}
+        <span>
+            About {money(perMonth)}
+            {monthlyIncomeMax(b.incomes) > perMonth + 1 ? `–${money(monthlyIncomeMax(b.incomes))}` : ""}/mo in, {money(billsMonth)}/mo in bills ({perMonth ? Math.round((billsMonth / perMonth) * 100) : 0}%).
+          </span>
+          {pattern && (
+            <span>
+              You tend to spend on {pattern.days.join(" and ")} ({pattern.share}% of spending). Fun money stretches further if those days get a little extra.
+            </span>
+          )}
+          {cur && cur.held > 0 && <span>After this paycheck you&apos;ll have {money(cur.held)} set aside for upcoming bills. Leave it be.</span>}
+        </section>
+      </details>
       {cur && b.safe && (
         <section className="money-hero">
           <span className="small">safe to spend</span>
@@ -193,9 +247,14 @@ export function MoneyView() {
           </button>
         </section>
       )}
-      <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setSheet("oneoff")}>
-        ＋ extra money or a surprise bill
-      </button>
+      <div className="row wrap" style={{ gap: 12 }}>
+        <button className="btn-link small" onClick={() => setSheet("oneoff")}>
+          ＋ extra money or a surprise bill
+        </button>
+        <button className="btn-link small" onClick={() => setSheet("history")}>
+          📜 my spending log
+        </button>
+      </div>
       <p className="small faint">Tap anything below only when you want the details.</p>
 
       {cur && (
@@ -328,21 +387,6 @@ export function MoneyView() {
       </section>
       </details>
 
-      <details className="fold">
-        <summary>💡 The big picture</summary>
-      <section className="small stack-sm money-facts">
-        <span>
-          About {money(perMonth)}
-          {monthlyIncomeMax(b.incomes) > perMonth + 1 ? `–${money(monthlyIncomeMax(b.incomes))}` : ""}/mo in, {money(billsMonth)}/mo in bills ({perMonth ? Math.round((billsMonth / perMonth) * 100) : 0}%).
-        </span>
-        {pattern && (
-          <span>
-            You tend to spend on {pattern.days.join(" and ")} ({pattern.share}% of spending). Fun money stretches further if those days get a little extra.
-          </span>
-        )}
-        {cur && cur.held > 0 && <span>After this paycheck you&apos;ll have {money(cur.held)} set aside for upcoming bills. Leave it be.</span>}
-      </section>
-      </details>
 
       <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setSetup((s) => !s)}>
         {setup ? "▾" : "▸"} Set up: pay, bills, savings, categories
@@ -436,6 +480,7 @@ export function MoneyView() {
       {sheet === "period" && period && (
         <Sheet title={`Paycheck ${d(period.start)}`} onClose={() => setSheet(null)}>
           <div className="stack-sm">
+            <PaydayAmount period={period} incomes={b.incomes} paychecks={b.paychecks} onDone={() => setSheet(null)} />
             <SplitBar p={period} />
             <ul className="money-lines">
               {period.paychecks.map((pc, i) => (
@@ -771,24 +816,107 @@ function SettingsForm({ initial, onDone }: { initial: Settings; onDone: () => vo
 
 function SpendHistory({ spends, categories }: { spends: Spend[]; categories: Category[] }) {
   const { toast } = useApp();
+  const [editing, setEditing] = useState<string | null>(null);
   const list = [...spends].reverse().slice(0, 80);
   const cat = (id: string | null) => categories.find((c) => c.id === id);
   if (!list.length) return <p className="small muted">Nothing logged yet.</p>;
   return (
     <ul className="pantry-list">
-      {list.map((s) => (
-        <li key={s.id} className="pantry-row">
-          <span className="pantry-name">
-            {cat(s.category_id)?.emoji ?? "🎈"} {s.note ?? cat(s.category_id)?.name ?? "fun money"}
-            <span className="pantry-meta"> {d(s.spent_on)}</span>
-          </span>
-          <span className="small">{money2(Number(s.amount))}</span>
-          <button className="lt-x" aria-label="Delete" onClick={() => run(db().from("budget_spend").delete().eq("id", s.id), toast)}>
-            ×
-          </button>
-        </li>
-      ))}
+      {list.map((s) =>
+        editing === s.id ? (
+          <li key={s.id} className="spend-edit">
+            <SpendEdit spend={s} categories={categories} onDone={() => setEditing(null)} />
+          </li>
+        ) : (
+          <li key={s.id} className="pantry-row">
+            <button className="pantry-name" onClick={() => setEditing(s.id)} title="Tap to fix it">
+              {cat(s.category_id)?.emoji ?? "🎈"} {s.note ?? cat(s.category_id)?.name ?? "fun money"}
+              <span className="pantry-meta"> {d(s.spent_on)}</span>
+            </button>
+            <span className="small">{money2(Number(s.amount))}</span>
+            <button className="lt-x" aria-label="Delete" onClick={() => confirm("Delete this?") && run(db().from("budget_spend").delete().eq("id", s.id), toast)}>
+              ×
+            </button>
+          </li>
+        ),
+      )}
     </ul>
+  );
+}
+
+/** Fix a log: the receipt said $50 after tip, not $40. */
+function SpendEdit({ spend, categories, onDone }: { spend: Spend; categories: Category[]; onDone: () => void }) {
+  const { toast } = useApp();
+  const [f, setF] = useState({ amount: String(Number(spend.amount)), note: spend.note ?? "", cat: spend.category_id, day: spend.spent_on });
+  return (
+    <form
+      className="stack-sm"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!(Number(f.amount) > 0)) return;
+        if (await run(db().from("budget_spend").update({ amount: Number(f.amount), note: f.note.trim() || null, category_id: f.cat, spent_on: f.day }).eq("id", spend.id), toast)) onDone();
+      }}
+    >
+      <div className="grid-2">
+        <div className="money-input">
+          <span>$</span>
+          <input className="input input-sm" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d.]/g, "") })} autoFocus aria-label="Amount" />
+        </div>
+        <input className="input input-sm" type="date" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value })} aria-label="Day" />
+      </div>
+      <input className="input input-sm" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="what" aria-label="What" />
+      <div className="chips">
+        <button type="button" className="chip chip-sm" aria-pressed={f.cat === null} onClick={() => setF({ ...f, cat: null })}>
+          🎈 fun money
+        </button>
+        {categories.map((c) => (
+          <button key={c.id} type="button" className="chip chip-sm" aria-pressed={f.cat === c.id} onClick={() => setF({ ...f, cat: c.id })}>
+            {c.emoji} {c.name}
+          </button>
+        ))}
+      </div>
+      <div className="row">
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+        <button className="btn btn-sm btn-primary">Save</button>
+      </div>
+    </form>
+  );
+}
+
+/** Set what a specific payday will actually be (or was), ahead of time or after. */
+function PaydayAmount({ period, incomes, paychecks, onDone }: { period: Period; incomes: Income[]; paychecks: Paycheck[]; onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const inc = incomes.find((i) => period.paychecks.some((p) => p.name === i.name));
+  const current = inc ? paychecks.find((p) => p.income_id === inc.id && p.paid_on === iso(period.start)) : undefined;
+  const [amt, setAmt] = useState(current ? String(Number(current.amount)) : "");
+  if (!inc) return null;
+  return (
+    <form
+      className="quick-add"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        await db().from("budget_paychecks").delete().eq("income_id", inc.id).eq("paid_on", iso(period.start));
+        if (Number(amt) > 0) await run(db().from("budget_paychecks").insert({ owner: meId, income_id: inc.id, paid_on: iso(period.start), amount: Number(amt) }), toast);
+        refreshAll();
+        toast(Number(amt) > 0 ? "Payday updated" : "Back to the usual amount");
+        onDone();
+      }}
+    >
+      <div className="money-input grow">
+        <span>💵 $</span>
+        <input
+          className="input input-sm"
+          inputMode="decimal"
+          value={amt}
+          onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ""))}
+          placeholder={`this check (usually ${money2(Number(inc.amount))}${inc.amount_max ? `–${money2(Number(inc.amount_max))}` : ""})`}
+          aria-label="This payday's amount"
+        />
+      </div>
+      <button className="btn btn-sm btn-primary">Set</button>
+    </form>
   );
 }
 
@@ -824,7 +952,7 @@ function BalanceForm({ tracked, onDone }: { tracked: number | null; onDone: () =
 }
 
 /** A one-time extra: money in (bonus, sold something) or a bill that popped up. */
-function OneOffForm({ onDone }: { onDone: () => void }) {
+export function OneOffForm({ onDone }: { onDone: () => void }) {
   const { meId, toast } = useApp();
   const [kind, setKind] = useState<"in" | "out">("out");
   const [name, setName] = useState("");

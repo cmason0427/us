@@ -8,7 +8,6 @@ import { useMeals, usePlaces } from "@/lib/foodData";
 import { toDateInput } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
-import { useFoodNotes } from "./FoodRating";
 
 interface Lunch {
   id: string;
@@ -22,7 +21,6 @@ interface Lunch {
   verdict_note: string | null;
 }
 
-const VERDICT: Record<NonNullable<Lunch["verdict"]>, string> = { loved: "😍 Loved it", liked: "🙂 Good", meh: "😐 Meh", no: "🙅 Not again" };
 
 /**
  * What got packed and how it went over. The maker logs it; the eater taps a
@@ -41,14 +39,14 @@ export function LunchLog() {
     ["lunch_log"],
   );
   const [adding, setAdding] = useState(false);
-  const { data: notes = [] } = useLive<LunchNote[]>(
-    "lunch_notes",
+  const { data: scores = [] } = useLive<Score[]>(
+    "lunch_ratings",
     async () => {
-      const { data, error } = await supabase.from("lunch_notes").select("*").order("created_at");
+      const { data, error } = await supabase.from("lunch_ratings").select("lunch_id, user_id, score");
       if (error) throw error;
-      return data as LunchNote[];
+      return data as Score[];
     },
-    ["lunch_notes"],
+    ["lunch_ratings"],
   );
   const [open, setOpen] = useState<Lunch | null>(null);
 
@@ -59,14 +57,16 @@ export function LunchLog() {
     const k = keyOf(l);
     const t = tally.get(k) ?? { loved: 0, no: 0, n: 0 };
     t.n++;
-    if (l.verdict === "loved") t.loved++;
-    if (l.verdict === "no") t.no++;
+    const ss = scores.filter((r) => r.lunch_id === l.id).map((r) => r.score);
+    const avg = ss.length ? ss.reduce((a, b) => a + b, 0) / ss.length : null;
+    if (avg != null && avg >= 8) t.loved++;
+    if (avg != null && avg <= 3) t.no++;
     tally.set(k, t);
   }
   const nameFor = (k: string) => log.find((l) => keyOf(l) === k)!.what;
   const hits = [...tally].filter(([, t]) => t.loved > 0).sort((a, b) => b[1].loved - a[1].loved).slice(0, 5);
   const misses = [...tally].filter(([, t]) => t.no > 0).map(([k]) => k);
-  const waiting = log.filter((l) => l.for_user === meId && !l.verdict);
+  const waiting = log.filter((l) => (l.for_user === meId || l.for_user === null) && !scores.some((r) => r.lunch_id === l.id && r.user_id === meId));
 
   return (
     <div className="stack">
@@ -105,27 +105,7 @@ export function LunchLog() {
                   </span>
                 </span>
               </button>
-              {l.for_user === meId ? (
-                <div className="chips">
-                  {(Object.keys(VERDICT) as NonNullable<Lunch["verdict"]>[]).map((v) => (
-                    <button
-                      key={v}
-                      className="chip chip-sm"
-                      aria-pressed={l.verdict === v}
-                      onClick={async () => {
-                        await supabase.from("lunch_log").update({ verdict: l.verdict === v ? null : v }).eq("id", l.id);
-                        refreshAll();
-                      }}
-                    >
-                      {VERDICT[v]}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className="small muted">{l.verdict ? VERDICT[l.verdict] : "not rated yet"}</span>
-              )}
-              {l.verdict_note && <span className="small">“{l.verdict_note}”</span>}
-              <LunchNotes lunch={l} notes={notes.filter((n) => n.lunch_id === l.id)} />
+              <LunchScores lunch={l} scores={scores.filter((r) => r.lunch_id === l.id)} />
             </li>
           ))}
         </ul>
@@ -239,80 +219,64 @@ function LunchForm({ initial, onDone }: { initial?: Lunch; onDone: () => void })
   );
 }
 
-interface LunchNote {
-  id: string;
+interface Score {
   lunch_id: string;
-  author: string;
-  text: string;
+  user_id: string;
+  score: number;
 }
 
-/** Either of you can say what you thought; 📌 keeps a note on the meal itself (Food). */
-function LunchNotes({ lunch, notes }: { lunch: Lunch; notes: LunchNote[] }) {
-  const { meId, nameOf, toast } = useApp();
-  const saved = useFoodNotes();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  const supabase = supabaseBrowser();
-  const target = lunch.meal_id ? { kind: "meal" as const, id: lunch.meal_id } : lunch.place_id ? { kind: "place" as const, id: lunch.place_id } : null;
-  const isSaved = (n: LunchNote) => !!target && saved.some((f) => f.kind === target.kind && f.ref_id === target.id && f.text === n.text);
-  if (!open && !notes.length)
-    return (
-      <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0 }} onClick={() => setOpen(true)}>
-        💬 add a thought
-      </button>
-    );
+/** 1 never again · 4 no opinion · 10 new favorite. */
+export const scoreWord = (n: number) =>
+  n <= 1 ? "never make me eat this again" : n <= 3 ? "not for me" : n === 4 ? "no opinion" : n <= 6 ? "it's fine" : n <= 8 ? "really good" : n === 9 ? "love it" : "new fav food";
+
+/**
+ * Both of you slide how much you liked it. If it's one of our meals or places,
+ * the score also lands on it in Food, so planning meals remembers.
+ */
+function LunchScores({ lunch, scores }: { lunch: Lunch; scores: Score[] }) {
+  const { meId, profiles, toast } = useApp();
+  const mine = scores.find((r) => r.user_id === meId)?.score;
+  const [draft, setDraft] = useState<number | null>(null);
+  const [editing, setEditing] = useState(false);
+  const shown = draft ?? mine ?? 4;
+  async function save(n: number) {
+    const supabase = supabaseBrowser();
+    const { error } = await supabase.from("lunch_ratings").upsert({ lunch_id: lunch.id, user_id: meId, score: n, updated_at: new Date().toISOString() });
+    if (error) return toast(error.message);
+    const target = lunch.meal_id ? { kind: "meal", ref_id: lunch.meal_id } : lunch.place_id ? { kind: "place", ref_id: lunch.place_id } : null;
+    if (target) await supabase.from("food_ratings").upsert({ ...target, user_id: meId, score: n, updated_at: new Date().toISOString() });
+    setDraft(null);
+    setEditing(false);
+    refreshAll();
+  }
+  const others = profiles.filter((p) => p.id !== meId);
   return (
-    <div className="note-thread">
-      {notes.map((n) => (
-        <div key={n.id} className="note-line">
-          <strong className="small">{n.author === meId ? "you" : nameOf(n.author)}</strong>
-          <span className="grow">{n.text}</span>
-          {target &&
-            (isSaved(n) ? (
-              <span className="small faint">📌 saved</span>
-            ) : (
-              <button
-                className="btn-link small"
-                onClick={async () => {
-                  const { error } = await supabase.from("food_notes").insert({ kind: target.kind, ref_id: target.id, author: n.author, text: n.text });
-                  if (error) return toast(error.message);
-                  refreshAll();
-                  toast(`Saved to ${lunch.what} 📌`);
-                }}
-              >
-                📌 save to meal
-              </button>
-            ))}
-          {n.author === meId && (
-            <button
-              className="lt-x"
-              aria-label="Delete"
-              onClick={async () => {
-                await supabase.from("lunch_notes").delete().eq("id", n.id);
-                refreshAll();
-              }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
-      <form
-        className="quick-add"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!draft.trim()) return;
-          const { error } = await supabase.from("lunch_notes").insert({ lunch_id: lunch.id, author: meId, text: draft.trim() });
-          if (error) return toast(error.message);
-          setDraft("");
-          refreshAll();
-        }}
-      >
-        <input className="input input-sm grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="what you thought…" aria-label="Note" />
-        <button className="btn btn-sm" disabled={!draft.trim()}>
-          Add
+    <div className="lunch-scores">
+      {others.map((p) => {
+        const r = scores.find((x) => x.user_id === p.id);
+        return (
+          <span key={p.id} className="small muted">
+            {p.display_name}: {r ? `${r.score}/10 · ${scoreWord(r.score)}` : "not rated"}
+          </span>
+        );
+      })}
+      {editing || mine == null ? (
+        editing ? (
+          <label className="feel-row lunch-slider">
+            <span className="feel-name">{shown}/10</span>
+            <input type="range" min={1} max={10} value={shown} onChange={(e) => setDraft(Number(e.target.value))} onPointerUp={() => save(shown)} onKeyUp={() => save(shown)} aria-label="How much you liked it" />
+            <span className="small muted">{scoreWord(shown)}</span>
+          </label>
+        ) : (
+          <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0 }} onClick={() => setEditing(true)}>
+            rate it 1–10
+          </button>
+        )
+      ) : (
+        <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0, textDecoration: "none" }} onClick={() => setEditing(true)}>
+          you: {mine}/10 · {scoreWord(mine)}
         </button>
-      </form>
+      )}
     </div>
   );
 }

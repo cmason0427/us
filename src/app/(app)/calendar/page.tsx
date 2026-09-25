@@ -416,6 +416,16 @@ function Empty({ text }: { text: string }) {
   );
 }
 
+/** A birthday or holiday that day shows its emoji by the date (🎂 for birthdays). */
+function dayEmoji(list: CalEvent[]) {
+  for (const e of list) {
+    if (!e.series_id || !e.all_day) continue;
+    const m = e.title.match(/^(\p{Extended_Pictographic}\uFE0F?)/u);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 type PlanProps = { plansOn: (d: Date) => DayPlan[]; onOpenPlan: (id: string) => void };
 
 function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan }: { events: CalEvent[]; from: Date; to: Date; onOpen: (e: CalEvent) => void } & PlanProps) {
@@ -469,7 +479,10 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cur
           const cls = ["mcell", !isSameMonth(d, cursor) && "other", isToday(d) && "today", isSameDay(d, cursor) && "selected"].filter(Boolean).join(" ");
           return (
             <button key={d.toISOString()} className={cls} onClick={() => onPickDay(d)} aria-label={`${format(d, "MMMM d")}, ${list.length} plans`}>
-              <span className="mnum">{format(d, "d")}</span>
+              <span className="mnum-row">
+                <span className="mnum">{format(d, "d")}</span>
+                {dayEmoji(list) && <span className="memoji">{dayEmoji(list)}</span>}
+              </span>
               <span className="mdots">
                 {list.slice(0, 3).map((e) => (
                   <i key={e.id} className="mdot ev" data-type={effectiveType(e)} data-person={personColor(e)} data-color={e.color ?? undefined} style={markStyle(e)} />

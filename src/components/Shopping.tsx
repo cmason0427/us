@@ -450,42 +450,21 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
       ) : (
         <input type="checkbox" className="check" checked={i.bought} onChange={(e) => toggleBought(i, e.currentTarget)} aria-label={`Bought ${i.name}`} />
       )}
-      <div className="grow">
-        <span className="row" style={{ gap: 6, display: "inline-flex" }}>
-          <button className="task-title task-edit" onClick={() => setEditing(i)}>
-            {i.name}
-          </button>
-          {i.link && (
-            <a href={i.link} target="_blank" rel="noreferrer" className="order-link" aria-label={`Order ${i.name} online`} title="Can be ordered: tap to open the link">
-              🛍️
-            </a>
-          )}
-        </span>
-        {(i.detail || i.store_ids.length > 0) && (
-          <div className="small muted row wrap" style={{ gap: 6 }}>
-            {i.detail && <span>{i.detail}</span>}
-            {i.store_ids.map((id) => storeName(id) && (
-              <span key={id} className="sticker sage">
-                {storeName(id)}
-              </span>
-            ))}
-          </div>
-        )}
-        {i.note && <div className="small shop-note">📝 {i.note}</div>}
-        {i.task_id && !i.bought && (
-          <div className="small muted row" style={{ gap: 6 }}>
-            📋 On a to-do
-            <button className="btn-link small" onClick={() => moveBack(i)}>
-              Move back
-            </button>
-          </div>
-        )}
-        {!i.bought && !selecting && !i.task_id && (
-          <button className={`claim${i.claimed_by ? " claimed" : ""}`} onClick={() => claim(i)} aria-pressed={i.claimed_by === meId}>
-            {i.claimed_by === meId ? "🙋 You've got this" : i.claimed_by ? `🙋 ${nameOf(i.claimed_by)}'s got this` : "🙋 I got this"}
-          </button>
-        )}
-      </div>
+      {/* Just the essentials up front; details, notes and stores are one tap away. */}
+      <button className="grow task-title task-edit shop-name" onClick={() => setEditing(i)}>
+        {i.name}
+        {i.task_id && !i.bought && <span className="shop-more"> 📋</span>}
+      </button>
+      {i.link && (
+        <a href={i.link} target="_blank" rel="noreferrer" className="order-link" aria-label={`Order ${i.name} online`} title="Order online">
+          🛍️
+        </a>
+      )}
+      {!i.bought && !selecting && !i.task_id && (
+        <button className={`claim claim-sm${i.claimed_by ? " claimed" : ""}`} onClick={() => claim(i)} aria-pressed={i.claimed_by === meId}>
+          {i.claimed_by === meId ? "🙋 you" : i.claimed_by ? `🙋 ${nameOf(i.claimed_by)}` : "🙋 I got this"}
+        </button>
+      )}
       {!selecting && !filtering && handle}
     </div>
   );
@@ -614,7 +593,24 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
       )}
       {editing && (
         <Sheet title={editing.name} onClose={() => setEditing(null)}>
-          <ShopItemForm initial={editing} onDone={() => setEditing(null)} />
+          <div className="stack">
+            {(editing.detail || editing.store_ids.length > 0 || editing.note) && (
+              <div className="small muted stack-sm">
+                {editing.detail && <span>{editing.detail}</span>}
+                {editing.store_ids.length > 0 && <span>{editing.store_ids.map(storeName).filter(Boolean).join(", ")}</span>}
+                {editing.note && <span>📝 {editing.note}</span>}
+              </div>
+            )}
+            {editing.task_id && !editing.bought && (
+              <div className="small muted row" style={{ gap: 6 }}>
+                📋 On a to-do
+                <button className="btn-link small" onClick={() => (moveBack(editing), setEditing(null))}>
+                  Move back
+                </button>
+              </div>
+            )}
+            <ShopItemForm initial={editing} onDone={() => setEditing(null)} />
+          </div>
         </Sheet>
       )}
     </div>

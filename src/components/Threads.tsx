@@ -45,7 +45,7 @@ export function useThreads() {
   return { threads, isNew };
 }
 
-const EMOJI = ["💭", "🎃", "🎄", "✈️", "🏠", "🎁", "🍽️", "🐶", "💡", "🛋️"];
+const EMOJI = ["🗒️", "🎃", "🎄", "✈️", "🏠", "🎁", "🍽️", "🐶", "💡", "🛋️"];
 
 /**
  * Threads sit at the top of the feed: little shared boards for brainstorming
@@ -64,7 +64,7 @@ export function ThreadStrip() {
     <div className="thread-strip">
       {active.map((t) => (
         <button key={t.id} className={`thread-chip${isNew(t) ? " is-new" : ""}`} onClick={() => setOpen(t.id)}>
-          <span>{t.emoji ?? "💭"}</span>
+          <span>{t.emoji ?? "🗒️"}</span>
           <span className="thread-chip-title">{t.title}</span>
           {isNew(t) && (
             <span className="thread-dot" aria-label={`${nameOf(t.last_by)} added something`}>
@@ -74,9 +74,9 @@ export function ThreadStrip() {
         </button>
       ))}
       <button className="thread-chip thread-new" onClick={() => setCreating(true)}>
-        ＋ thread
+        ＋ board
       </button>
-      {active.some(isNew) && <p className="small thread-note">{nameOf(active.find(isNew)!.last_by)} added to {active.filter(isNew).length === 1 ? "a thread" : "some threads"} 💭</p>}
+      {active.some(isNew) && <p className="small thread-note">{nameOf(active.find(isNew)!.last_by)} added to {active.filter(isNew).length === 1 ? "a board" : "some boards"} 🗒️</p>}
       {creating && (
         <NewThread
           onDone={(id) => {
@@ -92,7 +92,7 @@ export function ThreadStrip() {
 export function NewThread({ onDone, bare = false }: { onDone: (id?: string) => void; bare?: boolean }) {
   const { meId, toast } = useApp();
   const [title, setTitle] = useState("");
-  const [emoji, setEmoji] = useState("💭");
+  const [emoji, setEmoji] = useState("🗒️");
   const form = (
       <form
         className="stack"
@@ -121,13 +121,13 @@ export function NewThread({ onDone, bare = false }: { onDone: (id?: string) => v
   );
   if (bare) return form;
   return (
-    <Sheet title="New thread" onClose={() => onDone()}>
+    <Sheet title="New board" onClose={() => onDone()}>
       {form}
     </Sheet>
   );
 }
 
-/** Archived threads, for the Saved page. */
+/** Archived boards, for the Saved page. */
 export function ArchivedThreads() {
   const { threads } = useThreads();
   const router = useRouter();
@@ -135,12 +135,12 @@ export function ArchivedThreads() {
   if (!archived.length) return null;
   return (
     <section style={{ marginTop: 16 }}>
-      <h3 className="pantry-h">Archived threads</h3>
+      <h3 className="pantry-h">Archived boards</h3>
       <ul className="mini-list">
         {archived.map((t) => (
           <li key={t.id}>
             <button onClick={() => router.push(`/threads/${t.id}`)} style={{ border: "1px solid var(--line)" }}>
-              <span className="mini-emoji">{t.emoji ?? "💭"}</span>
+              <span className="mini-emoji">{t.emoji ?? "🗒️"}</span>
               <span className="grow">{t.title}</span>
             </button>
           </li>

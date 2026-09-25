@@ -295,3 +295,25 @@ export function fromBalance(balance: Balance | undefined, current: Period | null
   const daysLeft = Math.max(1, differenceInCalendarDays(current.end, startOfDay(today)));
   return { left, perDay: left / daysLeft, daysLeft, asOf, billsLeft, budgetsLeft, setAside: current.setAside, spentSince };
 }
+
+/**
+ * Your account balance right now, from the last check-in: minus what you've
+ * logged since, plus any paydays or extra money that have already landed.
+ * Nothing that hasn't arrived yet is counted.
+ */
+export function balanceNow(opts: { balance: Balance | undefined; spends: Spend[]; incomes: Income[]; paychecks: Paycheck[]; oneoffs: OneOff[]; today?: Date }) {
+  const { balance } = opts;
+  if (!balance) return null;
+  const asOf = new Date(balance.as_of);
+  const today = opts.today ?? new Date();
+  const spent = opts.spends.filter((s) => (s.created_at ? new Date(s.created_at) > asOf : s.spent_on > iso(asOf))).reduce((a, s) => a + Number(s.amount), 0);
+  let landed = 0;
+  for (const i of opts.incomes) {
+    for (const d of payDates(i, addDays(startOfDay(asOf), 1), today)) {
+      const actual = opts.paychecks.find((p) => p.income_id === i.id && p.paid_on === iso(d));
+      landed += actual ? Number(actual.amount) : Number(i.amount);
+    }
+  }
+  landed += opts.oneoffs.filter((o) => o.kind === "in" && o.on_date > iso(asOf) && o.on_date <= iso(today)).reduce((a, o) => a + Number(o.amount), 0);
+  return { now: Number(balance.amount) - spent + landed, checked: Number(balance.amount), asOf, spent, landed };
+}

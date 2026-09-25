@@ -6,10 +6,10 @@ import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
 import { NewThread } from "./Threads";
-import { SpendForm } from "./Budget";
+import { OneOffForm, SpendForm } from "./Budget";
 import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
-import { Sticker, type StickerName } from "./Sticker";
+import { type StickerName } from "./Sticker";
 import { StarForm } from "./StarForm";
 import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
@@ -28,11 +28,11 @@ const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Us",
     items: [
-      { kind: "post", emoji: "🌼", label: "Update", art: "wiley_face" },
-      { kind: "star", emoji: "⭐", label: "Send a star" },
+      { kind: "post", emoji: "🌼", label: "Update" },
+      { kind: "star", emoji: "⭐", label: "Star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
       { kind: "status", emoji: "🚗", label: "On my way" },
-      { kind: "thread", emoji: "🗒️", label: "New thread" },
+      { kind: "thread", emoji: "🗒️", label: "Board" },
       { kind: "deck-update", emoji: "🃏", label: "Deck update" },
     ],
   },
@@ -47,9 +47,9 @@ const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Food",
     items: [
-      { kind: "meal-suggest", emoji: "🍽️", label: "Meal suggestion" },
+      { kind: "meal-suggest", emoji: "🍽️", label: "Suggest a meal" },
       { kind: "meal", emoji: "🍳", label: "Home meal" },
-      { kind: "place", emoji: "📍", label: "Place to eat" },
+      { kind: "place", emoji: "📍", label: "Place" },
     ],
   },
   {
@@ -57,17 +57,23 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "task", emoji: "✅", label: "To-do" },
       { kind: "shop", emoji: "🛒", label: "Shopping" },
-      { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_walk" },
-      { kind: "goal", emoji: "💰", label: "Savings goal" },
-      { kind: "spend", emoji: "💸", label: "I spent money" },
+      { kind: "activity", emoji: "✨", label: "Activity idea" },
+      { kind: "goal", emoji: "🎯", label: "Savings goal" },
     ],
   },
   {
-    title: "The dogs",
+    title: "Dogs",
     items: [
-      { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "duo_faces" },
-      { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_sleep" },
-      { kind: "dog-preset", emoji: "📌", label: "New dog preset", art: "wiley_down" },
+      { kind: "dog-note", emoji: "🐾", label: "Dog note" },
+      { kind: "dog-task", emoji: "🦴", label: "Dog to-do" },
+      { kind: "dog-preset", emoji: "📌", label: "Dog preset" },
+    ],
+  },
+  {
+    title: "Money · just you",
+    items: [
+      { kind: "spend", emoji: "💸", label: "I spent" },
+      { kind: "oneoff", emoji: "⚡", label: "Extra money / surprise bill" },
     ],
   },
 ];
@@ -93,7 +99,8 @@ const TITLES: Record<AddKind, string> = {
   little: "Little things",
   vibe: "Vibe check",
   "deck-update": "Deck update",
-  thread: "New thread",
+  thread: "New board",
+  oneoff: "Something extra (just you)",
   spend: "I spent money (just you)",
 };
 
@@ -122,17 +129,15 @@ export function AddSheet() {
 
   if (addOpen === "menu") {
     return (
-      <Sheet title="Add something" onClose={closeAdd}>
-        <div className="stack">
+      <Sheet title="Add" onClose={closeAdd}>
+        <div className="add-menu">
           {GROUPS.map((g) => (
-            <section key={g.title}>
-              <div className="small muted" style={{ fontWeight: 650, marginBottom: 6 }}>
-                {g.title}
-              </div>
-              <div className="add-grid">
+            <section key={g.title} className="add-group">
+              <h3 className="add-group-title">{g.title}</h3>
+              <div className="add-pills">
                 {g.items.map((m) => (
-                  <button key={m.kind} className="tile" onClick={() => openAdd(m.kind)}>
-                    {m.art ? <Sticker name={m.art} size={48} /> : <span className="tile-emoji">{m.emoji}</span>}
+                  <button key={m.kind} className="add-pill" onClick={() => openAdd(m.kind)}>
+                    <span aria-hidden>{m.emoji}</span>
                     {m.label}
                   </button>
                 ))}
@@ -150,6 +155,8 @@ export function AddSheet() {
       {addOpen === "deck-update" && <PostComposer deckId="pick" onDone={closeAdd} />}
       {addOpen === "thread" && <NewThread bare onDone={closeAdd} />}
       {addOpen === "spend" && <SpendForm onDone={closeAdd} />}
+      {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}
+      {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}
       {addOpen === "event" && <EventForm onDone={closeAdd} />}
       {addOpen === "star" && <StarForm onDone={closeAdd} />}
       {addOpen === "dog-note" && <PostComposer dogNote onDone={closeAdd} />}

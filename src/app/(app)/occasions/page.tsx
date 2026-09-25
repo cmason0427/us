@@ -4,11 +4,12 @@ import { useState } from "react";
 import { differenceInCalendarDays, format, startOfDay } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { addYearlyDates, birthdayTitle, ordinal, removeYearly, untilText } from "@/lib/annual";
+import { addYearly, addYearlyDates, birthdayTitle, daysUntil, ordinal, removeYearly, untilText, yearsAtNext } from "@/lib/annual";
 import { COMMON, MON, ORD, WD, nextDate, ruleText, upcomingDates, type Occasion } from "@/lib/occasions";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
+import { PersonSheet, type Person } from "@/components/UsShared";
 
 const KIND_LABEL: Record<Occasion["kind"], string> = { holiday: "Holidays", birthday: "Birthdays", other: "Other dates" };
 
@@ -74,6 +75,7 @@ export default function OccasionsPage() {
         </div>
       )}
       {list.length === 0 && <p className="small muted">Nothing yet.</p>}
+      <OurBirthdays />
       {(["birthday", "holiday", "other"] as const).map((k) => {
         const group = list.filter((o) => o.kind === k).sort((a, b) => days(a) - days(b));
         if (!group.length) return null;
@@ -250,5 +252,90 @@ function OccasionForm({ initial, onDone }: { initial?: Occasion; onDone: () => v
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Birthdays that live elsewhere (your profiles in Little things, people in
+ * Us), listed here too so every birthday is in one place and editable.
+ */
+function OurBirthdays() {
+  const { nameOf, meId, toast } = useApp();
+  const supabase = supabaseBrowser();
+  const { data: profileBdays = [] } = useLive<{ id: string; about_user: string; text: string; series_id: string | null }[]>(
+    "bdays:profiles",
+    async () => {
+      const { data, error } = await supabase.from("little_things").select("id, about_user, text, series_id").eq("section", "about").eq("label", "Birthday");
+      if (error) throw error;
+      return data;
+    },
+    ["little_things"],
+  );
+  const { data: people = [] } = useLive<Person[]>(
+    "bdays:people",
+    async () => {
+      const { data, error } = await supabase.from("people").select("*").not("birthday", "is", null);
+      if (error) throw error;
+      return data as Person[];
+    },
+    ["people"],
+  );
+  const [person, setPerson] = useState<Person | null>(null);
+  const [mine, setMine] = useState<{ id: string; about_user: string; text: string; series_id: string | null } | null>(null);
+  const [date, setDate] = useState("");
+  const rows = [
+    ...profileBdays.map((b) => ({ key: b.id, name: b.about_user === meId ? "me" : nameOf(b.about_user), iso: b.text, open: () => (setMine(b), setDate(b.text)) })),
+    ...people.map((p) => ({ key: p.id, name: p.name, iso: p.birthday!, open: () => setPerson(p) })),
+  ].sort((a, b) => daysUntil(a.iso) - daysUntil(b.iso));
+  if (!rows.length) return null;
+  return (
+    <div className="pantry-group" style={{ marginBottom: 10 }}>
+      <h3 className="pantry-h">Our people (from Little things)</h3>
+      <ul className="mini-list">
+        {rows.map((r) => (
+          <li key={r.key}>
+            <button onClick={r.open}>
+              <span className="mini-emoji">🎂</span>
+              <span className="grow">
+                <strong>{r.name}</strong>
+                <span className="small faint"> {format(new Date(r.iso + "T00:00"), "MMM d")}</span>
+              </span>
+              <span className={`small ${daysUntil(r.iso) < 14 ? "soon" : "faint"}`}>
+                turns {yearsAtNext(r.iso)} {untilText(daysUntil(r.iso))}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {person && (
+        <Sheet title={person.name} onClose={() => setPerson(null)}>
+          <PersonSheet person={person} onDone={() => setPerson(null)} />
+        </Sheet>
+      )}
+      {mine && (
+        <Sheet title={`${mine.about_user === meId ? "My" : `${nameOf(mine.about_user)}'s`} birthday`} onClose={() => setMine(null)}>
+          <form
+            className="stack-sm"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!date) return;
+              await supabase.from("little_things").update({ text: date }).eq("id", mine.id);
+              // Keep the calendar in step with the new date.
+              if (mine.series_id && date !== mine.text) {
+                await removeYearly(mine.series_id);
+                const id = await addYearly(birthdayTitle(nameOf(mine.about_user), Number(date.slice(0, 4))), date, meId);
+                await supabase.from("little_things").update({ series_id: id }).eq("id", mine.id);
+              }
+              refreshAll();
+              toast("Saved 🎂");
+              setMine(null);
+            }}
+          >
+            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Birthday" />
+            <button className="btn btn-primary btn-block">Save</button>
+          </form>
+        </Sheet>
+      )}
+    </div>
   );
 }

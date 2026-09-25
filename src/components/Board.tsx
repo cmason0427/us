@@ -25,12 +25,13 @@ interface Item {
   h: number | null;
   color: string | null;
   z: number;
+  rot: number;
   created_at: string;
 }
-type Box = { x: number; y: number; w: number; h: number };
+type Box = { x: number; y: number; w: number; h: number; rot: number };
 
-const BOARD_W = 1400;
-const BOARD_H = 1800;
+const BOARD_W = 700;
+const BOARD_H = 900;
 const STICKY = ["#fff3a8", "#ffd1dc", "#c8f0c8", "#cfe3ff", "#ffd9b3", "#e6d4ff"];
 const PENS = ["#3b2a2a", "#e0457b", "#2f9a55", "#3f86d4", "#e69b1a"];
 const SIZE: Record<Item["kind"], [number, number]> = { note: [240, 110], sticky: [170, 160], photo: [240, 240], link: [240, 64], ink: [100, 100] };
@@ -38,12 +39,12 @@ const SIZE: Record<Item["kind"], [number, number]> = { note: [240, 110], sticky:
 /** Where an item sits; older items (from before boards) get a tidy spot. */
 function boxOf(i: Item, index: number): Box {
   const [w, h] = SIZE[i.kind];
-  if (i.x != null && i.y != null) return { x: i.x, y: i.y, w: i.w ?? w, h: i.h ?? h };
-  return { x: 24 + (index % 2) * 270, y: 24 + Math.floor(index / 2) * 270, w, h };
+  if (i.x != null && i.y != null) return { x: i.x, y: i.y, w: i.w ?? w, h: i.h ?? h, rot: i.rot ?? 0 };
+  return { x: 16 + (index % 2) * 260, y: 16 + Math.floor(index / 2) * 250, w, h, rot: i.rot ?? 0 };
 }
 
 /**
- * A thread as a shared board: sticky notes, pictures, links and doodles you
+ * A board: sticky notes, pictures, links and doodles you
  * can drag anywhere and resize with a corner. Changes land for the other
  * person quietly; no feed, no push.
  */
@@ -73,7 +74,9 @@ export function Board({ thread }: { thread: Thread }) {
   const [stroke, setStroke] = useState<{ x: number; y: number }[] | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{ id: string; mode: "move" | "resize"; sx: number; sy: number; box: Box; moved: boolean } | null>(null);
+  // The finger's gesture moves the element directly (no re-render per frame),
+  // then saves once on release. Much smoother on phones.
+  const gesture = useRef<{ id: string; el: HTMLElement; mode: "move" | "resize" | "rotate"; sx: number; sy: number; box: Box; next: Box; moved: boolean } | null>(null);
 
   // Opening the board (and anything that lands while it's open) counts as seen.
   const last = items[items.length - 1]?.created_at ?? thread.last_at;
@@ -137,12 +140,22 @@ export function Board({ thread }: { thread: Thread }) {
   }
 
   /* ── dragging and resizing ─────────────────────────────────────────── */
-  function down(e: React.PointerEvent, i: Item, mode: "move" | "resize") {
+  function down(e: React.PointerEvent, i: Item, mode: "move" | "resize" | "rotate") {
     if (tool !== "move" || editing === i.id) return;
     e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    gesture.current = { id: i.id, mode, sx: e.clientX, sy: e.clientY, box: boxes.get(i.id)!, moved: false };
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    const el = (target.closest(".board-item") as HTMLElement) ?? target;
+    const box = boxes.get(i.id)!;
+    gesture.current = { id: i.id, el, mode, sx: e.clientX, sy: e.clientY, box, next: box, moved: false };
     setSelected(i.id);
+  }
+  function paint(el: HTMLElement, b: Box) {
+    el.style.left = `${b.x}px`;
+    el.style.top = `${b.y}px`;
+    el.style.width = `${b.w}px`;
+    el.style.height = `${b.h}px`;
+    el.style.transform = `rotate(${b.rot}deg)`;
   }
   function move(e: React.PointerEvent) {
     const g = gesture.current;
@@ -151,19 +164,29 @@ export function Board({ thread }: { thread: Thread }) {
     const dy = (e.clientY - g.sy) / scale;
     if (Math.abs(dx) + Math.abs(dy) > 3) g.moved = true;
     const b = g.box;
-    const next =
-      g.mode === "move"
-        ? { ...b, x: Math.min(BOARD_W - 40, Math.max(0, b.x + dx)), y: Math.min(BOARD_H - 40, Math.max(0, b.y + dy)) }
-        : { ...b, w: Math.max(60, b.w + dx), h: Math.max(40, b.h + dy) };
-    setLocal((l) => ({ ...l, [g.id]: next }));
+    let next: Box;
+    if (g.mode === "move") next = { ...b, x: Math.min(BOARD_W - 30, Math.max(-b.w + 30, b.x + dx)), y: Math.min(BOARD_H - 30, Math.max(0, b.y + dy)) };
+    else if (g.mode === "resize") next = { ...b, w: Math.max(50, b.w + dx), h: Math.max(36, b.h + dy) };
+    else {
+      // Tilt: the angle from the item's center to your finger.
+      const r = g.el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const deg = (Math.atan2(e.clientY - cy, e.clientX - cx) * 180) / Math.PI + 90;
+      const snapped = Math.abs(deg) < 4 ? 0 : deg; // easy to get back to straight
+      next = { ...b, rot: Math.round(snapped) };
+    }
+    g.next = next;
+    paint(g.el, next);
   }
   async function up() {
     const g = gesture.current;
     gesture.current = null;
     if (!g || !g.moved) return;
-    const b = local[g.id];
-    if (!b) return;
-    await patch(g.id, { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h), z: maxZ + 1 });
+    const b = g.next;
+    // Hold the new spot locally until the save comes back, so nothing snaps.
+    setLocal((l) => ({ ...l, [g.id]: b }));
+    await patch(g.id, { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h), rot: b.rot, z: maxZ + 1 });
     setLocal((l) => {
       const { [g.id]: _drop, ...rest } = l;
       void _drop;
@@ -221,7 +244,7 @@ export function Board({ thread }: { thread: Thread }) {
           ←
         </button>
         <strong className="grow board-title">
-          {thread.emoji ?? "💭"} {thread.title}
+          {thread.emoji ?? "🗒️"} {thread.title}
         </strong>
         <button className="icon-btn" onClick={() => setMenu((m) => !m)} aria-label="More">
           ⋯
@@ -268,7 +291,7 @@ export function Board({ thread }: { thread: Thread }) {
             const isSel = selected === i.id;
             const common = {
               className: `board-item k-${i.kind}${isSel ? " sel" : ""}`,
-              style: { left: b.x, top: b.y, width: b.w, height: b.h, zIndex: isSel ? 9999 : i.z, background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : undefined },
+              style: { left: b.x, top: b.y, width: b.w, height: b.h, transform: `rotate(${b.rot}deg)`, zIndex: isSel ? 9999 : i.z, background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : undefined },
               onPointerDown: (e: React.PointerEvent) => down(e, i, "move"),
               onPointerMove: move,
               onPointerUp: up,
@@ -311,7 +334,12 @@ export function Board({ thread }: { thread: Thread }) {
               <div key={i.id} {...common}>
                 {body}
                 {i.kind !== "ink" && <span className="board-by">{i.author === meId ? "" : nameOf(i.author).slice(0, 1)}</span>}
-                {isSel && tool === "move" && <span className="board-resize" onPointerDown={(e) => down(e, i, "resize")} onPointerMove={move} onPointerUp={up} aria-label="Resize" />}
+                {isSel && tool === "move" && (
+                  <>
+                    <span className="board-resize" onPointerDown={(e) => down(e, i, "resize")} onPointerMove={move} onPointerUp={up} aria-label="Resize" />
+                    <span className="board-rotate" onPointerDown={(e) => down(e, i, "rotate")} onPointerMove={move} onPointerUp={up} aria-label="Tilt" />
+                  </>
+                )}
               </div>
             );
           })}

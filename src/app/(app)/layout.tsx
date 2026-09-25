@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { AppProvider } from "@/components/AppProvider";
-import { TabBar } from "@/components/TabBar";
 import { AddSheet } from "@/components/AddSheet";
 import { SideMenu } from "@/components/SideMenu";
 import { DailyRoutines } from "@/components/DailyRoutines";
@@ -14,7 +13,6 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppProvider meId={data.user.id}>
       <div className="shell">{children}</div>
-      <TabBar />
       <SideMenu />
       <AddSheet />
       <DailyRoutines />
