@@ -60,8 +60,8 @@ Names are never hardcoded. Each person's display name lives in `profiles` and ca
 - **Accounts:** create each user (admin API, `email_confirm: true`, `user_metadata.display_name`), then give them a PIN with
   `scripts/set-pin.mjs`. Sign-in is PIN only: the server HMACs the PIN with `PIN_PEPPER`, which both finds the account and is
   its real Supabase password, so a PIN can't be guessed against Supabase directly. Wrong guesses are capped at 5 per 15 minutes
-  and 20 per day across the whole app. The app asks for the PIN on every entry (cold start, or back after a
-  minute away; `src/lib/lock.ts`), and each unlock is a fresh sign-in.
+  and 20 per day across the whole app. The app only asks for the PIN when the sign-in has actually stopped working
+  (the server sends you to /login, or `AppProvider` sees the session end); there's no routine lock.
 
 ### On each phone
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen** → open Us from the home screen → sign in → Settings → turn on notifications (needs iOS 16.4 or later).

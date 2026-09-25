@@ -1,12 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import type { Profile } from "@/lib/types";
 import { useDogPhotos } from "./DogAvatar";
 import { usePhotoUrls } from "@/lib/photos";
-import { awayTooLong, isUnlocked, lockAndGoToLogin, markHidden } from "@/lib/lock";
+import { lockAndGoToLogin } from "@/lib/lock";
 
 export type AddKind = "post" | "event" | "task" | "household" | "dog-note" | "dog-task" | "star" | "meal" | "place" | "shop" | "activity" | "meal-suggest" | "vibe" | "requests" | "event-preset" | "dog-preset" | "goal" | "status" | "little";
 
@@ -29,8 +29,6 @@ interface AppCtx {
 }
 
 const Ctx = createContext<AppCtx | null>(null);
-// The unlock flag only changes via a full page load, so there's nothing to subscribe to.
-const noSubscribe = () => () => {};
 
 export function useApp() {
   const ctx = useContext(Ctx);
@@ -83,17 +81,15 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
   const [addOpen, setAddOpen] = useState<AddKind | "menu" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // PIN on every entry (see lib/lock). Nothing renders until we know it's unlocked.
-  const unlocked = useSyncExternalStore(noSubscribe, isUnlocked, () => false);
+  // No routine PIN: the server layout already sends anyone without a working
+  // session to /login. Here we only catch a session dying while the app is
+  // open (signed out elsewhere, a refresh that failed) and ask for the PIN then.
   useEffect(() => {
-    if (!isUnlocked()) return lockAndGoToLogin();
-    const onVis = () => {
-      if (document.visibilityState === "hidden") markHidden();
-      else if (awayTooLong()) lockAndGoToLogin();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, []);
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || (event === "TOKEN_REFRESHED" && !session)) lockAndGoToLogin();
+    });
+    return () => data.subscription.unsubscribe();
+  }, [supabase]);
 
   const value = useMemo<AppCtx>(() => {
     const byId = new Map(profiles.map((p) => [p.id, p.display_name]));
@@ -116,7 +112,7 @@ export function AppProvider({ meId, children }: { meId: string; children: ReactN
 
   return (
     <Ctx.Provider value={value}>
-      {unlocked ? children : null}
+      {children}
       {toastMsg && (
         <div className="toast" role="status">
           {toastMsg}
