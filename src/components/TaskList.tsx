@@ -9,8 +9,7 @@ import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
-import Link from "next/link";
-import { useShopping, type ShopItem } from "./Shopping";
+import { ShoppingTaskSheet, finishShoppingTask, useShopping, type ShopItem } from "./Shopping";
 import { TaskForm, TaskPresets, windowText } from "./TaskForm";
 import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
@@ -76,6 +75,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
   async function toggle(t: Task, el: HTMLElement) {
     const nowDone = !t.done;
     if (nowDone) celebrate(el);
+    if (nowDone) await finishShoppingTask(linkedTo(t));
     await supabase
       .from("tasks")
       .update({ done: nowDone, done_at: nowDone ? new Date().toISOString() : null, done_by: nowDone ? meId : null })
@@ -199,6 +199,7 @@ function TaskRow({
   meId: string;
   now: number;
 }) {
+  const [showItems, setShowItems] = useState(false);
   const overdue = isOverdue(t, now);
   const d = deadlineOf(t);
   return (
@@ -218,10 +219,11 @@ function TaskRow({
         {t.dogs?.length > 0 && <span className="sticker" style={{ marginLeft: 6 }}>🐾 {dogVoice(t.dogs)}</span>}
         {t.notes && <div className="small muted">{t.notes}</div>}
         {linked.length > 0 && !t.done && (
-          <Link href="/shopping" className="small muted task-shop">
+          <button className="small muted task-shop" onClick={() => setShowItems(true)}>
             🛒 {linked.filter((i) => i.bought).length} of {linked.length} bought: {linked.map((i) => `${i.name}${i.bought ? " ✓" : ""}`).join(" · ")}
-          </Link>
+          </button>
         )}
+        {showItems && <ShoppingTaskSheet title={t.title} items={linked} onClose={() => setShowItems(false)} />}
         {d && !t.done && (
           <div className={`small due${overdue ? " overdue" : ""}`}>
             {overdue ? "⏰ Overdue · " : "⏳ "}

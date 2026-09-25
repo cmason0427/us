@@ -393,8 +393,9 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     const now = !i.bought;
     if (now) celebrate(el, ["🛒", "✨"]);
     await supabase.from("shop_items").update({ bought: now }).eq("id", i.id);
-    // Bought a grocery → the pantry has it.
-    if (now && i.grocery) await setHave(i.name, true);
+    // Bought a grocery → the pantry has it. Items on a shopping to-do wait
+    // until that to-do is checked off (see finishShoppingTask).
+    if (now && i.grocery && !i.task_id) await setHave(i.name, true);
     refreshAll();
   }
 
@@ -411,7 +412,8 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
     const title = names.length === 1 ? `Buy ${names[0]}` : `Shopping: ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` +${names.length - 3}` : ""}`;
     const { data: task, error } = await supabase.from("tasks").insert({ title, list_type: "shared", created_by: meId }).select("id").single();
     if (error) return toast(error.message);
-    await supabase.from("shop_items").update({ task_id: task.id }).in("id", [...picked]);
+    // They start unchecked on the to-do, and the to-do carries the "I got this".
+    await supabase.from("shop_items").update({ task_id: task.id, bought: false, claimed_by: null }).in("id", [...picked]);
     setPicked(new Set());
     setSelecting(false);
     refreshAll();
@@ -478,7 +480,7 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
             </button>
           </div>
         )}
-        {!i.bought && !selecting && (
+        {!i.bought && !selecting && !i.task_id && (
           <button className={`claim${i.claimed_by ? " claimed" : ""}`} onClick={() => claim(i)} aria-pressed={i.claimed_by === meId}>
             {i.claimed_by === meId ? "🙋 You've got this" : i.claimed_by ? `🙋 ${nameOf(i.claimed_by)}'s got this` : "🙋 I got this"}
           </button>
@@ -616,5 +618,58 @@ export function ShoppingList({ groceries = false }: { groceries?: boolean }) {
         </Sheet>
       )}
     </div>
+  );
+}
+
+/** Checking off a shopping to-do: bought groceries go to the pantry's Have, and the items leave the list. */
+export async function finishShoppingTask(items: ShopItem[]) {
+  const supabase = supabaseBrowser();
+  await Promise.all(items.filter((i) => i.bought && i.grocery).map((i) => setHave(i.name, true)));
+  const done = items.filter((i) => i.bought).map((i) => i.id);
+  if (done.length) await supabase.from("shop_items").delete().in("id", done);
+}
+
+/** The items on a shopping to-do, in a popup: tick them off, or move one back to the list. */
+export function ShoppingTaskSheet({ title, items, onClose }: { title: string; items: ShopItem[]; onClose: () => void }) {
+  const supabase = supabaseBrowser();
+  async function tick(i: ShopItem, el: HTMLElement) {
+    if (!i.bought) celebrate(el, ["🛒", "✨"]);
+    await supabase.from("shop_items").update({ bought: !i.bought }).eq("id", i.id);
+    refreshAll();
+  }
+  async function moveBack(i: ShopItem) {
+    await supabase.from("shop_items").update({ task_id: null, bought: false }).eq("id", i.id);
+    refreshAll();
+  }
+  const left = items.filter((i) => !i.bought).length;
+  return (
+    <Sheet title={title} onClose={onClose}>
+      <div className="stack">
+        {items.length === 0 ? (
+          <p className="muted">Nothing left on this one.</p>
+        ) : (
+          <div className="card" style={{ padding: "2px 12px" }}>
+            {items.map((i) => (
+              <div key={i.id} className={`task${i.bought ? " done" : ""}`}>
+                <input type="checkbox" className="check" checked={i.bought} onChange={(e) => tick(i, e.currentTarget)} aria-label={`Got ${i.name}`} />
+                <span className="grow">
+                  <span className="task-title">{i.name}</span>
+                  {i.detail && <span className="small muted"> · {i.detail}</span>}
+                  {i.note && <div className="small shop-note">📝 {i.note}</div>}
+                </span>
+                {!i.bought && (
+                  <button className="btn-link small" onClick={() => moveBack(i)}>
+                    Move back
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="small muted">
+          {left ? `${left} to go. ` : "All set. "}Check off the to-do when you&apos;re done; the groceries go into the pantry then. “Move back” puts one back on the shopping list.
+        </p>
+      </div>
+    </Sheet>
   );
 }

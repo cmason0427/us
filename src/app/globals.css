@@ -807,7 +807,7 @@ div.dash-row { cursor: default; }
 .mcell .mdot { height: 7px; }
 .mdot.ev[data-color] { background: linear-gradient(90deg, var(--mark) 0 38%, var(--c) 38%); padding-left: 0; box-shadow: none; }
 .drawer-quiet { margin-top: auto; padding: 10px; font-size: 0.9rem; color: var(--ink-soft); text-decoration: none; }
-.task-shop { display: block; text-decoration: none; }
+.task-shop { display: block; text-decoration: none; background: none; border: 0; padding: 2px 0; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 
 /* Photo stickers as art accents */
 .sticker-img { display: inline-block; flex-shrink: 0; filter: drop-shadow(0 3px 6px color-mix(in srgb, var(--plum) 22%, transparent)); }
