@@ -17,9 +17,9 @@ export function SaveSheet({ paths, onClose }: { paths: string[]; onClose: () => 
   async function saveTo(folderId: string, folderName: string) {
     setBusy(true);
     try {
-      await saveCopies(meId, folderId, paths);
+      const { saved, skipped } = await saveCopies(meId, folderId, paths);
       refreshAll();
-      toast(`Saved to ${folderName} 🔖`);
+      toast(saved === 0 ? `Already in ${folderName}` : skipped ? `Saved ${saved} to ${folderName} 🔖 (${skipped} already there)` : `Saved to ${folderName} 🔖`);
       onClose();
     } catch (err) {
       toast((err as Error).message);

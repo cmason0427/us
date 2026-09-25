@@ -9,7 +9,8 @@ export type BillFreq = "monthly" | "weekly" | "biweekly" | "quarterly" | "yearly
 export interface Income {
   id: string;
   name: string;
-  amount: number;
+  amount: number; // the low end if pay varies (what we plan on)
+  amount_max?: number | null; // commission / performance: the high end
   freq: IncomeFreq;
   anchor: string; // a real payday, yyyy-MM-dd
   day2: number | null; // semimonthly: the second day of the month
@@ -44,6 +45,20 @@ export interface Spend {
   amount: number;
   note: string | null;
   spent_on: string;
+  created_at?: string;
+}
+/** A one-time thing: extra money in (bonus, a sale) or a surprise bill. */
+export interface OneOff {
+  id: string;
+  kind: "in" | "out";
+  name: string;
+  amount: number;
+  on_date: string;
+}
+export interface Balance {
+  id: string;
+  amount: number;
+  as_of: string;
 }
 export interface Settings {
   save_pct: number;
@@ -92,14 +107,16 @@ export const dueDates = (b: Bill, from: Date, to: Date) => schedule(b.anchor, b.
 /** Paychecks per year, for "about $X a month". */
 const PER_YEAR: Record<IncomeFreq, number> = { weekly: 52, biweekly: 26, semimonthly: 24, monthly: 12 };
 const BILL_PER_YEAR: Record<BillFreq, number> = { weekly: 52, biweekly: 26, monthly: 12, quarterly: 4, yearly: 1 };
-export const monthlyIncome = (list: Income[]) => list.reduce((s, i) => s + (i.amount * PER_YEAR[i.freq]) / 12, 0);
+export const monthlyIncome = (list: Income[]) => list.reduce((s, i) => s + (Number(i.amount) * PER_YEAR[i.freq]) / 12, 0);
+export const monthlyIncomeMax = (list: Income[]) => list.reduce((s, i) => s + (Number(i.amount_max ?? i.amount) * PER_YEAR[i.freq]) / 12, 0);
 export const monthlyBills = (list: Bill[]) => list.reduce((s, b) => s + (b.amount * BILL_PER_YEAR[b.freq]) / 12, 0);
 
 export interface Period {
   start: Date;
   end: Date; // the next payday (exclusive)
   income: number;
-  paychecks: { name: string; amount: number; actual: boolean }[];
+  paychecks: { name: string; amount: number; actual: boolean; max: number | null }[];
+  incomeMax: number; // if variable pay comes in at the top of its range
   bills: { bill: Bill; due: Date; paid: boolean }[];
   billTotal: number; // unpaid bills due this period
   savings: number;
@@ -129,6 +146,7 @@ export function buildPlan(opts: {
   paid: Set<string>; // `${bill_id}:${yyyy-MM-dd}`
   categories: Category[];
   settings: Settings;
+  oneoffs?: OneOff[];
   today?: Date;
   count?: number;
 }): Plan {
@@ -144,7 +162,8 @@ export function buildPlan(opts: {
     for (const d of payDates(i, from, to)) {
       const actual = opts.paychecks.find((p) => p.income_id === i.id && p.paid_on === iso(d));
       const list = byDay.get(iso(d)) ?? [];
-      list.push({ name: i.name, amount: actual ? Number(actual.amount) : Number(i.amount), actual: !!actual });
+      // Variable pay is planned at its low end, so a slow week never overspends; log what actually landed.
+      list.push({ name: i.name, amount: actual ? Number(actual.amount) : Number(i.amount), actual: !!actual, max: !actual && i.amount_max ? Number(i.amount_max) : null });
       byDay.set(iso(d), list);
     }
   }
@@ -155,16 +174,25 @@ export function buildPlan(opts: {
   for (let k = firstIdx; k < days.length - 1 && periods.length < (opts.count ?? 8); k++) {
     const start = parseISO(days[k]);
     const end = parseISO(days[k + 1]);
-    const paychecks = byDay.get(days[k])!;
+    const inRange = (o: OneOff) => o.on_date >= days[k] && o.on_date < days[k + 1];
+    const extra = (opts.oneoffs ?? []).filter((o) => o.kind === "in" && inRange(o));
+    const paychecks = [...byDay.get(days[k])!, ...extra.map((o) => ({ name: `➕ ${o.name}`, amount: Number(o.amount), actual: true, max: null }))];
     const income = paychecks.reduce((s, p) => s + p.amount, 0);
+    const incomeMax = paychecks.reduce((s, p) => s + (p.max ?? p.amount), 0);
     const due = bills
       // A due date from before you added the bill was already handled some other way.
       .flatMap((b) => dueDates(b, start, addDays(end, -1)).filter((d) => !b.created_at || iso(d) >= b.created_at.slice(0, 10)).map((d) => ({ bill: b, due: d, paid: opts.paid.has(`${b.id}:${iso(d)}`) })))
+      // Surprise bills count like any bill due in this stretch.
+      .concat(
+        (opts.oneoffs ?? [])
+          .filter((o) => o.kind === "out" && inRange(o))
+          .map((o) => ({ bill: { id: `oneoff:${o.id}`, name: o.name, emoji: "⚡", amount: Number(o.amount), freq: "monthly" as BillFreq, anchor: o.on_date, autopay: false }, due: parseISO(o.on_date), paid: false })),
+      )
       .sort((a, b) => a.due.getTime() - b.due.getTime());
     const billTotal = due.filter((x) => !x.paid).reduce((s, x) => s + Number(x.bill.amount), 0);
     const savings = Math.round((income * Number(settings.save_pct)) / 100 + Number(settings.save_fixed));
     const budgets = Math.round((monthlyBudgets * differenceInCalendarDays(end, start)) / 30.44);
-    periods.push({ start, end, income, paychecks, bills: due, billTotal, savings, budgets, setAside: 0, fromEarlier: 0, held: 0, free: income - billTotal - savings - budgets });
+    periods.push({ start, end, income, incomeMax, paychecks, bills: due, billTotal, savings, budgets, setAside: 0, fromEarlier: 0, held: 0, free: income - billTotal - savings - budgets });
   }
   // Tight paychecks borrow from earlier ones: walk backwards, pushing any gap onto the one before.
   for (let k = periods.length - 1; k > 0; k--) {
@@ -243,4 +271,27 @@ export function spendingDays(spends: Spend[], today = new Date()) {
     .filter((x) => x.v / total >= 0.2)
     .slice(0, 2);
   return top.length ? { days: top.map((t) => names[t.i]), share: Math.round((top.reduce((a, t) => a + t.v, 0) / total) * 100) } : null;
+}
+
+/**
+ * "My account has $X right now." When you check in a balance since the last
+ * payday, it wins over the tracked math (it catches purchases you forgot to
+ * log): balance − anything logged after it − bills still due before payday −
+ * what this paycheck should put aside − what's left in category budgets − the
+ * cushion = safe to spend.
+ */
+export function fromBalance(balance: Balance | undefined, current: Period | null, spends: Spend[], cushion: number, today = new Date()) {
+  if (!balance || !current) return null;
+  const asOf = new Date(balance.as_of);
+  if (asOf < current.start) return null; // from before this paycheck landed; ask for a fresh one
+  const t = iso(today);
+  const spentSince = spends.filter((s) => (s.created_at ? new Date(s.created_at) > asOf : s.spent_on > iso(asOf))).reduce((a, s) => a + Number(s.amount), 0);
+  const billsLeft = current.bills.filter((b) => !b.paid && iso(b.due) >= t).reduce((a, b) => a + Number(b.bill.amount), 0);
+  const inPeriod = spends.filter((s) => s.spent_on >= iso(current.start) && s.spent_on < iso(current.end));
+  const catSpent = inPeriod.filter((s) => s.category_id).reduce((a, s) => a + Number(s.amount), 0);
+  const budgetsLeft = Math.max(0, current.budgets - catSpent);
+  const reserved = billsLeft + current.setAside + budgetsLeft + cushion;
+  const left = Math.max(0, Number(balance.amount) - spentSince - reserved);
+  const daysLeft = Math.max(1, differenceInCalendarDays(current.end, startOfDay(today)));
+  return { left, perDay: left / daysLeft, daysLeft, asOf, billsLeft, budgetsLeft, setAside: current.setAside, spentSince };
 }

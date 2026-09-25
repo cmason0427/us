@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useLive } from "@/lib/useLive";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
 import { useFoodRatings } from "@/lib/foodData";
@@ -63,5 +65,74 @@ export function RatingBadge({ kind, id }: { kind: "place" | "meal"; id: string }
         </span>
       ))}
     </span>
+  );
+}
+
+export interface FoodNote {
+  id: string;
+  kind: "meal" | "place";
+  ref_id: string;
+  author: string;
+  text: string;
+  created_at: string;
+}
+export function useFoodNotes() {
+  const { data = [] } = useLive<FoodNote[]>(
+    "food_notes",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("food_notes").select("*").order("created_at");
+      if (error) throw error;
+      return data as FoodNote[];
+    },
+    ["food_notes"],
+  );
+  return data;
+}
+
+/** What we think of this meal / place, from either of you (lunch notes can be saved here too). */
+export function FoodNotes({ kind, id }: { kind: "meal" | "place"; id: string }) {
+  const { meId, nameOf, toast } = useApp();
+  const notes = useFoodNotes().filter((n) => n.kind === kind && n.ref_id === id);
+  const [draft, setDraft] = useState("");
+  return (
+    <div className="field">
+      <span>What we think</span>
+      {notes.length > 0 && (
+        <div className="note-thread">
+          {notes.map((n) => (
+            <div key={n.id} className="note-line">
+              <strong className="small">{n.author === meId ? "you" : nameOf(n.author)}</strong>
+              <span className="grow">{n.text}</span>
+              <button
+                className="lt-x"
+                aria-label="Remove note"
+                onClick={async () => {
+                  await supabaseBrowser().from("food_notes").delete().eq("id", n.id);
+                  refreshAll();
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <form
+        className="quick-add"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!draft.trim()) return;
+          const { error } = await supabaseBrowser().from("food_notes").insert({ kind, ref_id: id, author: meId, text: draft.trim() });
+          if (error) return toast(error.message);
+          setDraft("");
+          refreshAll();
+        }}
+      >
+        <input className="input input-sm grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="more sauce next time…" aria-label="Note" />
+        <button className="btn btn-sm" disabled={!draft.trim()}>
+          Add
+        </button>
+      </form>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
+import { useSectionBadges } from "@/lib/badges";
 import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
@@ -42,9 +43,11 @@ const isHere = (path: string, href: string) => (href === "/" ? path === "/" : pa
 
 /** The ☰ button (top left of every page). */
 export function MenuButton() {
-  const { setMenuOpen } = useApp();
+  const { setMenuOpen, meId } = useApp();
+  const fresh = useSectionBadges(meId);
   return (
-    <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+    <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)} aria-label={fresh.size ? "Open menu (something new)" : "Open menu"}>
+      {fresh.size > 0 && <span className="menu-dot" aria-hidden />}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="24" height="24" aria-hidden>
         <path d="M4 7h16M4 12h16M4 17h11" />
       </svg>
@@ -56,6 +59,7 @@ export function MenuButton() {
 export function SideMenu() {
   const { menuOpen, setMenuOpen, meId, me } = useApp();
   const path = usePathname();
+  const fresh = useSectionBadges(meId);
 
   // Close on navigation and on Escape.
   useEffect(() => setMenuOpen(false), [path, setMenuOpen]);
@@ -76,8 +80,9 @@ export function SideMenu() {
           <Link href="/saved" className="icon-btn" aria-label="Saved" aria-current={isHere(path, "/saved") ? "page" : undefined}>
             <IconBookmark />
           </Link>
-          <Link href="/places" className="icon-btn" aria-label="Address book" aria-current={isHere(path, "/places") ? "page" : undefined}>
+          <Link href="/places" className="icon-btn menu-btn-rel" aria-label="Address book" aria-current={isHere(path, "/places") ? "page" : undefined}>
             <IconPin />
+            {fresh.has("/places") && <span className="menu-dot" aria-hidden />}
           </Link>
           <Link href="/keys" className="icon-btn" aria-label="Keys" aria-current={isHere(path, "/keys") ? "page" : undefined}>
             <IconKey />
@@ -93,6 +98,7 @@ export function SideMenu() {
               <Link key={s.href} href={s.href} className="drawer-item" aria-current={isHere(path, s.href) ? "page" : undefined}>
                 <s.Icon width={22} height={22} />
                 <span>{s.label}</span>
+                {fresh.has(s.href) && <span className="drawer-dot" aria-label="something new" />}
               </Link>
             ))}
           </div>

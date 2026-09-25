@@ -35,7 +35,7 @@ export const birthdayTitle = (name: string, birthYear?: number | null) => (d: Da
   birthYear && d.getFullYear() > birthYear ? `🎂 ${name}'s ${ordinal(d.getFullYear() - birthYear)} birthday` : `🎂 ${name}'s birthday`;
 
 /**
- * Put a date on the calendar every year (all day, for both of you), starting
+ * Put a date on the calendar every year (all day, "on the radar"), starting
  * from its next time around. Returns the series id to remember it by.
  */
 export async function addYearly(title: Title, iso: string, meId: string, notes?: string | null): Promise<string | null> {
@@ -57,7 +57,7 @@ export async function addYearlyDates(title: Title, starts: Date[], meId: string,
   const { error: e2 } = await supabase.from("events").insert(
     starts.map((s) => ({
       title: typeof title === "function" ? title(s) : title,
-      type: "confirmed",
+      type: "radar", // "on the radar", not a plan for both of you
       all_day: true,
       start_time: s.toISOString(),
       end_time: addDays(s, 1).toISOString(),

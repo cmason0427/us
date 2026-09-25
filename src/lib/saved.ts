@@ -48,19 +48,26 @@ export function useSaves(folderId: string | null) {
 }
 
 /**
- * Save copies of these photos into one of your folders. They're copied under
- * your own storage folder so they stay even if the original post is deleted.
+ * Save copies of these photos into one of your folders (under your own storage
+ * folder, so they outlive the post), skipping any already saved there.
+ * Returns how many were new.
  */
 export async function saveCopies(meId: string, folderId: string, paths: string[]) {
   const supabase = supabaseBrowser();
+  const { data: have } = await supabase.from("saves").select("source_path").eq("folder_id", folderId).in("source_path", paths);
+  const already = new Set((have ?? []).map((h) => h.source_path));
+  const fresh = [...new Set(paths)].filter((p) => !already.has(p));
   const rows = [];
-  for (const from of paths) {
+  for (const from of fresh) {
     const ext = from.split(".").pop() || "jpg";
     const to = `${meId}/saved/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from("photos").copy(from, to);
     if (error) throw error;
-    rows.push({ owner: meId, folder_id: folderId, storage_path: to, added_by: meId });
+    rows.push({ owner: meId, folder_id: folderId, storage_path: to, source_path: from, added_by: meId });
   }
-  const { error } = await supabase.from("saves").insert(rows);
-  if (error) throw error;
+  if (rows.length) {
+    const { error } = await supabase.from("saves").insert(rows);
+    if (error) throw error;
+  }
+  return { saved: rows.length, skipped: paths.length - rows.length };
 }

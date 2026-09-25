@@ -7,6 +7,7 @@ import { refreshAll } from "@/lib/useLive";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
 import { Sheet } from "./Sheet";
+import { ImageSources } from "./ImageSources";
 import { SquareCrop } from "./SquareCrop";
 
 /** Set your own profile photo. */
@@ -38,6 +39,7 @@ export function MyPhoto() {
         <PersonAvatar id={meId} size={72} />
         <span className="small muted">{busy ? "Uploading…" : me?.avatar_path ? "Change photo" : "Add photo"}</span>
       </button>
+      <ImageSources multiple={false} onFiles={(fs) => fs[0] && setCropping(fs[0])} />
       <input
         ref={fileRef}
         type="file"

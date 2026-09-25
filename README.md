@@ -54,8 +54,12 @@ Names are never hardcoded. Each person's display name lives in `profiles` and ca
 | --- | --- |
 | `src/components/Threads.tsx` | Threads: shared brainstorm boards (`threads`, `thread_items`, per-person `thread_reads` for the unseen dot). Never posts or pushes; chips sit above the feed; archived ones live in Saved |
 | `src/app/(app)/places` | Shared address book (`address_book`); `AddressLinks` = copy / Apple Maps / Google Maps, also used on plan steps and people |
-| `src/app/(app)/money` + `src/lib/budget.ts` | Personal budget, owner-only RLS on every `budget_*` table. `buildPlan` walks pay periods: bills due before the next payday, savings off the top, category ceilings prorated, gaps backfilled from earlier checks, then fun money evened out across paychecks. `safeToSpend` = this period's fun money minus uncategorized spending minus the cushion |
+| `src/app/(app)/money` + `src/lib/budget.ts` | Personal budget, owner-only RLS on every `budget_*` table. `buildPlan` walks pay periods: bills due before the next payday, savings off the top, category ceilings prorated, gaps backfilled from earlier checks, then fun money evened out across paychecks. `safeToSpend` = this period's fun money minus uncategorized spending minus the cushion; a balance check-in (`budget_balances`) since the last payday overrides it (`fromBalance`). Variable pay (`amount_max`) is planned at the low end; `budget_oneoffs` add extra money / surprise bills. Money never appears on Home |
 | Decks | `decks.colors` (WUBRG+C pips), owner outline, hold-to-drag between shelves, `posts.deck_id` for deck updates |
+| `src/components/Board.tsx` | A thread opens as a full-screen board (`/threads/[id]`): `thread_items` carry x/y/w/h/z/color; stickies, text, photos, links and ink (SVG path JSON). Drag to move, corner to resize, ✏️ to draw |
+| `src/lib/badges.ts` | Menu dots: `section_activity()` (security definer, timestamps only) vs `section_seen`; opening a section clears it |
+| Rescind / reset | `ResetVotes.tsx`: deck calls and "on my way" can be taken back until answered; after, both tap reset (or they clear at day's end) |
+| Photos from anywhere | `ImageSources.tsx` (paste / link) + `/api/fetch-image` (server fetch, images only, 15MB, no private hosts) |
 | Garden | `garden_reviews.feel` (effect → 1–5); 🎯 Match a mood ranks rated items by closeness |
 
 ## Deployment

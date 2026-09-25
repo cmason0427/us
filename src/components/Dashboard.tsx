@@ -13,11 +13,8 @@ import { SleepControls, useSleepTonight } from "./Sleep";
 import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
-import { GoalsView, useGoalCheckins } from "./Goals";
 import { TaskList } from "./TaskList";
-import { SpendForm, useBudget } from "./Budget";
-import { money } from "@/lib/budget";
-import { usePartnerStatus } from "./Status";
+import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
 
 /**
  * Today at a glance. Everything here is read-only until you tap it; the
@@ -31,7 +28,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "goals" } | { kind: "spend" } | null;
+type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -45,19 +42,22 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const mealName = MEAL_LABEL[meal];
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
-  const checkins = useGoalCheckins();
   const status = usePartnerStatus();
-  const budget = useBudget();
-  const overCats = budget.cats.filter((c) => c.state === "over" || c.state === "close");
-  const { openAdd } = useApp();
+  const myStatus = useMyStatus();
   const them = partner?.display_name ?? "Them";
 
   return (
     <section className="card dash">
       {status && (
-        <Row icon="🚗" label={them} onClick={() => openAdd("status")}>
+        <Row icon="🚗" label={them} onClick={() => setOpen({ kind: "status", mine: false })}>
           {status.text}
-          <span className="small faint"> · {ago(status.updated_at)}</span>
+          <span className="small faint"> · {ago(status.updated_at)}{status.acked_at ? " · 👍" : ""}</span>
+        </Row>
+      )}
+      {myStatus && (
+        <Row icon="🚗" label="You said" onClick={() => setOpen({ kind: "status", mine: true })}>
+          {myStatus.text}
+          <span className="small faint"> · {myStatus.acked_at ? `${them} saw it 👍` : "not seen yet"}</span>
         </Row>
       )}
       {sleep.ready && (
@@ -99,19 +99,6 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
         </Row>
       )}
 
-      {budget.safe && budget.plan.current && (
-        <Row icon="💸" label="Safe to spend (just you)" onClick={() => setOpen({ kind: "spend" })}>
-          {money(budget.safe.left)}
-          <span className="small faint"> · about {money(budget.safe.perDay)}/day</span>
-          {overCats.length > 0 && <span className="small"> · {overCats.map((c) => `${c.c.emoji ?? ""}${c.c.name} ${Math.round(c.pct)}%`).join(", ")}</span>}
-        </Row>
-      )}
-
-      {checkins > 0 && (
-        <Row icon="💰" label="Savings" onClick={() => setOpen({ kind: "goals" })}>
-          {checkins === 1 ? "A savings check-in is waiting" : `${checkins} savings check-ins are waiting`}
-        </Row>
-      )}
 
       {open?.kind === "sleep" && (
         <Sheet title="Sleeping tonight" onClose={() => setOpen(null)}>
@@ -130,17 +117,9 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
           <TaskList listType="dogs" title="" hint="" />
         </Sheet>
       )}
-      {open?.kind === "spend" && (
-        <Sheet title="💸 I spent" onClose={() => setOpen(null)}>
-          <SpendForm onDone={() => setOpen(null)} />
-          <Link href="/money" className="btn-link small" style={{ display: "inline-block", marginTop: 10 }}>
-            open my money →
-          </Link>
-        </Sheet>
-      )}
-      {open?.kind === "goals" && (
-        <Sheet title="💰 Savings" onClose={() => setOpen(null)}>
-          <GoalsView />
+      {open?.kind === "status" && (open.mine ? myStatus : status) && (
+        <Sheet title={open.mine ? "Your heads-up" : `${them}'s heads-up`} onClose={() => setOpen(null)}>
+          <StatusSheetBody s={(open.mine ? myStatus : status)!} onDone={() => setOpen(null)} />
         </Sheet>
       )}
     </section>

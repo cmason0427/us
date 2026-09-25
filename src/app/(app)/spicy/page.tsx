@@ -9,6 +9,7 @@ import { shrinkImage } from "@/lib/image";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
+import { ImageSources } from "@/components/ImageSources";
 import { SpicyGate } from "@/components/SpicyGate";
 import { Wavy } from "@/components/Art";
 
@@ -139,7 +140,7 @@ function Pics() {
   );
   const untagged = media.filter((m) => m.people.length === 0).length;
 
-  function pick(files: FileList | null) {
+  function pick(files: FileList | File[] | null) {
     const list = Array.from(files ?? []);
     setPending(list.map((file) => ({ file, url: URL.createObjectURL(file), people: [] })));
   }
@@ -193,6 +194,7 @@ function Pics() {
         <span>Add pics or videos…</span>
         <input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => (pick(e.target.files), (e.target.value = ""))} />
       </label>
+      <ImageSources onFiles={(fs) => pick(fs)} />
 
       <div className="chips" role="group" aria-label="Show">
         {(
@@ -282,19 +284,44 @@ function Pics() {
 /* ─── Ideas: private fantasies, and the want-to-try list ──────────────────── */
 
 function Ideas() {
-  const { meId, partner, nameOf, toast } = useApp();
+  const { meId, partner, toast } = useApp();
   const items = useItems();
   const tryList = items.filter((i) => i.kind === "try");
   const mine = items.filter((i) => i.kind === "fantasy" && i.author === meId);
   const [tryDraft, setTryDraft] = useState("");
+  const { data: reactions = [] } = useLive<{ item_id: string; user_id: string; emoji: string }[]>(
+    "spicy_reactions",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("spicy_reactions").select("item_id, user_id, emoji");
+      if (error) throw error;
+      return data;
+    },
+    ["spicy_reactions"],
+  );
+  const { data: notes = [] } = useLive<IdeaNote[]>(
+    "spicy_item_notes",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("spicy_item_notes").select("*").order("created_at");
+      if (error) throw error;
+      return data as IdeaNote[];
+    },
+    ["spicy_item_notes"],
+  );
   const [fantasyDraft, setFantasyDraft] = useState("");
   const supabase = supabaseBrowser();
 
   async function add(kind: "try" | "fantasy", text: string) {
     const { data, error } = await supabase.from("spicy_items").insert({ author: meId, kind, text: text.trim() }).select("id").single();
     if (error) return toast(error.message);
-    if (kind === "try") notify({ kind: "spicy_item", id: data.id });
+    if (kind === "try") {
+      notify({ kind: "spicy_item", id: data.id });
+      await feedHint();
+    }
     refreshAll();
+  }
+  // A vague heads-up in the feed (no details); the rest stays behind the PIN.
+  async function feedHint() {
+    await supabase.from("posts").insert({ author: meId, text: "🌶️ A new idea in Spicy", spicy: true });
   }
 
   async function share(f: SpicyItem) {
@@ -303,6 +330,7 @@ function Ideas() {
     if (error) return toast(error.message);
     await supabase.from("spicy_items").delete().eq("id", f.id);
     notify({ kind: "spicy_item", id: data.id });
+    await feedHint();
     refreshAll();
     toast("Shared 😏");
   }
@@ -336,15 +364,7 @@ function Ideas() {
         {tryList.length > 0 && (
           <div className="card" style={{ marginTop: 10, padding: "2px 12px" }}>
             {tryList.map((i) => (
-              <div key={i.id} className="task">
-                <span className="grow task-title" style={{ fontWeight: 500 }}>
-                  {i.text}
-                </span>
-                <span className="small faint">{i.author === meId ? "you" : nameOf(i.author)}</span>
-                <button className="icon-btn" onClick={() => remove(i.id)} aria-label="Take off the list">
-                  ×
-                </button>
-              </div>
+              <IdeaRow key={i.id} item={i} reactions={reactions.filter((r) => r.item_id === i.id)} notes={notes.filter((n) => n.item_id === i.id)} onRemove={() => remove(i.id)} />
             ))}
           </div>
         )}
@@ -387,6 +407,96 @@ function Ideas() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+interface IdeaNote {
+  id: string;
+  item_id: string;
+  author: string;
+  text: string;
+  created_at: string;
+}
+const REACTIONS = ["🔥", "😍", "😏", "🤔", "🙈"];
+
+/** One want-to-try idea: a reaction each (tap again to clear) and a little note thread. */
+function IdeaRow({ item, reactions, notes, onRemove }: { item: SpicyItem; reactions: { user_id: string; emoji: string }[]; notes: IdeaNote[]; onRemove: () => void }) {
+  const { meId, nameOf, toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const supabase = supabaseBrowser();
+  const mine = reactions.find((r) => r.user_id === meId)?.emoji;
+  async function react(e: string) {
+    const { error } =
+      mine === e ? await supabase.from("spicy_reactions").delete().eq("item_id", item.id).eq("user_id", meId) : await supabase.from("spicy_reactions").upsert({ item_id: item.id, user_id: meId, emoji: e });
+    if (error) toast(error.message);
+    refreshAll();
+  }
+  async function addNote(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!draft.trim()) return;
+    const { error } = await supabase.from("spicy_item_notes").insert({ item_id: item.id, author: meId, text: draft.trim() });
+    if (error) return toast(error.message);
+    setDraft("");
+    refreshAll();
+  }
+  return (
+    <div className="idea-row">
+      <div className="row">
+        <span className="grow task-title" style={{ fontWeight: 500 }}>
+          {item.text}
+        </span>
+        <span className="small faint">{item.author === meId ? "you" : nameOf(item.author)}</span>
+        <button className="icon-btn icon-btn-sm" onClick={onRemove} aria-label="Take off the list">
+          ×
+        </button>
+      </div>
+      <div className="row wrap idea-react">
+        {reactions
+          .filter((r) => r.user_id !== meId)
+          .map((r) => (
+            <span key={r.user_id} className="small" title={nameOf(r.user_id)}>
+              {nameOf(r.user_id).slice(0, 1)} {r.emoji}
+            </span>
+          ))}
+        {REACTIONS.map((e) => (
+          <button key={e} type="button" className="idea-emoji" aria-pressed={mine === e} onClick={() => react(e)}>
+            {e}
+          </button>
+        ))}
+        <button type="button" className="btn-link small" onClick={() => setOpen((o) => !o)}>
+          💬 {notes.length || ""}
+        </button>
+      </div>
+      {open && (
+        <div className="note-thread">
+          {notes.map((n) => (
+            <div key={n.id} className="note-line">
+              <strong className="small">{n.author === meId ? "you" : nameOf(n.author)}</strong>
+              <span className="grow">{n.text}</span>
+              {n.author === meId && (
+                <button
+                  className="lt-x"
+                  aria-label="Delete note"
+                  onClick={async () => {
+                    await supabase.from("spicy_item_notes").delete().eq("id", n.id);
+                    refreshAll();
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <form className="quick-add" onSubmit={addNote}>
+            <input className="input input-sm grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="a thought on this…" aria-label="Note" />
+            <button className="btn btn-sm" disabled={!draft.trim()}>
+              Add
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

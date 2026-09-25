@@ -7,18 +7,22 @@ import { useLive, refreshAll } from "@/lib/useLive";
 import {
   DEFAULT_SETTINGS,
   buildPlan,
+  fromBalance,
   categoryStatus,
   iso,
   money,
   money2,
   monthlyBills,
   monthlyIncome,
+  monthlyIncomeMax,
   safeToSpend,
   spendingDays,
+  type Balance,
   type Bill,
   type BillFreq,
   type Category,
   type Income,
+  type OneOff,
   type IncomeFreq,
   type Paycheck,
   type Period,
@@ -54,11 +58,17 @@ export function useBudget() {
   const spends = useRows<Spend>("budget_spend", "spent_on");
   const settingsRows = useRows<Settings & { owner: string }>("budget_settings", "updated_at");
   const settings = settingsRows[0] ?? DEFAULT_SETTINGS;
+  const balances = useRows<Balance>("budget_balances", "as_of");
+  const oneoffs = useRows<OneOff>("budget_oneoffs", "on_date");
+  const balance = balances[balances.length - 1];
   const paid = new Set(paidRows.map((p) => `${p.bill_id}:${p.due_on}`));
-  const plan = buildPlan({ incomes, paychecks, bills, paid, categories, settings });
-  const safe = safeToSpend(plan.current, spends, Number(settings.cushion));
+  const plan = buildPlan({ incomes, paychecks, bills, paid, categories, settings, oneoffs });
+  const tracked = safeToSpend(plan.current, spends, Number(settings.cushion));
+  const real = fromBalance(balance, plan.current, spends, Number(settings.cushion));
+  // A recent balance check-in beats the tracked math.
+  const safe = real ? { ...real, funSpent: tracked?.funSpent ?? 0 } : tracked;
   const cats = categoryStatus(categories, spends);
-  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats };
+  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, real, tracked, oneoffs };
 }
 
 const db = () => supabaseBrowser();
@@ -131,7 +141,7 @@ const d = (x: Date | string) => format(typeof x === "string" ? parseISO(x) : x, 
 
 export function MoneyView() {
   const b = useBudget();
-  const [sheet, setSheet] = useState<null | "spend" | "income" | "bill" | "cat" | "settings" | "period" | "history">(null);
+  const [sheet, setSheet] = useState<null | "spend" | "income" | "bill" | "cat" | "settings" | "period" | "history" | "balance" | "oneoff">(null);
   const [editIncome, setEditIncome] = useState<Income | undefined>();
   const [editBill, setEditBill] = useState<Bill | undefined>();
   const [editCat, setEditCat] = useState<Category | undefined>();
@@ -172,29 +182,31 @@ export function MoneyView() {
           <span className="small">
             until payday {d(cur.end)} · about {money(b.safe.perDay)}/day for {b.safe.daysLeft} day{b.safe.daysLeft === 1 ? "" : "s"}
           </span>
+          <span className="small money-basis">
+            {b.real ? `from your balance (${format(b.real.asOf, "EEE h:mm a")})` : "from what you've logged"} ·{" "}
+            <button className="btn-link small" onClick={() => setSheet("balance")}>
+              🏦 {b.real ? "update balance" : "check in my balance"}
+            </button>
+          </span>
           <button className="btn btn-sm money-spend" onClick={() => setSheet("spend")}>
             💸 I spent
           </button>
         </section>
       )}
-
-      {b.plan.shortfall > 0 && (
-        <p className="money-alert">
-          This paycheck is {money(b.plan.shortfall)} short of what&apos;s due before the next one. Skip fun money this round, or move a bill if you can.
-        </p>
-      )}
-      {alerts.map((a) => (
-        <p key={a.c.id} className={`money-alert${a.state === "over" ? " over" : ""}`}>
-          {a.c.emoji} {a.c.name}: {money(a.spent)} of {money(a.ceiling!)} this month{a.state === "over" ? ". Over." : ". Getting close."}
-        </p>
-      ))}
+      <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setSheet("oneoff")}>
+        ＋ extra money or a surprise bill
+      </button>
+      <p className="small faint">Tap anything below only when you want the details.</p>
 
       {cur && (
-        <section className="card stack-sm">
+        <details className="fold">
+          <summary>📬 Where this paycheck goes</summary>
+        <section className="stack-sm">
           <div className="row-between">
             <strong>This paycheck</strong>
             <span className="small muted">
               {d(cur.start)} · {money(cur.income)}
+              {cur.incomeMax > cur.income ? `–${money(cur.incomeMax)}` : ""}
             </span>
           </div>
           <SplitBar p={cur} />
@@ -230,12 +242,18 @@ export function MoneyView() {
               <span>{money(cur.free)}</span>
             </li>
           </ul>
-          {!cur.paychecks.some((p) => p.actual) && <PaycheckActual period={cur} incomes={b.incomes} />}
+          {cur.incomeMax > cur.income && (
+            <p className="small muted">Planned on the low end ({money(cur.income)}). If it lands higher, log it below and the extra spreads across your fun money and savings.</p>
+          )}
+          {!cur.paychecks.some((p) => p.actual) && <PaycheckActual period={cur} incomes={b.incomes} varies={cur.incomeMax > cur.income} />}
+          {b.plan.shortfall > 0 && <p className="small muted">This one&apos;s {money(b.plan.shortfall)} short of what&apos;s due before the next. Skipping fun money this round covers most of it.</p>}
         </section>
+        </details>
       )}
 
+      <details className="fold">
+        <summary>🧾 Bills coming up{upcoming.filter((u) => !u.paid).length ? ` (${upcoming.filter((u) => !u.paid).length})` : ""}</summary>
       <section className="stack-sm">
-        <h3 className="pantry-h">Coming up</h3>
         {upcoming.length === 0 ? (
           <p className="small muted">No bills in the next month. Add them under Set up.</p>
         ) : (
@@ -253,11 +271,14 @@ export function MoneyView() {
           </ul>
         )}
       </section>
+      </details>
 
       {b.categories.length > 0 && (
+        <details className="fold">
+          <summary>🗂️ Categories this month{alerts.length ? ` · ${alerts.length} getting close` : ""}</summary>
         <section className="stack-sm">
           <div className="row-between">
-            <h3 className="pantry-h">This month</h3>
+            <span />
             <button className="btn-link small" onClick={() => setSheet("history")}>
               history
             </button>
@@ -281,15 +302,18 @@ export function MoneyView() {
             </button>
           ))}
         </section>
+        </details>
       )}
 
+      <details className="fold">
+        <summary>📆 Paychecks ahead</summary>
       <section className="stack-sm">
-        <h3 className="pantry-h">Paychecks ahead</h3>
         <ul className="pantry-list">
           {b.plan.periods.slice(1, 7).map((p) => (
             <li key={iso(p.start)} className="pantry-row">
               <button className="pantry-name" onClick={() => (setPeriod(p), setSheet("period"))}>
                 {d(p.start)} · {money(p.income)}
+                {p.incomeMax > p.income ? `–${money(p.incomeMax)}` : ""}
                 <span className="pantry-meta">
                   {" "}
                   bills {money(p.billTotal)}
@@ -302,10 +326,14 @@ export function MoneyView() {
           ))}
         </ul>
       </section>
+      </details>
 
-      <section className="card small stack-sm money-facts">
+      <details className="fold">
+        <summary>💡 The big picture</summary>
+      <section className="small stack-sm money-facts">
         <span>
-          About {money(perMonth)}/mo in, {money(billsMonth)}/mo in bills ({perMonth ? Math.round((billsMonth / perMonth) * 100) : 0}%).
+          About {money(perMonth)}
+          {monthlyIncomeMax(b.incomes) > perMonth + 1 ? `–${money(monthlyIncomeMax(b.incomes))}` : ""}/mo in, {money(billsMonth)}/mo in bills ({perMonth ? Math.round((billsMonth / perMonth) * 100) : 0}%).
         </span>
         {pattern && (
           <span>
@@ -314,6 +342,7 @@ export function MoneyView() {
         )}
         {cur && cur.held > 0 && <span>After this paycheck you&apos;ll have {money(cur.held)} set aside for upcoming bills. Leave it be.</span>}
       </section>
+      </details>
 
       <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setSetup((s) => !s)}>
         {setup ? "▾" : "▸"} Set up: pay, bills, savings, categories
@@ -322,7 +351,7 @@ export function MoneyView() {
         <div className="stack">
           <SetupList
             title="Pay"
-            rows={b.incomes.map((i) => ({ id: i.id, label: `${i.name} · ${money2(Number(i.amount))}`, sub: `${FREQ_LABEL[i.freq]} · next from ${d(i.anchor)}`, onClick: () => (setEditIncome(i), setSheet("income")) }))}
+            rows={b.incomes.map((i) => ({ id: i.id, label: `${i.name} · ${money2(Number(i.amount))}${i.amount_max ? `–${money2(Number(i.amount_max))}` : ""}`, sub: `${FREQ_LABEL[i.freq]} · next from ${d(i.anchor)}`, onClick: () => (setEditIncome(i), setSheet("income")) }))}
             onAdd={() => (setEditIncome(undefined), setSheet("income"))}
           />
           <SetupList
@@ -335,6 +364,27 @@ export function MoneyView() {
             rows={b.categories.map((c) => ({ id: c.id, label: `${c.emoji ?? "🗂️"} ${c.name}`, sub: c.ceiling != null ? `ceiling ${money(Number(c.ceiling))}/mo · warn at ${c.warn_pct}%` : "just tracking", onClick: () => (setEditCat(c), setSheet("cat")) }))}
             onAdd={() => (setEditCat(undefined), setSheet("cat"))}
           />
+          {b.oneoffs.filter((o) => o.on_date >= iso(new Date(nowMs - 31 * 864e5))).length > 0 && (
+            <div className="stack-sm">
+              <h3 className="pantry-h">Extras</h3>
+              <ul className="pantry-list">
+                {b.oneoffs
+                  .filter((o) => o.on_date >= iso(new Date(nowMs - 31 * 864e5)))
+                  .map((o) => (
+                    <li key={o.id} className="pantry-row">
+                      <span className="pantry-name">
+                        {o.kind === "in" ? "➕" : "⚡"} {o.name}
+                        <span className="pantry-meta"> {d(o.on_date)}</span>
+                      </span>
+                      <span className="small">{money2(Number(o.amount))}</span>
+                      <button className="lt-x" aria-label="Remove" onClick={() => run(db().from("budget_oneoffs").delete().eq("id", o.id), toast)}>
+                        ×
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
           <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setSheet("settings")}>
             🐷 Savings: {b.settings.save_pct}%{Number(b.settings.save_fixed) ? ` + ${money(Number(b.settings.save_fixed))}` : ""} of each paycheck
             {Number(b.settings.cushion) ? ` · keep ${money(Number(b.settings.cushion))} cushion` : ""}
@@ -342,6 +392,22 @@ export function MoneyView() {
         </div>
       )}
 
+      {sheet === "oneoff" && (
+        <Sheet title="Something extra" onClose={() => setSheet(null)}>
+          <OneOffForm onDone={() => setSheet(null)} />
+        </Sheet>
+      )}
+      {sheet === "balance" && (
+        <Sheet title="🏦 What's in your account right now?" onClose={() => setSheet(null)}>
+          <BalanceForm tracked={b.tracked?.left ?? null} onDone={() => setSheet(null)} />
+        </Sheet>
+      )}
+      {b.real && b.tracked && Math.abs(b.real.left - b.tracked.left) >= 25 && (
+        <p className="small muted">
+          Your balance says {money(b.real.left)} is safe; your logged spending said {money(b.tracked.left)}.{" "}
+          {b.real.left < b.tracked.left ? "Probably a few purchases that didn't get logged. No big deal: the balance wins." : "You've got a bit more than the plan thought."}
+        </p>
+      )}
       {sheet === "spend" && (
         <Sheet title="💸 I spent" onClose={() => setSheet(null)}>
           <SpendForm onDone={() => setSheet(null)} />
@@ -439,7 +505,7 @@ function SplitBar({ p }: { p: Period }) {
 }
 
 /** "Got a different amount?" for paychecks that vary (overtime, fewer hours). */
-function PaycheckActual({ period, incomes }: { period: Period; incomes: Income[] }) {
+function PaycheckActual({ period, incomes, varies = false }: { period: Period; incomes: Income[]; varies?: boolean }) {
   const { meId, toast } = useApp();
   const [open, setOpen] = useState(false);
   const [amt, setAmt] = useState("");
@@ -448,7 +514,7 @@ function PaycheckActual({ period, incomes }: { period: Period; incomes: Income[]
   if (!open)
     return (
       <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(true)}>
-        This check was a different amount?
+        {varies ? "💵 What did this check come to?" : "This check was a different amount?"}
       </button>
     );
   return (
@@ -461,7 +527,7 @@ function PaycheckActual({ period, incomes }: { period: Period; incomes: Income[]
         setOpen(false);
       }}
     >
-      <input className="input input-sm grow" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ""))} placeholder={`what landed (expected ${money2(Number(inc.amount))})`} autoFocus />
+      <input className="input input-sm grow" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ""))} placeholder={`what landed (${inc.amount_max ? `${money2(Number(inc.amount))}–${money2(Number(inc.amount_max))}` : `expected ${money2(Number(inc.amount))}`})`} autoFocus />
       <button className="btn btn-sm btn-primary">Save</button>
     </form>
   );
@@ -502,11 +568,12 @@ function DeleteBtn({ label, onDelete }: { label: string; onDelete: () => void })
 
 function IncomeForm({ initial, onDone }: { initial?: Income; onDone: () => void }) {
   const { meId, toast } = useApp();
-  const [f, setF] = useState({ name: initial?.name ?? "Paycheck", amount: initial ? String(initial.amount) : "", freq: initial?.freq ?? ("biweekly" as IncomeFreq), anchor: initial?.anchor ?? iso(new Date()), day2: initial?.day2 ? String(initial.day2) : "15" });
+  const [f, setF] = useState({ name: initial?.name ?? "Paycheck", amount: initial ? String(initial.amount) : "", max: initial?.amount_max ? String(initial.amount_max) : "", varies: !!initial?.amount_max, freq: initial?.freq ?? ("biweekly" as IncomeFreq), anchor: initial?.anchor ?? iso(new Date()), day2: initial?.day2 ? String(initial.day2) : "15" });
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!(Number(f.amount) > 0)) return;
-    const row = { name: f.name.trim() || "Paycheck", amount: Number(f.amount), freq: f.freq, anchor: f.anchor, day2: f.freq === "semimonthly" ? Number(f.day2) || 15 : null };
+    const max = f.varies && Number(f.max) > Number(f.amount) ? Number(f.max) : null;
+    const row = { name: f.name.trim() || "Paycheck", amount: Number(f.amount), amount_max: max, freq: f.freq, anchor: f.anchor, day2: f.freq === "semimonthly" ? Number(f.day2) || 15 : null };
     if (await run(initial ? db().from("budget_income").update(row).eq("id", initial.id) : db().from("budget_income").insert({ ...row, owner: meId }), toast)) onDone();
   }
   return (
@@ -515,9 +582,19 @@ function IncomeForm({ initial, onDone }: { initial?: Income; onDone: () => void 
         <input className="input input-sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Job name" aria-label="Name" />
         <div className="money-input">
           <span>$</span>
-          <input className="input input-sm" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder="take-home" aria-label="Take-home amount" />
+          <input className="input input-sm" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={f.varies ? "lowest" : "take-home"} aria-label="Take-home amount" />
         </div>
       </div>
+      <label className="toggle-row small">
+        <span>Pay varies (commission, tips, performance)</span>
+        <input type="checkbox" checked={f.varies} onChange={(e) => setF({ ...f, varies: e.target.checked })} />
+      </label>
+      {f.varies && (
+        <div className="money-input">
+          <span>up to $</span>
+          <input className="input input-sm" inputMode="decimal" value={f.max} onChange={(e) => setF({ ...f, max: e.target.value.replace(/[^\d.]/g, "") })} placeholder="a good check" aria-label="Highest amount" />
+        </div>
+      )}
       <div className="chips">
         {(Object.keys(FREQ_LABEL) as IncomeFreq[]).map((k) => (
           <button key={k} type="button" className="chip chip-sm" aria-pressed={f.freq === k} onClick={() => setF({ ...f, freq: k })}>
@@ -535,7 +612,11 @@ function IncomeForm({ initial, onDone }: { initial?: Income; onDone: () => void 
           <input className="input input-sm" inputMode="numeric" value={f.day2} onChange={(e) => setF({ ...f, day2: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
         </label>
       )}
-      <p className="small faint">Use what actually lands in your account. If a check comes in different, you can fix just that one later.</p>
+      <p className="small faint">
+        {f.varies
+          ? "The plan uses the low number so a slow check never leaves you short. Each payday, log what actually landed and everything updates."
+          : "Use what actually lands in your account. If a check comes in different, you can fix just that one later."}
+      </p>
       <div className="row-between">
         {initial ? <DeleteBtn label={initial.name} onDelete={() => run(db().from("budget_income").delete().eq("id", initial.id), toast).then(onDone)} /> : <span />}
         <button className="btn btn-primary btn-sm" disabled={!(Number(f.amount) > 0)}>
@@ -708,5 +789,82 @@ function SpendHistory({ spends, categories }: { spends: Spend[]; categories: Cat
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A quick "here's my real balance" check-in. Everything re-figures from it. */
+function BalanceForm({ tracked, onDone }: { tracked: number | null; onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const [amt, setAmt] = useState("");
+  return (
+    <form
+      className="stack-sm"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (amt === "" || isNaN(Number(amt))) return;
+        if (await run(db().from("budget_balances").insert({ owner: meId, amount: Number(amt), as_of: new Date().toISOString() }), toast)) {
+          toast("Balance updated 🏦");
+          onDone();
+        }
+      }}
+    >
+      <div className="money-input">
+        <span>$</span>
+        <input className="input" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.-]/g, ""))} placeholder="checking balance" autoFocus aria-label="Balance" />
+      </div>
+      <p className="small faint">
+        The account your paycheck lands in. Forgot to log a bunch of stuff? This catches it: bills still due, what to put aside and your category budgets come off, and the rest is safe to spend.
+        {tracked != null ? ` (Logged spending says ${money(tracked)} is safe right now.)` : ""}
+      </p>
+      <button className="btn btn-primary btn-block" disabled={amt === ""}>
+        Update
+      </button>
+    </form>
+  );
+}
+
+/** A one-time extra: money in (bonus, sold something) or a bill that popped up. */
+function OneOffForm({ onDone }: { onDone: () => void }) {
+  const { meId, toast } = useApp();
+  const [kind, setKind] = useState<"in" | "out">("out");
+  const [name, setName] = useState("");
+  const [amt, setAmt] = useState("");
+  const [day, setDay] = useState(iso(new Date()));
+  return (
+    <form
+      className="stack-sm"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!(Number(amt) > 0)) return;
+        const ok = await run(db().from("budget_oneoffs").insert({ owner: meId, kind, name: name.trim() || (kind === "in" ? "Extra money" : "Surprise bill"), amount: Number(amt), on_date: day }), toast);
+        if (ok) {
+          toast(kind === "in" ? "Added. Fun money updated 🎈" : "Added. It's worked into the plan.");
+          onDone();
+        }
+      }}
+    >
+      <div className="seg seg-sm" role="group" aria-label="Which">
+        <button type="button" aria-pressed={kind === "out"} onClick={() => setKind("out")}>
+          ⚡ A bill came up
+        </button>
+        <button type="button" aria-pressed={kind === "in"} onClick={() => setKind("in")}>
+          ➕ Extra money
+        </button>
+      </div>
+      <div className="grid-2">
+        <input className="input input-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "in" ? "bonus, sold a thing…" : "vet, car repair…"} aria-label="What" />
+        <div className="money-input">
+          <span>$</span>
+          <input className="input input-sm" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ""))} placeholder="amount" autoFocus aria-label="Amount" />
+        </div>
+      </div>
+      <label className="field">
+        <span>{kind === "in" ? "When it lands" : "When it's due"}</span>
+        <input className="input input-sm" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+      </label>
+      <button className="btn btn-primary btn-block" disabled={!(Number(amt) > 0)}>
+        Add
+      </button>
+    </form>
   );
 }

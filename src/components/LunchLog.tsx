@@ -8,6 +8,7 @@ import { useMeals, usePlaces } from "@/lib/foodData";
 import { toDateInput } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import { useFoodNotes } from "./FoodRating";
 
 interface Lunch {
   id: string;
@@ -40,6 +41,15 @@ export function LunchLog() {
     ["lunch_log"],
   );
   const [adding, setAdding] = useState(false);
+  const { data: notes = [] } = useLive<LunchNote[]>(
+    "lunch_notes",
+    async () => {
+      const { data, error } = await supabase.from("lunch_notes").select("*").order("created_at");
+      if (error) throw error;
+      return data as LunchNote[];
+    },
+    ["lunch_notes"],
+  );
   const [open, setOpen] = useState<Lunch | null>(null);
 
   // Hits and misses by what it was (one of our meals/places counts as itself, however it was typed).
@@ -115,6 +125,7 @@ export function LunchLog() {
                 <span className="small muted">{l.verdict ? VERDICT[l.verdict] : "not rated yet"}</span>
               )}
               {l.verdict_note && <span className="small">“{l.verdict_note}”</span>}
+              <LunchNotes lunch={l} notes={notes.filter((n) => n.lunch_id === l.id)} />
             </li>
           ))}
         </ul>
@@ -225,5 +236,83 @@ function LunchForm({ initial, onDone }: { initial?: Lunch; onDone: () => void })
         </button>
       </div>
     </form>
+  );
+}
+
+interface LunchNote {
+  id: string;
+  lunch_id: string;
+  author: string;
+  text: string;
+}
+
+/** Either of you can say what you thought; 📌 keeps a note on the meal itself (Food). */
+function LunchNotes({ lunch, notes }: { lunch: Lunch; notes: LunchNote[] }) {
+  const { meId, nameOf, toast } = useApp();
+  const saved = useFoodNotes();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const supabase = supabaseBrowser();
+  const target = lunch.meal_id ? { kind: "meal" as const, id: lunch.meal_id } : lunch.place_id ? { kind: "place" as const, id: lunch.place_id } : null;
+  const isSaved = (n: LunchNote) => !!target && saved.some((f) => f.kind === target.kind && f.ref_id === target.id && f.text === n.text);
+  if (!open && !notes.length)
+    return (
+      <button className="btn-link small" style={{ alignSelf: "flex-start", padding: 0 }} onClick={() => setOpen(true)}>
+        💬 add a thought
+      </button>
+    );
+  return (
+    <div className="note-thread">
+      {notes.map((n) => (
+        <div key={n.id} className="note-line">
+          <strong className="small">{n.author === meId ? "you" : nameOf(n.author)}</strong>
+          <span className="grow">{n.text}</span>
+          {target &&
+            (isSaved(n) ? (
+              <span className="small faint">📌 saved</span>
+            ) : (
+              <button
+                className="btn-link small"
+                onClick={async () => {
+                  const { error } = await supabase.from("food_notes").insert({ kind: target.kind, ref_id: target.id, author: n.author, text: n.text });
+                  if (error) return toast(error.message);
+                  refreshAll();
+                  toast(`Saved to ${lunch.what} 📌`);
+                }}
+              >
+                📌 save to meal
+              </button>
+            ))}
+          {n.author === meId && (
+            <button
+              className="lt-x"
+              aria-label="Delete"
+              onClick={async () => {
+                await supabase.from("lunch_notes").delete().eq("id", n.id);
+                refreshAll();
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      <form
+        className="quick-add"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!draft.trim()) return;
+          const { error } = await supabase.from("lunch_notes").insert({ lunch_id: lunch.id, author: meId, text: draft.trim() });
+          if (error) return toast(error.message);
+          setDraft("");
+          refreshAll();
+        }}
+      >
+        <input className="input input-sm grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="what you thought…" aria-label="Note" />
+        <button className="btn btn-sm" disabled={!draft.trim()}>
+          Add
+        </button>
+      </form>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { ManaPips, useDeckNames } from "./Decks";
+import { ImageSources, filesFromPaste } from "./ImageSources";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { shrinkImage } from "@/lib/image";
@@ -111,7 +112,18 @@ export function PostComposer({
   }
 
   return (
-    <form className="stack" onSubmit={submit}>
+    <form
+      className="stack"
+      onSubmit={submit}
+      onPaste={(e) => {
+        // Pasting a copied photo into the box adds it.
+        const fs = filesFromPaste(e);
+        if (fs.length) {
+          e.preventDefault();
+          setFiles((cur) => [...cur, ...fs].slice(0, MAX_PHOTOS));
+        }
+      }}
+    >
       {dogNote && <DogChips value={dogs} onChange={setDogs} />}
       {deckId === "pick" && (
         <div className="chips">
@@ -165,9 +177,12 @@ export function PostComposer({
       )}
       {error && <p className="error">{error}</p>}
       <div className="row-between">
-        <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_PHOTOS}>
-          <IconCamera width={22} height={22} /> Photo
-        </button>
+        <span className="row wrap" style={{ gap: 2 }}>
+          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_PHOTOS}>
+            <IconCamera width={22} height={22} /> Photo
+          </button>
+          <ImageSources onFiles={(fs) => setFiles((cur) => [...cur, ...fs].slice(0, MAX_PHOTOS))} />
+        </span>
         <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length)}>
           {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
         </button>

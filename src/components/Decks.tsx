@@ -10,6 +10,8 @@ import { ago, useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
+import { ImageSources } from "./ImageSources";
+import { ResetVotes } from "./ResetVotes";
 
 export interface Deck {
   id: string;
@@ -63,6 +65,7 @@ interface Call {
   asking: boolean;
   note: string | null;
   answered_at: string | null;
+  reset_votes: string[];
   created_at: string;
 }
 
@@ -570,6 +573,7 @@ function DeckForm({ room, initial, shelves, tags, onDone, onDeleted }: { room: R
           <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()}>
             {file ? "Change picture" : initial?.cover_path ? "Replace cover" : "Choose a picture"}
           </button>
+          <ImageSources multiple={false} onFiles={(fs) => fs[0] && setFile(fs[0])} />
           {file && <span className="small muted">{file.name}</span>}
         </div>
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
@@ -639,7 +643,9 @@ export function GameNight() {
   const [answering, setAnswering] = useState<Call | null>(null);
   const now = useNow()?.getTime() ?? 0;
   if (!partner) return null;
-  const latest = calls.find((c) => now - Date.parse(c.created_at) < 2 * 86_400_000);
+  // Only today's call shows, so it resets itself overnight.
+  const today = now ? new Date(now).toDateString() : "";
+  const latest = calls.find((c) => new Date(c.created_at).toDateString() === today);
   const deckName = (id: string | null) => decks.find((d) => d.id === id)?.name;
 
   let body: React.ReactNode = <span className="muted">Nobody&apos;s called their deck yet.</span>;
@@ -671,6 +677,20 @@ export function GameNight() {
             Pick mine
           </button>
         )}
+        {fromMe && !latest.answered_at && (
+          <button
+            className="btn btn-sm btn-ghost"
+            style={{ alignSelf: "flex-start" }}
+            onClick={async () => {
+              await supabaseBrowser().from("deck_calls").delete().eq("id", latest.id);
+              refreshAll();
+              toast("Took it back");
+            }}
+          >
+            ↩ Take it back
+          </button>
+        )}
+        {latest.answered_at && <ResetVotes table="deck_calls" match={{ id: latest.id }} votes={latest.reset_votes ?? []} />}
       </div>
     );
   }
