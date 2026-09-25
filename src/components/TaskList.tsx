@@ -14,7 +14,7 @@ import { useShopping, type ShopItem } from "./Shopping";
 import { TaskForm, TaskPresets, windowText } from "./TaskForm";
 import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
-import { DogPic } from "./DogPic";
+import { Sticker } from "./Sticker";
 import { IconTrash } from "./Art";
 
 // Ours also collects household (older items) and dog to-dos, so nothing hides.
@@ -136,7 +136,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
       <div className="card" style={{ marginTop: 12, padding: "4px 14px" }}>
         {open.length === 0 && (
           <div className="empty" style={{ padding: 18 }}>
-            <DogPic name={listType === "personal" ? "wiley_curled" : "kodo_curled"} size={72} />
+            <Sticker name={listType === "personal" ? "wiley_down" : "kodo_sleep"} size={120} tilt={-2} />
             <span>All clear. Put the kettle on.</span>
           </div>
         )}

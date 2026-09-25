@@ -9,11 +9,11 @@ import { usePhotoUrls } from "@/lib/photos";
 import { DOGS, type DogId } from "@/lib/dogs";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
+import { Sticker } from "@/components/Sticker";
 import { Sheet } from "@/components/Sheet";
 import { PostComposer } from "@/components/PostComposer";
 import { PostCard } from "@/components/PostCard";
 import { DogAvatar } from "@/components/DogAvatar";
-import { DogPic } from "@/components/DogPic";
 import { DogProfileCards } from "@/components/DogProfiles";
 import { TaskList } from "@/components/TaskList";
 import { Wavy } from "@/components/Art";
@@ -24,7 +24,7 @@ export default function DogsPage() {
   const initialDog = DOGS.find((d) => d.id === wanted)?.id ?? null;
   return (
     <main className="page">
-      <PageHead eyebrow="Kodo & Wiley" title="Dogs" art={<DogPic name="kodo_wiley_face" size={52} />} />
+      <PageHead eyebrow="Kodo & Wiley" title="Dogs" art={<Sticker name="duo_side" size={92} tilt={-3} />} />
       <Wavy />
       <DogProfileCards />
       <Dogs initialDog={initialDog} />
@@ -61,7 +61,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
   return (
     <>
       <button className="card composer-prompt" onClick={() => setWriting(true)}>
-        <DogPic name="kodo_wiley_face" size={40} />
+        <Sticker name="duo_faces" size={56} />
         <span>Add a dog note… it posts as the dog</span>
       </button>
 
@@ -70,7 +70,7 @@ function Dogs({ initialDog }: { initialDog: DogId | null }) {
       </div>
 
       <div className="section-title">
-        <DogPic name="kodo_wiley_back_walk" size={26} /> Dog notes
+        <Sticker name="duo_mountains" size={40} /> Dog notes
       </div>
       <div className="chips" role="group" aria-label="Show notes for" style={{ marginBottom: 12 }}>
         <button className="chip" aria-pressed={filter === null} onClick={() => pickFilter(null)}>

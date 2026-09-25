@@ -7,7 +7,7 @@ import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
 import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
-import { DogPic, type ArtName } from "./DogPic";
+import { Sticker, type StickerName } from "./Sticker";
 import { StarForm } from "./StarForm";
 import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
@@ -19,14 +19,14 @@ import { TaskPresetForm } from "./TaskForm";
 import { MealStart } from "./MealThread";
 import { VibeAsk } from "./Vibe";
 
-type Entry = { kind: AddKind; emoji: string; label: string; art?: ArtName };
+type Entry = { kind: AddKind; emoji: string; label: string; art?: StickerName };
 
 // Grouped so it stays scannable as it grows. New things to add go here.
 const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Us",
     items: [
-      { kind: "post", emoji: "🌼", label: "Update", art: "wiley_happy" },
+      { kind: "post", emoji: "🌼", label: "Update", art: "wiley_face" },
       { kind: "star", emoji: "⭐", label: "Send a star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
       { kind: "status", emoji: "🚗", label: "On my way" },
@@ -53,15 +53,15 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "task", emoji: "✅", label: "To-do" },
       { kind: "shop", emoji: "🛒", label: "Shopping" },
-      { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_run" },
+      { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_walk" },
       { kind: "goal", emoji: "💰", label: "Savings goal" },
     ],
   },
   {
     title: "The dogs",
     items: [
-      { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "kodo_wiley_face" },
-      { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_down" },
+      { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "duo_faces" },
+      { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_sleep" },
       { kind: "dog-preset", emoji: "☆", label: "New dog preset", art: "wiley_down" },
     ],
   },
@@ -124,7 +124,7 @@ export function AddSheet() {
               <div className="add-grid">
                 {g.items.map((m) => (
                   <button key={m.kind} className="tile" onClick={() => openAdd(m.kind)}>
-                    {m.art ? <DogPic name={m.art} size={34} /> : <span className="tile-emoji">{m.emoji}</span>}
+                    {m.art ? <Sticker name={m.art} size={48} /> : <span className="tile-emoji">{m.emoji}</span>}
                     {m.label}
                   </button>
                 ))}

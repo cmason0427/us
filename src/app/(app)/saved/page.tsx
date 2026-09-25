@@ -1,6 +1,5 @@
 "use client";
 
-import { DogPic } from "@/components/DogPic";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -9,6 +8,7 @@ import { usePhotoUrls } from "@/lib/photos";
 import { useFolders, useSaves, type Folder } from "@/lib/saved";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
+import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
 
 export default function SavedPage() {
@@ -38,7 +38,7 @@ export default function SavedPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Just yours" title="Saved" art={<DogPic name="kodo_happy" size={42} />} />
+      <PageHead eyebrow="Just yours" title="Saved" art={<Sticker name="kodo_face" size={80} tilt={4} />} />
       <Wavy />
       <div className="folder-grid" style={{ marginTop: 16 }}>
         {folders.map((f) => (
@@ -88,13 +88,13 @@ function FolderView({ folder, onBack }: { folder: Folder; onBack: () => void }) 
   return (
     <main className="page">
       <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 6 }}>
-        <DogPic name="kodo_back" size={26} /> Saved
+        <Sticker name="kodo_back" size={40} /> Saved
       </button>
       <PageHead title={`${folder.is_spicy ? "🌶️ " : ""}${folder.name}`} />
       <Wavy />
       {saves.length === 0 ? (
         <div className="empty">
-          <DogPic name="wiley_curled" size={100} />
+          <Sticker name="kodo_sleep" size={150} tilt={2} />
           <p>Empty for now.</p>
         </div>
       ) : (

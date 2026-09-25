@@ -1,7 +1,7 @@
 "use client";
 
 import { PageHead } from "@/components/PageHead";
-import { DogPic } from "@/components/DogPic";
+import { Sticker } from "@/components/Sticker";
 import { GoalsView } from "@/components/Goals";
 import { Wavy } from "@/components/Art";
 
@@ -9,7 +9,7 @@ import { Wavy } from "@/components/Art";
 export default function GoalsPage() {
   return (
     <main className="page">
-      <PageHead eyebrow="Saving for" title="Goals" art={<DogPic name="wiley_jump" size={48} />} />
+      <PageHead eyebrow="Saving for" title="Goals" art={<Sticker name="wiley_trot" size={84} tilt={4} />} />
       <Wavy />
       <GoalsView />
     </main>

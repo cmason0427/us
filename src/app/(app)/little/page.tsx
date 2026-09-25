@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
-import { DogPic } from "@/components/DogPic";
+import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
 
 interface Thing {
@@ -69,7 +69,7 @@ export default function LittleThingsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="Worth remembering" title="Little things" art={<DogPic name="kodo_wiley_standing" size={46} />} />
+      <PageHead eyebrow="Worth remembering" title="Little things" art={<Sticker name="duo_cuddle" size={92} tilt={-2} />} />
       <Wavy />
       <div className="seg" role="group" aria-label="About who">
         <button aria-pressed={about === "them"} onClick={() => setAbout("them")}>

@@ -6,7 +6,7 @@ import { Pantry } from "@/components/Pantry";
 import { ShoppingList } from "@/components/Shopping";
 import { type FoodFilters, type FoodPlace, type HomeMeal } from "@/lib/food";
 import { PageHead } from "@/components/PageHead";
-import { DogPic } from "@/components/DogPic";
+import { Sticker } from "@/components/Sticker";
 import { Sheet } from "@/components/Sheet";
 import { MealBatch, PlaceBatch } from "@/components/Batches";
 import { FoodFilterPanel } from "@/components/FoodFilterPanel";
@@ -29,7 +29,7 @@ export default function EatPage() {
   };
   return (
     <main className="page">
-      <PageHead eyebrow="What sounds good?" title="Eat" art={<DogPic name="wiley_happy" size={44} />} />
+      <PageHead eyebrow="What sounds good?" title="Eat" art={<Sticker name="wiley_sniff" size={84} tilt={-4} />} />
       <Wavy />
       <div className="seg" role="group" aria-label="Section" style={{ marginBottom: 14 }}>
         <button aria-pressed={section === "pick"} onClick={() => pick("pick")}>

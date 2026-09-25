@@ -808,3 +808,10 @@ div.dash-row { cursor: default; }
 .mdot.ev[data-color] { background: linear-gradient(90deg, var(--mark) 0 38%, var(--c) 38%); padding-left: 0; box-shadow: none; }
 .drawer-quiet { margin-top: auto; padding: 10px; font-size: 0.9rem; color: var(--ink-soft); text-decoration: none; }
 .task-shop { display: block; text-decoration: none; }
+
+/* Photo stickers as art accents */
+.sticker-img { display: inline-block; flex-shrink: 0; filter: drop-shadow(0 3px 6px color-mix(in srgb, var(--plum) 22%, transparent)); }
+.head-title-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.head-art { flex-shrink: 0; margin: -18px 0 -14px auto; }
+.head-art .sticker-img { display: block; }
+.tile .sticker-img { margin: -6px 0; }

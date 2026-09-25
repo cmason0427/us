@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PageHead } from "@/components/PageHead";
-import { DogPic } from "@/components/DogPic";
+import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
 import { Sheet } from "@/components/Sheet";
 import { EventPresetForm, useTemplates, type EventTemplate } from "@/components/EventForm";
@@ -23,7 +23,7 @@ export default function PresetsPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="One-tap shortcuts" title="Presets" art={<DogPic name="kodo_standing" size={46} />} />
+      <PageHead eyebrow="One-tap shortcuts" title="Presets" art={<Sticker name="wiley_back" size={80} tilt={3} />} />
       <Wavy />
 
       <div className="row-between">

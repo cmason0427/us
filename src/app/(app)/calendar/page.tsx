@@ -1,6 +1,5 @@
 "use client";
 
-import { DogPic } from "@/components/DogPic";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -32,6 +31,7 @@ import { PlanCard, PlanSheet, createPlan, planEnd, planStart, planSteps, usePlan
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
+import { Sticker } from "@/components/Sticker";
 import { Sheet } from "@/components/Sheet";
 import { EventForm } from "@/components/EventForm";
 import { IconBell, IconChevron, IconPin, IconPlus, Wavy } from "@/components/Art";
@@ -178,7 +178,7 @@ export default function CalendarPage() {
 
   return (
     <main className="page">
-      <PageHead eyebrow="What's coming up" title="Calendar" art={<DogPic name="kodo_wiley_back_walk" size={44} />} />
+      <PageHead eyebrow="What's coming up" title="Calendar" art={<Sticker name="duo_mountains" size={84} tilt={-3} />} />
       <Wavy className="sage" />
 
       {waiting.length > 0 && (
@@ -671,7 +671,7 @@ function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void;
 function Empty({ text }: { text: string }) {
   return (
     <div className="empty">
-      <DogPic name="wiley_down" size={110} />
+      <Sticker name="wiley_down" size={150} tilt={-2} />
       <p className="display">{text}</p>
     </div>
   );

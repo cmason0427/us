@@ -13,10 +13,10 @@ export function PageHead({ eyebrow, title, art }: { eyebrow?: string; title: Rea
       <MenuButton />
       <div className="grow">
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h1>
-          {title}
-          {art}
-        </h1>
+        <div className="head-title-row">
+          <h1>{title}</h1>
+          {art && <div className="head-art">{art}</div>}
+        </div>
       </div>
       <Link href="/settings" aria-label="Settings" style={{ textDecoration: "none" }}>
         <PersonAvatar id={meId} size={40} />
