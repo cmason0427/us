@@ -31,6 +31,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
     .select("id, subscription_json")
     .eq("user_id", userId);
 
+  // The app never mixes capitals, and pushes match it.
+  payload = { ...payload, title: payload.title.toLowerCase(), body: payload.body.toLowerCase() };
   let sent = 0;
   await Promise.all(
     (subs ?? []).map(async (s) => {

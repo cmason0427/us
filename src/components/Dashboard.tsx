@@ -6,13 +6,15 @@ import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import { ago, useNow } from "@/lib/dates";
+import { isHiddenNow } from "@/lib/deadline";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { SleepControls, useSleepTonight } from "./Sleep";
 import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
-import { useGoalCheckins } from "./Goals";
+import { GoalsView, useGoalCheckins } from "./Goals";
+import { TaskList } from "./TaskList";
 import { usePartnerStatus } from "./Status";
 
 /**
@@ -27,7 +29,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | null;
+type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "goals" } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -88,13 +90,13 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       ) : null}
 
       {dogTodos > 0 && (
-        <Row icon="🐾" label="Dogs" href="/dogs">
+        <Row icon="🐾" label="Dogs" onClick={() => setOpen({ kind: "dogs" })}>
           {dogTodos} dog to-do{dogTodos === 1 ? "" : "s"}
         </Row>
       )}
 
       {checkins > 0 && (
-        <Row icon="💰" label="Savings" href="/goals">
+        <Row icon="💰" label="Savings" onClick={() => setOpen({ kind: "goals" })}>
           {checkins === 1 ? "A savings check-in is waiting" : `${checkins} savings check-ins are waiting`}
         </Row>
       )}
@@ -111,6 +113,16 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       )}
       {open?.kind === "vibe" && vibe.incoming && <AnswerSheet check={vibe.incoming} onClose={() => setOpen(null)} />}
       {open?.kind === "plan" && <PlanSheet id={open.id} onClose={() => setOpen(null)} />}
+      {open?.kind === "dogs" && (
+        <Sheet title="🐾 Dog to-dos" onClose={() => setOpen(null)}>
+          <TaskList listType="dogs" title="" hint="" />
+        </Sheet>
+      )}
+      {open?.kind === "goals" && (
+        <Sheet title="💰 Savings" onClose={() => setOpen(null)}>
+          <GoalsView />
+        </Sheet>
+      )}
     </section>
   );
 }
@@ -147,14 +159,16 @@ function Row({ icon, label, children, onClick, href }: { icon: string; label: st
 }
 
 function useDogTodoCount() {
-  const { data = 0 } = useLive<number>(
-    "tasks:dogs:open:count",
+  const now = useNow()?.getTime() ?? 0;
+  const { data = [] } = useLive<{ window_start: string | null; due_at: string | null; done: boolean }[]>(
+    "tasks:dogs:open",
     async () => {
-      const { count, error } = await supabaseBrowser().from("tasks").select("id", { count: "exact", head: true }).eq("list_type", "dogs").eq("done", false);
+      const { data, error } = await supabaseBrowser().from("tasks").select("window_start, due_at, done").eq("list_type", "dogs").eq("done", false);
       if (error) throw error;
-      return count ?? 0;
+      return data;
     },
     ["tasks"],
   );
-  return data;
+  // Scheduled ones don't count until they show up in the list.
+  return data.filter((t) => !isHiddenNow(t, now)).length;
 }

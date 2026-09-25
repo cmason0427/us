@@ -207,7 +207,7 @@ function SecretView({ secret }: { secret: Secret }) {
   const { toast } = useApp();
   const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => toast("Copied"));
   return (
-    <dl className="about-prompts key-secret">
+    <dl className="about-prompts key-secret keep-case">
       {secret.username && (
         <div>
           <dt>Login</dt>
@@ -320,9 +320,9 @@ function KeySheet({ item, partnerName, onDone }: { item?: Key; partnerName: stri
         ))}
       </div>
       <input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Spotify, phone PIN, home PC…" required autoFocus={!item} aria-label="Name" />
-      <input className="input" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} placeholder="Login / email (optional)" autoComplete="off" aria-label="Login" />
-      <input className="input" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder="Password or PIN" required autoComplete="off" aria-label="Password" />
-      <input className="input" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Note (optional)" autoComplete="off" aria-label="Note" />
+      <input className="input keep-case" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} placeholder="Login / email (optional)" autoComplete="off" aria-label="Login" />
+      <input className="input keep-case" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder="Password or PIN" required autoComplete="off" aria-label="Password" />
+      <input className="input keep-case" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Note (optional)" autoComplete="off" aria-label="Note" />
       <button className="btn btn-primary btn-block" disabled={busy || !f.name.trim() || !f.password.trim()}>
         {busy ? "Saving…" : "Save"}
       </button>

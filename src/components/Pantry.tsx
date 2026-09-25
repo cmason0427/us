@@ -3,21 +3,24 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { setHave, useMeals } from "@/lib/foodData";
+import { useMeals } from "@/lib/foodData";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { addToShopping, useShopping } from "./Shopping";
 
-type Row = { name: string; have: boolean; low: boolean; tag: string | null };
+type Row = { name: string; have: boolean; low: boolean; area: string | null; type: string | null };
 
-/** Shelves for the Have list. Anything else you type becomes its own shelf. */
-export const PANTRY_TAGS = ["Fridge", "Freezer", "Vegetables", "Fruit", "Sauces", "Spices", "Baking", "Grains & pasta", "Canned", "Snacks", "Drinks"];
+/** Where it lives. Anything you type becomes its own spot. */
+export const AREAS = ["Fridge", "Freezer", "Pantry", "Lazy susan", "Counter", "Spice rack", "Cabinet"];
+/** What kind of thing it is. */
+export const TYPES = ["Fruit & veg", "Meat & fish", "Dairy & eggs", "Bread & bakery", "Pasta, rice & grains", "Canned & jarred", "Sauces & condiments", "Spices", "Baking", "Snacks", "Frozen meals", "Drinks", "Other"];
+const rank = (list: string[], v: string) => list.indexOf(v) + 1 || 99;
 
 function usePantryRows() {
   const { data = [] } = useLive<Row[]>(
     "pantry_rows",
     async () => {
-      const { data, error } = await supabaseBrowser().from("pantry").select("name, have, low, tag");
+      const { data, error } = await supabaseBrowser().from("pantry").select("name, have, low, area, type").order("name");
       if (error) throw error;
       return data as Row[];
     },
@@ -26,11 +29,16 @@ function usePantryRows() {
   return data;
 }
 
+const save = (name: string, patch: Partial<Row>) =>
+  supabaseBrowser()
+    .from("pantry")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("name", name);
+
 /**
- * What we have. Everything the pantry knows about, plus every ingredient your
- * home meals use (those start as "need"). Checking something counts for every
- * meal that uses it. Have is grouped by shelf; anything can be flagged
- * "almost out".
+ * What we keep in the kitchen. Only things you add here (or check off as
+ * "have" on a meal) are tracked, so it doesn't fill up with every ingredient
+ * ever typed. Group it by where it lives or what it is.
  */
 export function Pantry() {
   const { meId, toast } = useApp();
@@ -38,51 +46,50 @@ export function Pantry() {
   const meals = useMeals();
   const { items: shopping } = useShopping();
   const [draft, setDraft] = useState("");
-  const [shelf, setShelf] = useState<string | null>(null);
-  const [sort, setSort] = useState<"shelf" | "az">("shelf");
-  const [editing, setEditing] = useState<{ key: string; label: string } | null>(null);
+  const [newArea, setNewArea] = useState<string>("");
+  const [newType, setNewType] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [group, setGroup] = useState<"area" | "type" | "az">("area");
+  const [showFilters, setShowFilters] = useState(false);
+  const [areaF, setAreaF] = useState<string | null>(null);
+  const [typeF, setTypeF] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
-  const byKey = new Map(rows.map((r) => [r.name, r]));
-  const names = new Map<string, string>(); // key → display name
-  for (const r of rows) names.set(r.name, r.name);
-  for (const m of meals) for (const i of m.meal_ingredients) names.set(i.name.trim().toLowerCase(), i.name.trim());
-  const all = [...names.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const need = all.filter(([k]) => !byKey.get(k)?.have);
-  const have = all.filter(([k]) => byKey.get(k)?.have);
-  const low = have.filter(([k]) => byKey.get(k)?.low);
   const onList = new Set(shopping.filter((s) => !s.bought).map((s) => s.name.trim().toLowerCase()));
-  const tagOf = (k: string) => byKey.get(k)?.tag ?? null;
+  const q = search.trim().toLowerCase();
+  const shown = rows.filter((r) => (!q || r.name.includes(q)) && (!areaF || r.area === areaF) && (!typeF || r.type === typeF));
+  const low = shown.filter((r) => r.have && r.low);
+  const out = shown.filter((r) => !r.have);
+  const have = shown.filter((r) => r.have && !r.low);
+  const areas = [...new Set([...AREAS, ...rows.map((r) => r.area).filter((a): a is string => !!a)])];
+  const types = [...new Set([...TYPES, ...rows.map((r) => r.type).filter((t): t is string => !!t)])];
+  const filterCount = (areaF ? 1 : 0) + (typeF ? 1 : 0);
 
-  const usedTags = [...new Set(have.map(([k]) => tagOf(k)).filter((t): t is string => !!t))].sort(
-    (a, b) => (PANTRY_TAGS.indexOf(a) + 1 || 99) - (PANTRY_TAGS.indexOf(b) + 1 || 99) || a.localeCompare(b),
-  );
-  const shownHave = shelf ? have.filter(([k]) => (shelf === "none" ? !tagOf(k) : tagOf(k) === shelf)) : have;
+  const keyOf = (r: Row) => (group === "area" ? r.area : group === "type" ? r.type : null);
+  const order = group === "area" ? areas : types;
   const groups =
-    sort === "az"
-      ? [{ tag: null as string | null, list: shownHave }]
-      : [...usedTags, null].map((tag) => ({ tag, list: shownHave.filter(([k]) => tagOf(k) === tag) })).filter((g) => g.list.length);
+    group === "az"
+      ? [{ name: null as string | null, list: have }]
+      : [...new Set(have.map(keyOf))]
+          .sort((a, b) => (a === null ? 1 : b === null ? -1 : rank(order, a) - rank(order, b) || a.localeCompare(b)))
+          .map((name) => ({ name, list: have.filter((r) => keyOf(r) === name) }));
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft.trim()) return;
-    const { error } = await setHave(draft, true);
+    const name = draft.trim().toLowerCase();
+    if (!name) return;
+    const { error } = await supabaseBrowser()
+      .from("pantry")
+      .upsert({ name, have: true, low: false, area: newArea || null, type: newType || null, updated_at: new Date().toISOString() });
     if (error) return toast(error.message);
     setDraft("");
     refreshAll();
   }
-
-  async function toggle(name: string, v: boolean) {
-    const { error } = await setHave(name, v);
+  async function patch(name: string, p: Partial<Row>) {
+    const { error } = await save(name, p);
     if (error) toast(error.message);
     refreshAll();
   }
-
-  async function setLow(key: string, v: boolean) {
-    const { error } = await supabaseBrowser().from("pantry").update({ low: v, updated_at: new Date().toISOString() }).eq("name", key);
-    if (error) toast(error.message);
-    refreshAll();
-  }
-
   async function shop(name: string) {
     const { error } = await addToShopping(meId, [{ name }]);
     if (error) return toast(error.message);
@@ -90,128 +97,135 @@ export function Pantry() {
     toast(`${name} → grocery list 🛒`);
   }
 
-  // Gone for good: out of the pantry, and (if you say so) out of any meal that lists it.
-  async function forget(key: string, label: string) {
-    const supabase = supabaseBrowser();
-    const usedIn = meals.filter((m) => m.meal_ingredients.some((i) => i.name.trim().toLowerCase() === key));
-    if (usedIn.length) {
-      const list = usedIn.map((m) => m.name).join(", ");
-      if (!confirm(`${label} is an ingredient in ${list}. Remove it from ${usedIn.length === 1 ? "that meal" : "those meals"} too?`)) return;
-      const ids = usedIn.flatMap((m) => m.meal_ingredients.filter((i) => i.name.trim().toLowerCase() === key).map((i) => i.id));
-      const { error } = await supabase.from("meal_ingredients").delete().in("id", ids);
-      if (error) return toast(error.message);
-    }
-    await supabase.from("pantry").delete().eq("name", key);
-    refreshAll();
-    toast(`Removed ${label}`);
-  }
-
-  const shopButton = (key: string, label: string) =>
-    onList.has(key) ? (
-      <span className="small faint">on the list</span>
-    ) : (
-      <button className="btn btn-sm btn-ghost" onClick={() => shop(label)}>
-        🛒 Add
-      </button>
-    );
-
-  const row = ([key, label]: [string, string], isHave: boolean) => {
-    const r = byKey.get(key);
+  const row = (r: Row) => {
+    const meta = [group !== "area" && r.area, group !== "type" && r.type].filter(Boolean).join(" · ");
     return (
-      <div key={key} className={`task${r?.low ? " pantry-low" : ""}`}>
-        <input type="checkbox" className="check" checked={isHave} onChange={(e) => toggle(label, e.target.checked)} aria-label={`Have ${label}`} />
-        <button className="grow task-title task-edit" onClick={() => setEditing({ key, label })}>
-          {label}
-          {r?.low && <span className="sticker butter" style={{ marginLeft: 6 }}>almost out</span>}
+      <li key={r.name} className={`pantry-row${r.low ? " is-low" : ""}${r.have ? "" : " is-out"}`}>
+        <input type="checkbox" className="check check-sm" checked={r.have} onChange={(e) => patch(r.name, { have: e.target.checked, low: false })} aria-label={`Have ${r.name}`} />
+        <button className="pantry-name" onClick={() => setEditing(r.name)}>
+          {r.name}
+          {meta && <span className="pantry-meta"> {meta}</span>}
         </button>
-        {(!isHave || r?.low) && shopButton(key, label)}
-        {isHave && !r?.low && (
-          <button className="btn btn-sm btn-ghost" onClick={() => setLow(key, true)} title="Mark almost out">
-            Low?
+        {r.have && (
+          <button className={`pantry-chip${r.low ? " on" : ""}`} onClick={() => patch(r.name, { low: !r.low })} title="Almost out">
+            low
           </button>
         )}
-      </div>
+        {(!r.have || r.low) &&
+          (onList.has(r.name) ? (
+            <span className="pantry-chip faint">listed</span>
+          ) : (
+            <button className="pantry-chip" onClick={() => shop(r.name)} aria-label={`Add ${r.name} to groceries`}>
+              🛒
+            </button>
+          ))}
+      </li>
     );
   };
 
+  const editRow = rows.find((r) => r.name === editing);
+
   return (
     <div className="stack">
-      <form className="quick-add" onSubmit={add}>
-        <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="We have… (rice, eggs)" aria-label="Add to pantry" />
-        <button className="btn btn-primary" disabled={!draft.trim()}>
-          Add
-        </button>
+      <form className="stack-sm" onSubmit={add}>
+        <div className="quick-add">
+          <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="we have… (rice, eggs)" aria-label="Add to pantry" />
+          <button className="btn btn-primary btn-sm" disabled={!draft.trim()}>
+            Add
+          </button>
+        </div>
+        <div className="row">
+          <select className="select select-sm grow" value={newArea} onChange={(e) => setNewArea(e.target.value)} aria-label="Where it lives">
+            <option value="">where? (optional)</option>
+            {areas.map((a) => (
+              <option key={a}>{a}</option>
+            ))}
+          </select>
+          <select className="select select-sm grow" value={newType} onChange={(e) => setNewType(e.target.value)} aria-label="What kind">
+            <option value="">what kind? (optional)</option>
+            {types.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </div>
       </form>
 
+      <div className="row">
+        <input className="input input-sm grow" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="search…" aria-label="Search the pantry" />
+        <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || filterCount > 0} onClick={() => setShowFilters((f) => !f)}>
+          Filter{filterCount ? ` (${filterCount})` : ""}
+        </button>
+      </div>
+      {showFilters && (
+        <div className="card stack-sm" style={{ padding: "8px 10px" }}>
+          <div className="chips">
+            <span className="small muted">Group</span>
+            {(
+              [
+                ["area", "Where"],
+                ["type", "Kind"],
+                ["az", "A–Z"],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} className="chip chip-sm" aria-pressed={group === k} onClick={() => setGroup(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <div className="chips">
+            <span className="small muted">Where</span>
+            {areas.map((a) => (
+              <button key={a} className="chip chip-sm" aria-pressed={areaF === a} onClick={() => setAreaF(areaF === a ? null : a)}>
+                {a}
+              </button>
+            ))}
+          </div>
+          <div className="chips">
+            <span className="small muted">Kind</span>
+            {types.map((t) => (
+              <button key={t} className="chip chip-sm" aria-pressed={typeF === t} onClick={() => setTypeF(typeF === t ? null : t)}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 && <p className="small muted">Add what&apos;s in the kitchen. Only what you add here gets tracked.</p>}
       {low.length > 0 && (
-        <>
-          <div className="section-title" style={{ margin: "6px 0" }}>
-            Almost out ({low.length})
+        <div className="pantry-group">
+          <h3 className="pantry-h">Almost out · {low.length}</h3>
+          <ul className="pantry-list">{low.map(row)}</ul>
+        </div>
+      )}
+      {out.length > 0 && (
+        <div className="pantry-group">
+          <h3 className="pantry-h">Out · {out.length}</h3>
+          <ul className="pantry-list">{out.map(row)}</ul>
+        </div>
+      )}
+      {groups.map((g) =>
+        g.list.length ? (
+          <div key={g.name ?? "none"} className="pantry-group">
+            <h3 className="pantry-h">
+              {group === "az" ? "Have" : (g.name ?? (group === "area" ? "Somewhere" : "Uncategorized"))} · {g.list.length}
+            </h3>
+            <ul className="pantry-list">{g.list.map(row)}</ul>
           </div>
-          <div className="card" style={{ padding: "2px 12px" }}>{low.map((n) => row(n, true))}</div>
-        </>
+        ) : null,
       )}
 
-      <div className="section-title" style={{ margin: "6px 0" }}>
-        Need ({need.length})
-      </div>
-      {need.length ? <div className="card" style={{ padding: "2px 12px" }}>{need.map((n) => row(n, false))}</div> : <p className="small muted">Nothing missing that we know of.</p>}
-
-      <div className="row-between" style={{ marginTop: 6 }}>
-        <div className="section-title" style={{ margin: 0 }}>
-          Have ({have.length})
-        </div>
-        <div className="seg seg-sm" role="group" aria-label="Sort">
-          <button aria-pressed={sort === "shelf"} onClick={() => setSort("shelf")}>
-            By shelf
-          </button>
-          <button aria-pressed={sort === "az"} onClick={() => setSort("az")}>
-            A–Z
-          </button>
-        </div>
-      </div>
-      {usedTags.length > 0 && (
-        <div className="chips" role="group" aria-label="Show one shelf">
-          {usedTags.map((t) => (
-            <button key={t} className="chip chip-sm" aria-pressed={shelf === t} onClick={() => setShelf(shelf === t ? null : t)}>
-              {t}
-            </button>
-          ))}
-          {have.some(([k]) => !tagOf(k)) && (
-            <button className="chip chip-sm" aria-pressed={shelf === "none"} onClick={() => setShelf(shelf === "none" ? null : "none")}>
-              No shelf
-            </button>
-          )}
-        </div>
-      )}
-      {have.length === 0 ? (
-        <p className="small muted">Add what&apos;s in the kitchen.</p>
-      ) : (
-        groups.map((g) => (
-          <div key={g.tag ?? "none"} className="stack-sm">
-            {sort === "shelf" && (usedTags.length > 0 || g.tag) && <span className="small muted pantry-shelf">{g.tag ?? "No shelf yet"}</span>}
-            <div className="card" style={{ padding: "2px 12px" }}>{g.list.map((n) => row(n, true))}</div>
-          </div>
-        ))
-      )}
-      <p className="small faint">Tap an item to put it on a shelf, mark it almost out, or remove it.</p>
-
-      {editing && (
+      {editRow && (
         <PantryItemSheet
-          label={editing.label}
-          row={byKey.get(editing.key)}
-          tags={[...new Set([...PANTRY_TAGS, ...usedTags])]}
-          onTag={async (tag) => {
-            const r = byKey.get(editing.key);
-            const { error } = await supabaseBrowser()
-              .from("pantry")
-              .upsert({ name: editing.key, have: r?.have ?? false, low: r?.low ?? false, tag, updated_at: new Date().toISOString() });
-            if (error) toast(error.message);
-            refreshAll();
-          }}
-          onLow={(v) => setLow(editing.key, v)}
+          row={editRow}
+          areas={areas}
+          types={types}
+          usedIn={meals.filter((m) => m.meal_ingredients.some((i) => i.name.trim().toLowerCase() === editRow.name)).map((m) => m.name)}
+          onPatch={(p) => patch(editRow.name, p)}
           onRemove={async () => {
-            await forget(editing.key, editing.label);
+            if (!confirm(`Stop tracking ${editRow.name}?`)) return;
+            await supabaseBrowser().from("pantry").delete().eq("name", editRow.name);
+            refreshAll();
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
@@ -222,62 +236,57 @@ export function Pantry() {
 }
 
 function PantryItemSheet({
-  label,
   row,
-  tags,
-  onTag,
-  onLow,
+  areas,
+  types,
+  usedIn,
+  onPatch,
   onRemove,
   onClose,
 }: {
-  label: string;
-  row: Row | undefined;
-  tags: string[];
-  onTag: (t: string | null) => void;
-  onLow: (v: boolean) => void;
+  row: Row;
+  areas: string[];
+  types: string[];
+  usedIn: string[];
+  onPatch: (p: Partial<Row>) => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const [custom, setCustom] = useState("");
+  const [customArea, setCustomArea] = useState("");
+  const [customType, setCustomType] = useState("");
+  const picker = (label: string, list: string[], cur: string | null, key: "area" | "type", custom: string, setCustom: (v: string) => void, ph: string) => (
+    <div className="field">
+      <span>{label}</span>
+      <div className="chips">
+        {list.map((v) => (
+          <button key={v} type="button" className="chip chip-sm" aria-pressed={cur === v} onClick={() => onPatch({ [key]: cur === v ? null : v })}>
+            {v}
+          </button>
+        ))}
+        <input
+          className="input chip-input"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || !custom.trim()) return;
+            e.preventDefault();
+            onPatch({ [key]: custom.trim() });
+            setCustom("");
+          }}
+          placeholder={ph}
+          aria-label={`New ${label.toLowerCase()}`}
+        />
+      </div>
+    </div>
+  );
   return (
-    <Sheet title={label} onClose={onClose}>
+    <Sheet title={row.name} onClose={onClose}>
       <div className="stack">
-        <div className="field">
-          <span>Shelf</span>
-          <div className="chips">
-            {tags.map((t) => (
-              <button key={t} type="button" className="chip chip-sm" aria-pressed={row?.tag === t} onClick={() => onTag(row?.tag === t ? null : t)}>
-                {t}
-              </button>
-            ))}
-          </div>
-          <form
-            className="quick-add"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (custom.trim()) {
-                onTag(custom.trim());
-                setCustom("");
-              }
-            }}
-          >
-            <input className="input grow" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="New shelf (Tea, Dog food…)" aria-label="New shelf" />
-            <button className="btn btn-sm" disabled={!custom.trim()}>
-              Add
-            </button>
-          </form>
-        </div>
-        {row?.have && (
-          <div className="toggle-row">
-            <span className="label">Almost out</span>
-            <label className="switch">
-              <input type="checkbox" checked={!!row.low} onChange={(e) => onLow(e.target.checked)} />
-              <span />
-            </label>
-          </div>
-        )}
-        <button className="btn btn-ghost" style={{ alignSelf: "flex-start", color: "var(--danger)" }} onClick={onRemove}>
-          Remove {label}
+        {picker("Where it lives", areas, row.area, "area", customArea, setCustomArea, "+ other")}
+        {picker("What kind", types, row.type, "type", customType, setCustomType, "+ other")}
+        {usedIn.length > 0 && <p className="small muted">In: {usedIn.join(", ")}</p>}
+        <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", color: "var(--danger)" }} onClick={onRemove}>
+          Stop tracking {row.name}
         </button>
       </div>
     </Sheet>

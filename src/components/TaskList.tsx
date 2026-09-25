@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { celebrate } from "@/lib/celebrate";
 import { URGENCY_RANK, type ListType, type Task, type Urgency } from "@/lib/types";
-import { dueLabel, isOverdue, type Deadline } from "@/lib/deadline";
+import { dueLabel, isHiddenNow, isOverdue, type Deadline } from "@/lib/deadline";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
@@ -61,7 +61,9 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
     ["tasks"],
   );
 
-  const open = sortTasks(tasks.filter((t) => !t.done), now);
+  // Before hydration (now = 0) nothing is hidden, so the list doesn't flicker empty.
+  const later = tasks.filter((t) => isHiddenNow(t, now));
+  const open = sortTasks(tasks.filter((t) => !t.done && !isHiddenNow(t, now)), now);
 
   // A passed deadline makes it urgent. The reminders cron does this too; doing
   // it here as well means it flips the moment you're looking at it.
@@ -108,10 +110,12 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
 
   return (
     <section>
-      <div className="section-title">{title}</div>
-      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
-        {hint}
-      </p>
+      {title && <div className="section-title">{title}</div>}
+      {hint && (
+        <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
+          {hint}
+        </p>
+      )}
       <div className="row wrap">
         <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
           ＋ Add new
@@ -136,7 +140,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
       <div className="card" style={{ marginTop: 12, padding: "4px 14px" }}>
         {open.length === 0 && (
           <div className="empty" style={{ padding: 18 }}>
-            <Sticker name={listType === "personal" ? "wiley_down" : "kodo_sleep"} size={120} tilt={-2} />
+            <Sticker name={listType === "personal" ? "wiley_down" : "kodo_sleep"} size={84} tilt={-2} />
             <span>All clear. Put the kettle on.</span>
           </div>
         )}
@@ -144,6 +148,11 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           <TaskRow key={t.id} t={t} linked={linkedTo(t)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
+      {later.length > 0 && (
+        <p className="small faint" style={{ marginTop: 6 }}>
+          + {later.map((t) => t.title).join(", ")} later (each shows up an hour before its window)
+        </p>
+      )}
 
       {done.length > 0 && (
         <div style={{ marginTop: 10 }}>

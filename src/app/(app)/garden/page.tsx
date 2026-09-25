@@ -35,6 +35,7 @@ interface Review {
   high: number | null;
   worth: "yes" | "meh" | "no" | null;
   effects: string[];
+  good_for: string[];
   flavor: number | null;
   note: string | null;
 }
@@ -57,6 +58,14 @@ const STRAIN_TYPES: { v: string; label: string }[] = [
 const TERPS = ["Myrcene", "Limonene", "Caryophyllene", "Pinene", "Linalool", "Humulene", "Terpinolene", "Ocimene"];
 /** "24%", "24.5", "10mg" → a number to sort by (percent or mg, whatever was typed). */
 const thcNum = (t: string | null) => (t ? parseFloat(t.replace(/[^\d.]/g, "")) || 0 : 0);
+/** What it's good for: shop by what you're in the mood for. */
+const GOOD_FOR = ["Sleep", "Anxiety", "Pain", "Chilling", "Movie night", "Gaming", "Social", "Creative", "Cleaning", "Outdoors", "Sex", "Appetite", "Focus", "Laughing", "Music", "Daytime", "Just a little"];
+const PRICES: { v: string; label: string; ok: (n: number) => boolean }[] = [
+  { v: "u20", label: "Under $20", ok: (n) => n < 20 },
+  { v: "20-40", label: "$20–40", ok: (n) => n >= 20 && n <= 40 },
+  { v: "40-60", label: "$40–60", ok: (n) => n > 40 && n <= 60 },
+  { v: "60+", label: "$60+", ok: (n) => n > 60 },
+];
 const EFFECTS = ["Relaxed", "Sleepy", "Giggly", "Creative", "Hungry", "Focused", "Euphoric", "Body high", "Couch-lock", "Social", "Anxious", "Dry mouth", "Headache"];
 const WORTH: Record<string, string> = { yes: "💸 Worth it", meh: "😐 Meh", no: "🙅 Not worth it" };
 const label = (list: { v: string; label: string }[], v: string | null) => list.find((x) => x.v === v)?.label;
@@ -72,6 +81,9 @@ export default function GardenPage() {
   const [type, setType] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
   const [terps, setTerps] = useState<string[]>([]);
+  const [goodFor, setGoodFor] = useState<string[]>([]);
+  const [felt, setFelt] = useState<string[]>([]);
+  const [price, setPrice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"new" | "high" | "flavor" | "worth" | "thc" | "price">("new");
   const { data: items = [] } = useLive<Item[]>(
@@ -112,7 +124,13 @@ export default function GardenPage() {
         (!type || i.strain_type === type) &&
         (!brand || i.brand?.trim() === brand) &&
         terps.every((t) => (i.terps ?? []).includes(t)) &&
-        (!q || [i.name, i.strain, i.brand, i.shop, i.notes].some((x) => x?.toLowerCase().includes(q))),
+        goodFor.every((g) => reviewsOf(i.id).some((r) => (r.good_for ?? []).includes(g))) &&
+        felt.every((f) => reviewsOf(i.id).some((r) => r.effects.includes(f))) &&
+        (!price || (i.price != null && PRICES.find((p) => p.v === price)!.ok(Number(i.price)))) &&
+        (!q ||
+          [i.name, i.strain, i.brand, i.shop, i.notes, ...(i.terps ?? []), ...reviewsOf(i.id).flatMap((r) => [...r.effects, ...(r.good_for ?? []), r.note])].some((x) =>
+            x?.toLowerCase().includes(q),
+          )),
     )
     .sort((a, b) =>
       sort === "high"
@@ -127,7 +145,8 @@ export default function GardenPage() {
                 ? Number(a.price ?? 1e9) - Number(b.price ?? 1e9)
                 : 0,
     );
-  const filterCount = [kind, type, brand].filter(Boolean).length + terps.length;
+  const filterCount = [kind, type, brand, price].filter(Boolean).length + terps.length + goodFor.length + felt.length;
+  const toggle = (list: string[], set: (v: string[]) => void, v: string) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const openItem = items.find((i) => i.id === open);
 
   return (
@@ -140,7 +159,7 @@ export default function GardenPage() {
         </button>
         {items.length > 1 && (
           <>
-            <input className="input grow" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" aria-label="Search" style={{ minWidth: 120 }} />
+            <input className="input grow" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="sleepy, cheap, limonene…" aria-label="Search" style={{ minWidth: 120 }} />
             <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || filterCount > 0} onClick={() => setShowFilters((f) => !f)}>
               Sort &amp; filter{filterCount ? ` (${filterCount})` : ""}
             </button>
@@ -163,6 +182,30 @@ export default function GardenPage() {
             ).map(([k, l]) => (
               <button key={k} className="chip chip-sm" aria-pressed={sort === k} onClick={() => setSort(k)}>
                 {l}
+              </button>
+            ))}
+          </div>
+          <div className="chips">
+            <span className="small muted">In the mood for</span>
+            {GOOD_FOR.map((g) => (
+              <button key={g} className="chip chip-sm" aria-pressed={goodFor.includes(g)} onClick={() => toggle(goodFor, setGoodFor, g)}>
+                {g}
+              </button>
+            ))}
+          </div>
+          <div className="chips">
+            <span className="small muted">Want to feel</span>
+            {EFFECTS.map((e) => (
+              <button key={e} className="chip chip-sm" aria-pressed={felt.includes(e)} onClick={() => toggle(felt, setFelt, e)}>
+                {e}
+              </button>
+            ))}
+          </div>
+          <div className="chips">
+            <span className="small muted">Price</span>
+            {PRICES.map((p) => (
+              <button key={p.v} className="chip chip-sm" aria-pressed={price === p.v} onClick={() => setPrice(price === p.v ? null : p.v)}>
+                {p.label}
               </button>
             ))}
           </div>
@@ -201,7 +244,7 @@ export default function GardenPage() {
             ))}
           </div>
           {filterCount > 0 && (
-            <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => (setKind(null), setType(null), setBrand(null), setTerps([]))}>
+            <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => (setKind(null), setType(null), setBrand(null), setTerps([]), setGoodFor([]), setFelt([]), setPrice(null))}>
               Clear filters
             </button>
           )}
@@ -288,6 +331,7 @@ function ItemSheet({ item, reviews, onClose }: { item: Item; reviews: Review[]; 
               </div>
               {r?.flavor ? <span className="small">Flavor {"★".repeat(r.flavor)}{"☆".repeat(5 - r.flavor)}</span> : null}
               {r?.worth && <span className="small">{WORTH[r.worth]}</span>}
+              {r && (r.good_for ?? []).length > 0 && <span className="small">Good for: {r.good_for.join(", ")}</span>}
               {r && r.effects.length > 0 && (
                 <div className="chips">
                   {r.effects.map((e) => (
@@ -321,11 +365,12 @@ function ReviewForm({ item, initial, onDone }: { item: Item; initial?: Review; o
   const [flavor, setFlavor] = useState(initial?.flavor ?? 0);
   const [worth, setWorth] = useState<Review["worth"]>(initial?.worth ?? null);
   const [effects, setEffects] = useState<string[]>(initial?.effects ?? []);
+  const [goodFor, setGoodFor] = useState<string[]>(initial?.good_for ?? []);
   const [note, setNote] = useState(initial?.note ?? "");
   async function save() {
     const { error } = await supabaseBrowser()
       .from("garden_reviews")
-      .upsert({ item_id: item.id, user_id: meId, high: high || null, flavor: flavor || null, worth, effects, note: note.trim() || null, updated_at: new Date().toISOString() });
+      .upsert({ item_id: item.id, user_id: meId, high: high || null, flavor: flavor || null, worth, effects, good_for: goodFor, note: note.trim() || null, updated_at: new Date().toISOString() });
     if (error) return toast(error.message);
     refreshAll();
     onDone();
@@ -368,6 +413,16 @@ function ReviewForm({ item, initial, onDone }: { item: Item; initial?: Review; o
           {EFFECTS.map((e) => (
             <button key={e} type="button" className="chip chip-sm" aria-pressed={effects.includes(e)} onClick={() => setEffects(effects.includes(e) ? effects.filter((x) => x !== e) : [...effects, e])}>
               {e}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field">
+        <span>Good for</span>
+        <div className="chips">
+          {GOOD_FOR.map((g) => (
+            <button key={g} type="button" className="chip chip-sm" aria-pressed={goodFor.includes(g)} onClick={() => setGoodFor(goodFor.includes(g) ? goodFor.filter((x) => x !== g) : [...goodFor, g])}>
+              {g}
             </button>
           ))}
         </div>

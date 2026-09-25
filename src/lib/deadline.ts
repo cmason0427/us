@@ -24,3 +24,19 @@ export function dueLabel(d: Deadline, now = new Date()) {
   if (d.due_all_day) return `by end of ${day}`;
   return `due ${day === "today" ? "" : `${day} `}${timeLabel(at)}`;
 }
+
+/**
+ * Scheduled to-dos (a time window, like the daily dog ones) stay out of sight
+ * until an hour before the window opens, so the list isn't full of dinner at 8am.
+ */
+export function hiddenUntil(t: { window_start: string | null; due_at: string | null }): number | null {
+  if (!t.window_start || !t.due_at) return null;
+  const [h, m] = t.window_start.slice(0, 5).split(":").map(Number);
+  const open = new Date(t.due_at);
+  open.setHours(h, m, 0, 0);
+  return open.getTime() - 60 * 60 * 1000;
+}
+export const isHiddenNow = (t: { window_start: string | null; due_at: string | null; done: boolean }, now: number) => {
+  const until = hiddenUntil(t);
+  return !t.done && until != null && now > 0 && now < until;
+};

@@ -14,6 +14,8 @@ import { useApp } from "./AppProvider";
 import { SaveSheet } from "./SaveSheet";
 import { starColor } from "@/lib/stars";
 import { IconTrash } from "./Art";
+import { PlanSheet } from "./Plans";
+import { EventPeek } from "./EventDetail";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
@@ -21,6 +23,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   // Dog notes speak as the dog(s); only the person who wrote one can delete it.
   const asDog = post.as_dog && post.dogs.length > 0;
   const [saving, setSaving] = useState(false);
+  const [peek, setPeek] = useState<"plan" | "event" | null>(null);
   const [menu, setMenu] = useState(false);
   // Which photo of a carousel is showing; 🔖 saves just that one.
   const [slide, setSlide] = useState(0);
@@ -103,15 +106,17 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       {saving && photos[slide] && <SaveSheet paths={[photos[slide].storage_path]} onClose={() => setSaving(false)} />}
       {post.kind === "lunch_you" && <LunchYou post={post} />}
       {post.plan_id && (
-        <Link className="btn btn-sm" href={`/calendar?plan=${post.plan_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
+        <button className="btn btn-sm" onClick={() => setPeek("plan")} style={{ marginTop: 10, alignSelf: "flex-start" }}>
           📅 Take a look
-        </Link>
+        </button>
       )}
       {post.event_id && (
-        <Link className="btn btn-sm" href={`/calendar?event=${post.event_id}`} style={{ marginTop: 10, alignSelf: "flex-start" }}>
-          📅 Open in calendar
-        </Link>
+        <button className="btn btn-sm" onClick={() => setPeek("event")} style={{ marginTop: 10, alignSelf: "flex-start" }}>
+          📅 Take a look
+        </button>
       )}
+      {peek === "plan" && post.plan_id && <PlanSheet id={post.plan_id} onClose={() => setPeek(null)} />}
+      {peek === "event" && post.event_id && <EventPeek id={post.event_id} onClose={() => setPeek(null)} />}
       {n === 1 && (
         <div className="photos n1">
           <a className="photo" href={urls[photos[0].storage_path]} target="_blank" rel="noreferrer" style={photos[0].width && photos[0].height ? { aspectRatio: `${photos[0].width} / ${photos[0].height}` } : undefined}>

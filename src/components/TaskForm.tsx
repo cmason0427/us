@@ -25,6 +25,8 @@ export interface TaskPreset {
   window_end: string | null;
   /** Adds itself every day (see DailyRoutines). */
   daily: boolean;
+  /** Daily ones can ping at a set time (HH:mm:ss), sent by the reminders cron. */
+  ping_at: string | null;
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
@@ -301,6 +303,8 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
   const [winEnd, setWinEnd] = useState(initial?.window_end ? hhmm(initial.window_end) : "");
   const [useWindow, setUseWindow] = useState(!!initial?.window_start);
   const [daily, setDaily] = useState(initial?.daily ?? false);
+  const [ping, setPing] = useState(!!initial?.ping_at);
+  const [pingAt, setPingAt] = useState(initial?.ping_at ? hhmm(initial.ping_at) : "");
   const windowOk = !useWindow || (winStart && winEnd && winEnd > winStart);
 
   async function submit(e: React.FormEvent) {
@@ -316,6 +320,7 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
       window_start: useWindow ? winStart : null,
       window_end: useWindow ? winEnd : null,
       daily,
+      ping_at: daily && ping && pingAt ? pingAt : null,
     };
     const supabase = supabaseBrowser();
     const { error } = initial ? await supabase.from("task_templates").update(row).eq("id", initial.id) : await supabase.from("task_templates").insert({ ...row, created_by: meId });
@@ -384,7 +389,29 @@ export function TaskPresetForm({ initial, listType = "dogs", onDone }: { initial
           <span />
         </label>
       </div>
-      {daily && <p className="small muted">It shows up each morning{useWindow ? " (skipped if the window's already over)" : ""}. Unchecked ones clear themselves the next day.</p>}
+      {daily && (
+        <p className="small muted">
+          {useWindow ? "It shows up an hour before the window opens (skipped if the window's already over)" : "It shows up each morning"}. Unchecked ones clear themselves the next day.
+        </p>
+      )}
+      {daily && (
+        <div className="toggle-row">
+          <span className="label">Ping at a certain time?</span>
+          <label className="switch">
+            <input type="checkbox" checked={ping} onChange={(e) => (setPing(e.target.checked), !pingAt && setPingAt(winStart || "08:00"))} />
+            <span />
+          </label>
+        </div>
+      )}
+      {daily && ping && (
+        <div className="stack-sm">
+          <label className="time-field" style={{ alignSelf: "flex-start" }}>
+            <span>Push at</span>
+            <input type="time" value={pingAt} onChange={(e) => setPingAt(e.target.value)} />
+          </label>
+          <p className="small muted">A quiet push to both of you, unless it&apos;s already checked off.</p>
+        </div>
+      )}
       <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="A note (optional): 1 cup + fish oil" aria-label="Note" />
       <div className="row-between">
         {initial ? (

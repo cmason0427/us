@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PageHead } from "@/components/PageHead";
 import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
@@ -86,6 +87,10 @@ export default function PresetsPage() {
           ))}
         </div>
       )}
+
+      <Link href="/occasions" className="btn-link small" style={{ display: "inline-block", marginTop: 16 }}>
+        🎂 Holidays & birthdays →
+      </Link>
 
       {editEvent && (
         <Sheet title={editEvent === "new" ? "New calendar preset" : `Edit ${editEvent.name}`} onClose={() => setEditEvent(null)}>

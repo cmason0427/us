@@ -137,6 +137,15 @@ export default function SettingsPage() {
         </span>
         <span aria-hidden>›</span>
       </Link>
+      <Link href="/occasions" className="card row-between settings-link" style={{ marginTop: 8 }}>
+        <span>
+          <strong>Holidays & birthdays</strong>
+          <span className="small muted" style={{ display: "block" }}>
+            Other people&apos;s birthdays and holidays, on the calendar every year
+          </span>
+        </span>
+        <span aria-hidden>›</span>
+      </Link>
 
       <section className="card stack" style={{ marginTop: 16 }}>
         <h2>Notifications</h2>

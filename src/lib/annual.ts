@@ -27,16 +27,21 @@ export function untilText(days: number) {
  * from its next time around. Returns the series id to remember it by.
  */
 export async function addYearly(title: string, iso: string, meId: string, notes?: string | null): Promise<string | null> {
-  const supabase = supabaseBrowser();
   const first = nextOccurrence(iso);
-  const until = addYears(first, 30);
+  return addYearlyDates(title, occurrences(first, "yearly", addYears(first, 30)), meId, notes);
+}
+
+/** Same, for dates you've already worked out (Thanksgiving moves around). */
+export async function addYearlyDates(title: string, starts: Date[], meId: string, notes?: string | null): Promise<string | null> {
+  if (!starts.length) return null;
+  const supabase = supabaseBrowser();
+  const until = starts[starts.length - 1];
   const { data: series, error } = await supabase
     .from("event_series")
     .insert({ freq: "yearly", until: toDateInput(until), created_by: meId })
     .select("id")
     .single();
   if (error || !series) return null;
-  const starts = occurrences(first, "yearly", until);
   const { error: e2 } = await supabase.from("events").insert(
     starts.map((s) => ({
       title,
