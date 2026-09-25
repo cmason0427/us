@@ -2,7 +2,7 @@ import type { FoodFilters } from "./food";
 
 export type LunchPlace = "home" | "work" | "out";
 export type LunchRef = { kind: "place" | "meal"; id: string };
-export type LunchMsgKind = "propose" | "filters" | "request" | "options" | "decided";
+export type LunchMsgKind = "propose" | "filters" | "request" | "options" | "decided" | "surprise";
 
 export interface LunchMsg {
   id: string;

@@ -52,6 +52,7 @@ export const MEAL_LABEL: Record<Meal, string> = { breakfast: "Breakfast", lunch:
 
 type Picker =
   | { kind: "pick"; start?: FoodFilters } // choose one thing to propose (optionally starting from their wants)
+  | { kind: "surprise" } // plan a surprise (optionally pick what it is; only you see it)
   | { kind: "prefs"; start?: FoodFilters } // set preferences (optionally from theirs) and send
   | { kind: "options" } // choose a few to send
   | { kind: "choose"; refs: LunchRef[] } // choose one of the options they sent
@@ -121,7 +122,8 @@ export function useMealThread(day: string, meal: Meal) {
     const list = latest?.refs.map(refName).join(", ") ?? "";
     const who = latest ? (theirTurn ? nameOf(latest.author) : "You") : "";
     if (!latest) return meal === "lunch" && place ? `${placeLabel(place, workLabel)}. Nothing picked yet.` : null;
-    if (latest.kind === "decided") return `${list} ✅`;
+    if (latest.kind === "decided") return latest.refs.length ? `${list} ✅` : "🎁 A surprise ✅";
+    if (latest.kind === "surprise") return theirTurn ? `🎁 ${nameOf(latest.author)} has a surprise planned` : "🎁 Your surprise is planned";
     const turn = theirTurn ? " · your turn" : "";
     if (latest.kind === "propose") return `${who} picked ${list}${turn}`;
     if (latest.kind === "filters") return `${who} sent what ${theirTurn ? "they want" : "you want"}${turn}`;
@@ -157,6 +159,9 @@ export function MealPanel({ t }: { t: MealThreadState }) {
       </button>
       <button className="btn btn-sm" onClick={() => setPicker({ kind: "pick" })}>
         Just pick something
+      </button>
+      <button className="btn btn-sm" onClick={() => setPicker({ kind: "surprise" })}>
+        🎁 Surprise
       </button>
       {needsTakeout(place) && (
         <button className="btn btn-sm btn-ghost" onClick={() => send("request", {})}>
@@ -205,6 +210,21 @@ export function MealPanel({ t }: { t: MealThreadState }) {
               <button className="btn btn-sm" onClick={() => setPicker({ kind: "pick" })}>
                 Change it
               </button>
+            ) : latest.kind === "surprise" ? (
+              <>
+                <button className="btn btn-sm btn-primary" onClick={(e) => send("decided", { refs: [] }, e.currentTarget)}>
+                  Can&apos;t wait 💛
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => {
+                    // A surprise is planned: asking for something else gets a gentle "are you sure?" first.
+                    if (confirm(`${nameOf(latest.author)} has a surprise planned. Are you sure you want to request something?`)) setPicker({ kind: "prefs" });
+                  }}
+                >
+                  Request something anyway
+                </button>
+              </>
             ) : latest.kind === "propose" ? (
               <>
                 <button className="btn btn-sm btn-primary" onClick={(e) => send("decided", { refs: latest.refs }, e.currentTarget)}>
@@ -284,10 +304,10 @@ function MealStartFor({ day, meal, onDone }: { day: string; meal: Meal; onDone: 
   const send: Send = async (kind, body, el) => {
     if (await t.send(kind, body, el)) onDone();
   };
-  if (meal === "lunch") return <MealPanel t={t} />;
+  // Lunch, or anything already going (like a surprise waiting): the full panel, with its "are you sure?"s.
+  if (meal === "lunch" || t.latest) return <MealPanel t={t} />;
   return (
     <>
-      {t.summary && <p className="small muted">Today so far: {t.summary}</p>}
       <p className="small muted">{MEAL_LABEL[meal]} only shows on Home once you send it.</p>
       <div className="row wrap">
         <button className="btn btn-sm" onClick={() => setPicker({ kind: "prefs" })}>
@@ -295,6 +315,9 @@ function MealStartFor({ day, meal, onDone }: { day: string; meal: Meal; onDone: 
         </button>
         <button className="btn btn-sm btn-primary" onClick={() => setPicker({ kind: "pick" })}>
           Just pick something
+        </button>
+        <button className="btn btn-sm" onClick={() => setPicker({ kind: "surprise" })}>
+          🎁 Surprise
         </button>
       </div>
       {picker && <PickerSheet picker={picker} meal={meal} place={t.place} refName={t.refName} onClose={() => setPicker(null)} onSend={send} />}
@@ -318,7 +341,13 @@ function Thread({
   if (!latest) return <p className="small muted">Nothing picked yet.</p>;
   const who = theirTurn ? nameOf(latest.author) : "You";
   const text =
-    latest.kind === "decided"
+    latest.kind === "surprise"
+      ? theirTurn
+        ? `🎁 ${nameOf(latest.author)} has a surprise planned`
+        : "🎁 You planned a surprise"
+      : latest.kind === "decided" && latest.refs.length === 0
+        ? "🎁 A surprise it is ✅"
+        : latest.kind === "decided"
       ? "Decided:"
       : latest.kind === "propose"
         ? `${who} picked`
@@ -333,7 +362,7 @@ function Thread({
         {text}
         {!theirTurn && latest.kind !== "decided" && <span className="small faint"> · waiting…</span>}
       </p>
-      {latest.refs.length > 0 && latest.kind !== "request" && (
+      {latest.refs.length > 0 && latest.kind !== "request" && !(latest.kind === "surprise" && theirTurn) && (
         <div className="chips">
           {latest.refs.map((r) => (
             <button key={r.id} className="chip chip-sm" onClick={() => onOpen(r)} title="See details">
@@ -343,6 +372,7 @@ function Thread({
         </div>
       )}
       {latest.kind === "filters" && latest.filters && <PrefChips filters={latest.filters} />}
+      {latest.kind === "surprise" && !theirTurn && latest.refs.length > 0 && <p className="small faint">Only you can see what it is.</p>}
       {latest.note && <p className="lunch-note">“{latest.note}”</p>}
     </div>
   );
@@ -439,7 +469,7 @@ function PickerSheet({
 
   const multi = picker.kind === "options";
   const onPick = (p: FoodPick) => {
-    if (!multi) return onSend("propose", { refs: [toRef(p)], note });
+    if (!multi) return onSend(picker.kind === "surprise" ? "surprise" : "propose", { refs: [toRef(p)], note });
     setSelected((s) => {
       const n = new Map(s);
       if (n.has(p.item.id)) n.delete(p.item.id);
@@ -449,8 +479,16 @@ function PickerSheet({
   };
 
   return (
-    <Sheet title={multi ? "Send a few options" : `Pick ${label}`} onClose={onClose}>
+    <Sheet title={multi ? "Send a few options" : picker.kind === "surprise" ? `Surprise ${label} 🎁` : `Pick ${label}`} onClose={onClose}>
       <div className="stack">
+        {picker.kind === "surprise" && (
+          <>
+            <p className="small muted">They&apos;ll only hear that you have something planned. Pick what it is (only you&apos;ll see it), or just send it.</p>
+            <button className="btn btn-primary btn-block" onClick={() => onSend("surprise", { refs: [], note })}>
+              Just send “I have a surprise” 🎁
+            </button>
+          </>
+        )}
         {noteField}
         <FoodFilterPanel value={filters} onChange={setFilters} lockMode={place === "out"} takeoutOnly={takeout} />
         {takeout && filters.mode === "out" && <p className="small muted">Only places with takeout, drive-thru or delivery.</p>}

@@ -114,7 +114,9 @@ export async function POST(req: Request) {
       filters: `${myName} wants: ${msg.filters ? describeFilters(msg.filters) : "anything"}. Pick something?`,
       request: `${myName} wants some ${meal.toLowerCase()} options.`,
       options: `${myName} sent options: ${list}. Pick one?`,
-      decided: `${meal}: ${list} ✅`,
+      decided: msg.refs.length ? `${meal}: ${list} ✅` : `${myName} can't wait for the ${meal.toLowerCase()} surprise 💛`,
+      // Never name what the surprise is.
+      surprise: `${myName} has a surprise planned for ${meal.toLowerCase()} 🎁`,
     }[msg.kind];
     const note = (msg as LunchMsg).note;
     const sent = await sendPushToUser(partner.id, { title: `🍽️ ${meal}`, body: note ? `${text} "${note}"` : text, url: "/", tag: `${mealKey}-${msg.day}` });
