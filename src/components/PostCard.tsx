@@ -21,6 +21,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   // Dog notes speak as the dog(s); only the person who wrote one can delete it.
   const asDog = post.as_dog && post.dogs.length > 0;
   const [saving, setSaving] = useState(false);
+  const [menu, setMenu] = useState(false);
   // Which photo of a carousel is showing; 🔖 saves just that one.
   const [slide, setSlide] = useState(0);
   const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
@@ -59,7 +60,29 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
             <IconTrash />
           </button>
         )}
+        {/* Tucked away: rarely needed. */}
+        {post.counter === null && !post.spicy && post.kind === "post" && (
+          <button className="icon-btn post-more" onClick={() => setMenu((m) => !m)} aria-label="More" aria-expanded={menu}>
+            ⋯
+          </button>
+        )}
       </div>
+      {menu && post.counter === null && (
+        <button
+          className="btn btn-sm btn-ghost"
+          style={{ alignSelf: "flex-start" }}
+          onClick={async () => {
+            const label = window.prompt("What are we counting?", "");
+            setMenu(false);
+            if (!label?.trim()) return;
+            const { error } = await supabaseBrowser().rpc("set_post_counter", { p: post.id, label: label.trim(), start: 1 });
+            if (error) return toast(error.message);
+            refreshAll();
+          }}
+        >
+          🔢 Add a counter
+        </button>
+      )}
       {post.kind === "star" && (
         <div className="star-card">
           <span className="star-big" style={{ color: starColor(post.star_color).hex }} aria-hidden>
@@ -98,6 +121,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         </div>
       )}
       {n > 1 && <Carousel photos={photos} urls={urls} slide={slide} onSlide={setSlide} />}
+      {post.counter !== null && <PostCounter post={post} />}
       {post.dogs.length > 0 && !asDog && (
         <div className="chips post-dogs">
           {post.dogs.map((d) => (
@@ -177,6 +201,54 @@ function LunchYou({ post }: { post: Post }) {
       <button className="btn btn-sm" disabled={busy} onClick={() => answer(false)}>
         Not right now
       </button>
+    </div>
+  );
+}
+
+/** A tally on a post. Anyone can tick it up; tap the name for −1, rename or remove. */
+function PostCounter({ post }: { post: Post }) {
+  const { toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const supabase = supabaseBrowser();
+  async function bump(delta: number) {
+    const { error } = await supabase.rpc("bump_post_counter", { p: post.id, delta });
+    if (error) return toast(error.message);
+    refreshAll();
+  }
+  async function set(label: string | null) {
+    const { error } = await supabase.rpc("set_post_counter", { p: post.id, label, start: post.counter ?? 0 });
+    if (error) return toast(error.message);
+    setOpen(false);
+    refreshAll();
+  }
+  return (
+    <div className="post-counter">
+      <button className="post-counter-label" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {post.counter_label ?? "Count"}
+      </button>
+      <strong className="post-counter-n">{post.counter}</strong>
+      <button className="btn btn-sm btn-primary" onClick={() => bump(1)} aria-label={`Add one to ${post.counter_label ?? "the count"}`}>
+        +1
+      </button>
+      {open && (
+        <div className="row wrap" style={{ gap: 6, width: "100%" }}>
+          <button className="btn btn-sm btn-ghost" onClick={() => bump(-1)} disabled={!post.counter}>
+            −1
+          </button>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => {
+              const l = window.prompt("Rename the counter", post.counter_label ?? "");
+              if (l?.trim()) set(l.trim());
+            }}
+          >
+            Rename
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => confirm("Remove this counter?") && set(null)}>
+            Remove
+          </button>
+        </div>
+      )}
     </div>
   );
 }

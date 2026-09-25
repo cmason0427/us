@@ -74,6 +74,9 @@ export interface Post {
   star_for: string | null;
   /** A mood ask's answer: "yes" (I'm in) or "no" (not right now; hidden from the feed). */
   reply: "yes" | "no" | null;
+  /** An optional tally on the post ("Tootsie rolls: 3"); null = none. */
+  counter: number | null;
+  counter_label: string | null;
   /** The "🌶️ added something for you" note (the photos are in their Spicy folder). */
   spicy: boolean;
   /** Written as a dog note: shown as from the dog(s), not the author. */
