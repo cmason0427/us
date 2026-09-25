@@ -1091,8 +1091,15 @@ a.pantry-chip { text-decoration: none; display: inline-flex; align-items: center
 .drawer-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--terracotta); margin-left: auto; flex: none; }
 .menu-btn-rel { position: relative; }
 
-/* Subheadings in the plain sans; the serif is only for big titles. */
-h2, h3 { font-family: var(--font-body); font-weight: 750; line-height: 1.2; margin: 0; letter-spacing: -0.005em; }
+/* Titles, headings and names stay in the serif; running text and small labels are the sans. */
+h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "WONK" 0; font-weight: 600; line-height: 1.2; margin: 0; letter-spacing: -0.005em; }
+.section-title, .drawer-item, .drawer-heading, .drawer-head strong, .sheet-head h2, .about-name, .shelf-head, .post-author, .activity-card .name, .tl-day, .lt-card-head h2, .board-title, .fold > summary, .money-lines li.strong, .cal-title, .agenda-day h3 {
+  font-family: var(--font-display); font-variation-settings: "SOFT" 60, "WONK" 0;
+}
+.section-title { font-weight: 650; font-size: 1.05rem; }
+.drawer-item { font-weight: 600; }
+/* Tiny uppercase labels read better in the sans. */
+.pantry-h, .add-group-title, .lt-tile-label, .dash-label, .eyebrow { font-family: var(--font-body); }
 
 /* The add menu: small pills in labeled groups, not big tiles. */
 .add-menu { display: flex; flex-direction: column; gap: 12px; }
