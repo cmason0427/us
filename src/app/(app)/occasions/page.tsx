@@ -4,7 +4,7 @@ import { useState } from "react";
 import { differenceInCalendarDays, format, startOfDay } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { addYearlyDates, removeYearly, untilText } from "@/lib/annual";
+import { addYearlyDates, birthdayTitle, ordinal, removeYearly, untilText } from "@/lib/annual";
 import { COMMON, MON, ORD, WD, nextDate, ruleText, upcomingDates, type Occasion } from "@/lib/occasions";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
@@ -87,7 +87,11 @@ export default function OccasionsPage() {
                     <span className="mini-emoji">{o.emoji ?? "📅"}</span>
                     <span className="grow">
                       <strong>{o.title}</strong>
-                      <span className="small faint"> {ruleText(o)}</span>
+                      <span className="small faint">
+                        {" "}
+                        {ruleText(o)}
+                        {o.year && nextDate(o, today).getFullYear() > o.year ? ` · ${ordinal(nextDate(o, today).getFullYear() - o.year)}` : ""}
+                      </span>
                     </span>
                     <span className={`small ${days(o) < 14 ? "soon" : "faint"}`}>{untilText(days(o))}</span>
                   </button>
@@ -119,6 +123,7 @@ function OccasionForm({ initial, onDone }: { initial?: Occasion; onDone: () => v
     nth: initial?.nth ?? 1,
     weekday: initial?.weekday ?? 0,
     note: initial?.note ?? "",
+    year: initial?.year ? String(initial.year) : "",
   });
   const [onCal, setOnCal] = useState(initial ? !!initial.series_id : true);
   const [busy, setBusy] = useState(false);
@@ -129,7 +134,8 @@ function OccasionForm({ initial, onDone }: { initial?: Occasion; onDone: () => v
     e.preventDefault();
     if (!f.title.trim()) return;
     setBusy(true);
-    const row = { title: f.title.trim(), emoji: f.emoji || null, kind: f.kind, note: f.note.trim() || null, ...rule };
+    const year = f.kind === "birthday" && /^\d{4}$/.test(f.year) ? Number(f.year) : null;
+    const row = { title: f.title.trim(), emoji: f.emoji || null, kind: f.kind, note: f.note.trim() || null, year, ...rule };
     let id = initial?.id;
     if (initial) {
       const { error } = await supabase.from("occasions").update(row).eq("id", initial.id);
@@ -139,13 +145,15 @@ function OccasionForm({ initial, onDone }: { initial?: Occasion; onDone: () => v
       if (error) return (setBusy(false), toast(error.message));
       id = data.id;
     }
-    const changed = !!initial && (["title", "emoji", "rule", "month", "day", "nth", "weekday"] as const).some((k) => initial[k] !== (row as Record<string, unknown>)[k]);
+    const changed = !!initial && (["title", "emoji", "rule", "month", "day", "nth", "weekday", "year"] as const).some((k) => initial[k] !== (row as Record<string, unknown>)[k]);
     let series = initial?.series_id ?? null;
     if (series && (!onCal || changed)) {
       await removeYearly(series);
       series = null;
     }
-    if (onCal && !series) series = await addYearlyDates(`${row.emoji ?? ""} ${row.title}`.trim(), upcomingDates(rule), meId);
+    // Birthdays with a year get "34th" on each year's calendar entry.
+    const title = f.kind === "birthday" ? birthdayTitle(row.title.replace(/'s birthday$|'s bday$/i, ""), year) : `${row.emoji ?? ""} ${row.title}`.trim();
+    if (onCal && !series) series = await addYearlyDates(title, upcomingDates(rule), meId);
     if (series !== (initial?.series_id ?? null)) await supabase.from("occasions").update({ series_id: series }).eq("id", id!);
     setBusy(false);
     refreshAll();
@@ -217,7 +225,13 @@ function OccasionForm({ initial, onDone }: { initial?: Occasion; onDone: () => v
           </select>
         )}
       </div>
-      <p className="small muted">Next: {format(next, "EEEE, MMM d, yyyy")}</p>
+      {f.kind === "birthday" && (
+        <input className="input input-sm" inputMode="numeric" value={f.year} onChange={(e) => set("year", e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="Birth year (optional)" aria-label="Birth year" />
+      )}
+      <p className="small muted">
+        Next: {format(next, "EEEE, MMM d, yyyy")}
+        {f.kind === "birthday" && /^\d{4}$/.test(f.year) && next.getFullYear() > Number(f.year) && ` · their ${ordinal(next.getFullYear() - Number(f.year))}`}
+      </p>
       <label className="toggle-row small">
         <span>On the calendar every year</span>
         <input type="checkbox" checked={onCal} onChange={(e) => setOnCal(e.target.checked)} />

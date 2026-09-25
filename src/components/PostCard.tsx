@@ -16,6 +16,7 @@ import { starColor } from "@/lib/stars";
 import { IconTrash } from "./Art";
 import { PlanSheet } from "./Plans";
 import { EventPeek } from "./EventDetail";
+import { ManaPips, useDeckNames } from "./Decks";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
@@ -97,6 +98,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           </p>
         </div>
       )}
+      {post.deck_id && <DeckTag id={post.deck_id} />}
       {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${post.text}”` : post.text}</p>}
       {post.spicy && post.author !== meId && (
         <Link className="btn btn-sm" href="/spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
@@ -255,5 +257,16 @@ function PostCounter({ post }: { post: Post }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** "🃏 nekusar ⚫🔵🔴" above a deck update. */
+function DeckTag({ id }: { id: string }) {
+  const deck = useDeckNames().get(id);
+  if (!deck) return null;
+  return (
+    <span className="post-deck">
+      🃏 {deck.name} <ManaPips colors={deck.colors ?? []} />
+    </span>
   );
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { useMeals } from "@/lib/foodData";
+import { useMeals, usePlaces } from "@/lib/foodData";
 import { toDateInput } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
@@ -16,6 +16,7 @@ interface Lunch {
   for_user: string | null;
   what: string;
   meal_id: string | null;
+  place_id: string | null;
   verdict: "loved" | "liked" | "meh" | "no" | null;
   verdict_note: string | null;
 }
@@ -41,17 +42,18 @@ export function LunchLog() {
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<Lunch | null>(null);
 
-  // Hits and misses by what it was.
+  // Hits and misses by what it was (one of our meals/places counts as itself, however it was typed).
+  const keyOf = (l: Lunch) => l.meal_id ?? l.place_id ?? l.what.trim().toLowerCase();
   const tally = new Map<string, { loved: number; no: number; n: number }>();
   for (const l of log) {
-    const k = l.what.trim().toLowerCase();
+    const k = keyOf(l);
     const t = tally.get(k) ?? { loved: 0, no: 0, n: 0 };
     t.n++;
     if (l.verdict === "loved") t.loved++;
     if (l.verdict === "no") t.no++;
     tally.set(k, t);
   }
-  const nameFor = (k: string) => log.find((l) => l.what.trim().toLowerCase() === k)!.what;
+  const nameFor = (k: string) => log.find((l) => keyOf(l) === k)!.what;
   const hits = [...tally].filter(([, t]) => t.loved > 0).sort((a, b) => b[1].loved - a[1].loved).slice(0, 5);
   const misses = [...tally].filter(([, t]) => t.no > 0).map(([k]) => k);
   const waiting = log.filter((l) => l.for_user === meId && !l.verdict);
@@ -137,6 +139,12 @@ export function LunchLog() {
 function LunchForm({ initial, onDone }: { initial?: Lunch; onDone: () => void }) {
   const { meId, partner, toast } = useApp();
   const meals = useMeals();
+  const places = usePlaces();
+  // Pick from our meals and places (so it's tracked against them), or type anything.
+  const [pick, setPick] = useState<{ kind: "meal" | "place"; id: string } | null>(
+    initial?.meal_id ? { kind: "meal", id: initial.meal_id } : initial?.place_id ? { kind: "place", id: initial.place_id } : null,
+  );
+  const [search, setSearch] = useState("");
   const [day, setDay] = useState(initial?.day ?? toDateInput(new Date()));
   const [what, setWhat] = useState(initial?.what ?? "");
   const [forUser, setForUser] = useState<string | null>(initial ? initial.for_user : (partner?.id ?? null));
@@ -147,8 +155,9 @@ function LunchForm({ initial, onDone }: { initial?: Lunch; onDone: () => void })
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!what.trim()) return;
-    const meal = meals.find((m) => m.name.toLowerCase() === what.trim().toLowerCase());
-    const row = { day, what: what.trim(), for_user: forUser, meal_id: meal?.id ?? null, verdict_note: note.trim() || null };
+    const meal = pick?.kind === "meal" ? pick.id : (meals.find((m) => m.name.toLowerCase() === what.trim().toLowerCase())?.id ?? null);
+    const place = pick?.kind === "place" ? pick.id : null;
+    const row = { day, what: what.trim(), for_user: forUser, meal_id: meal, place_id: place, verdict_note: note.trim() || null };
     const { error } = initial ? await supabase.from("lunch_log").update(row).eq("id", initial.id) : await supabase.from("lunch_log").insert({ ...row, made_by: meId });
     if (error) return toast(error.message);
     refreshAll();
@@ -157,12 +166,26 @@ function LunchForm({ initial, onDone }: { initial?: Lunch; onDone: () => void })
 
   return (
     <form className="stack" onSubmit={save}>
-      <input className="input" list="lunch-meals" value={what} onChange={(e) => setWhat(e.target.value)} placeholder="Turkey wrap + grapes" autoFocus={!initial} required aria-label="What" />
-      <datalist id="lunch-meals">
-        {meals.map((m) => (
-          <option key={m.id} value={m.name} />
-        ))}
-      </datalist>
+      <input className="input input-sm" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="find one of our meals or places…" aria-label="Search meals" />
+      <div className="lunch-picks">
+        {[
+          ...meals.map((m) => ({ kind: "meal" as const, id: m.id, name: m.name })),
+          ...places.map((p) => ({ kind: "place" as const, id: p.id, name: p.name })),
+        ]
+          .filter((o) => !search.trim() || o.name.toLowerCase().includes(search.trim().toLowerCase()))
+          .map((o) => (
+            <button
+              key={o.kind + o.id}
+              type="button"
+              className="chip chip-sm"
+              aria-pressed={pick?.id === o.id}
+              onClick={() => (pick?.id === o.id ? (setPick(null), setWhat("")) : (setPick({ kind: o.kind, id: o.id }), setWhat(o.name)))}
+            >
+              {o.kind === "meal" ? "🍳" : "📍"} {o.name}
+            </button>
+          ))}
+      </div>
+      <input className="input" value={what} onChange={(e) => (setWhat(e.target.value), pick && e.target.value !== what && setPick(null))} placeholder="or type it: turkey wrap + grapes" required aria-label="What" />
       <div className="grid-2">
         <input className="input" type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="Day" />
         <div className="seg" role="group" aria-label="For">

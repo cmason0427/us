@@ -35,6 +35,7 @@ interface Review {
   high: number | null;
   worth: "yes" | "meh" | "no" | null;
   effects: string[];
+  feel: Record<string, number>;
   good_for: string[];
   flavor: number | null;
   note: string | null;
@@ -66,7 +67,10 @@ const PRICES: { v: string; label: string; ok: (n: number) => boolean }[] = [
   { v: "40-60", label: "$40–60", ok: (n) => n > 40 && n <= 60 },
   { v: "60+", label: "$60+", ok: (n) => n > 60 },
 ];
-const EFFECTS = ["Relaxed", "Sleepy", "Giggly", "Creative", "Hungry", "Focused", "Euphoric", "Body high", "Couch-lock", "Social", "Anxious", "Dry mouth", "Headache"];
+/** How it felt. Each picked one gets a 1–5 "how much". The last few are the not-so-fun ones. */
+const EFFECTS = ["Relaxed", "Calm", "Sleepy", "Giggly", "Happy", "Euphoric", "Creative", "Focused", "Energized", "Chatty", "Social", "Horny", "Hungry", "Body high", "Head high", "Floaty", "Couch-lock", "Introspective", "Anxious", "Paranoid", "Foggy", "Dry mouth", "Headache"];
+const BAD = new Set(["Anxious", "Paranoid", "Foggy", "Dry mouth", "Headache"]);
+const LEVEL = ["", "a little", "some", "medium", "a lot", "all the way"];
 const WORTH: Record<string, string> = { yes: "💸 Worth it", meh: "😐 Meh", no: "🙅 Not worth it" };
 const label = (list: { v: string; label: string }[], v: string | null) => list.find((x) => x.v === v)?.label;
 const money = (n: number) => `$${n % 1 ? n.toFixed(2) : n}`;
@@ -148,6 +152,7 @@ export default function GardenPage() {
   const filterCount = [kind, type, brand, price].filter(Boolean).length + terps.length + goodFor.length + felt.length;
   const toggle = (list: string[], set: (v: string[]) => void, v: string) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const openItem = items.find((i) => i.id === open);
+  const [matching, setMatching] = useState(false);
 
   return (
     <main className="page">
@@ -157,6 +162,11 @@ export default function GardenPage() {
         <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
           ＋ Add
         </button>
+        {reviews.length > 0 && (
+          <button className="btn btn-sm" onClick={() => setMatching(true)}>
+            🎯 Match a mood
+          </button>
+        )}
         {items.length > 1 && (
           <>
             <input className="input grow" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="sleepy, cheap, limonene…" aria-label="Search" style={{ minWidth: 120 }} />
@@ -276,6 +286,14 @@ export default function GardenPage() {
           <AddOneOrSeveral onDone={() => setAdding(false)} />
         </Sheet>
       )}
+      {matching && (
+        <MoodMatch
+          items={items}
+          reviewsOf={reviewsOf}
+          onPick={(id) => (setMatching(false), setOpen(id))}
+          onClose={() => setMatching(false)}
+        />
+      )}
       {openItem && <ItemSheet item={openItem} reviews={reviewsOf(openItem.id)} onClose={() => setOpen(null)} />}
     </main>
   );
@@ -335,8 +353,9 @@ function ItemSheet({ item, reviews, onClose }: { item: Item; reviews: Review[]; 
               {r && r.effects.length > 0 && (
                 <div className="chips">
                   {r.effects.map((e) => (
-                    <span key={e} className="sticker sage">
+                    <span key={e} className={`sticker ${BAD.has(e) ? "" : "sage"}`}>
                       {e}
+                      {r.feel?.[e] ? ` ${"•".repeat(r.feel[e])}` : ""}
                     </span>
                   ))}
                 </div>
@@ -364,13 +383,15 @@ function ReviewForm({ item, initial, onDone }: { item: Item; initial?: Review; o
   const [high, setHigh] = useState(initial?.high ?? 0);
   const [flavor, setFlavor] = useState(initial?.flavor ?? 0);
   const [worth, setWorth] = useState<Review["worth"]>(initial?.worth ?? null);
-  const [effects, setEffects] = useState<string[]>(initial?.effects ?? []);
+  // Picked feelings and how strong (1–5); older ratings without levels start at "medium".
+  const [feel, setFeel] = useState<Record<string, number>>(() => ({ ...Object.fromEntries((initial?.effects ?? []).map((e) => [e, 3])), ...(initial?.feel ?? {}) }));
+  const effects = Object.keys(feel);
   const [goodFor, setGoodFor] = useState<string[]>(initial?.good_for ?? []);
   const [note, setNote] = useState(initial?.note ?? "");
   async function save() {
     const { error } = await supabaseBrowser()
       .from("garden_reviews")
-      .upsert({ item_id: item.id, user_id: meId, high: high || null, flavor: flavor || null, worth, effects, good_for: goodFor, note: note.trim() || null, updated_at: new Date().toISOString() });
+      .upsert({ item_id: item.id, user_id: meId, high: high || null, flavor: flavor || null, worth, effects, feel, good_for: goodFor, note: note.trim() || null, updated_at: new Date().toISOString() });
     if (error) return toast(error.message);
     refreshAll();
     onDone();
@@ -411,11 +432,28 @@ function ReviewForm({ item, initial, onDone }: { item: Item; initial?: Review; o
         <span>How it felt</span>
         <div className="chips">
           {EFFECTS.map((e) => (
-            <button key={e} type="button" className="chip chip-sm" aria-pressed={effects.includes(e)} onClick={() => setEffects(effects.includes(e) ? effects.filter((x) => x !== e) : [...effects, e])}>
+            <button
+              key={e}
+              type="button"
+              className={`chip chip-sm${BAD.has(e) ? " chip-bad" : ""}`}
+              aria-pressed={e in feel}
+              onClick={() => setFeel((f) => (e in f ? Object.fromEntries(Object.entries(f).filter(([k]) => k !== e)) : { ...f, [e]: 3 }))}
+            >
               {e}
             </button>
           ))}
         </div>
+        {effects.length > 0 && (
+          <div className="feel-sliders">
+            {effects.map((e) => (
+              <label key={e} className="feel-row">
+                <span className="feel-name">{e}</span>
+                <input type="range" min={1} max={5} value={feel[e]} onChange={(ev) => setFeel({ ...feel, [e]: Number(ev.target.value) })} />
+                <span className="feel-level small muted">{LEVEL[feel[e]]}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div className="field">
         <span>Good for</span>
@@ -633,5 +671,102 @@ function ItemForm({ initial, onDone, onDeleted }: { initial?: Item; onDone: () =
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * "How do we want tonight to hit?" Pick feelings, slide how strong, and the
+ * garden ranks what you've rated closest to that (the not-fun effects count
+ * against). Optionally only one kind (flower, edibles…).
+ */
+function MoodMatch({ items, reviewsOf, onPick, onClose }: { items: Item[]; reviewsOf: (id: string) => Review[]; onPick: (id: string) => void; onClose: () => void }) {
+  const [want, setWant] = useState<Record<string, number>>({ Relaxed: 3 });
+  const [kinds, setKinds] = useState<string[]>([]);
+  const [budget, setBudget] = useState<string | null>(null);
+  // Average felt level per effect across both of your ratings (0 = never felt).
+  const felt = (id: string) => {
+    const rs = reviewsOf(id);
+    const out: Record<string, number> = {};
+    for (const e of EFFECTS) {
+      const vals = rs.map((r) => r.feel?.[e] ?? (r.effects.includes(e) ? 3 : 0));
+      out[e] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    }
+    return out;
+  };
+  const wanted = Object.keys(want);
+  const ranked = items
+    .filter((i) => reviewsOf(i.id).length > 0 && (!kinds.length || kinds.includes(i.kind ?? "")) && (!budget || (i.price != null && PRICES.find((p) => p.v === budget)!.ok(Number(i.price)))))
+    .map((i) => {
+      const f = felt(i.id);
+      const miss = wanted.reduce((sum, e) => sum + Math.abs((want[e] ?? 0) - f[e]), 0);
+      const bad = [...BAD].filter((e) => !(e in want)).reduce((sum, e) => sum + f[e] * 0.6, 0);
+      const worst = wanted.length * 5 + 3;
+      return { i, score: Math.max(0, Math.round(100 - ((miss + bad) / worst) * 100)), f };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return (
+    <Sheet title="🎯 Match a mood" onClose={onClose}>
+      <div className="stack">
+        <div className="chips">
+          {EFFECTS.filter((e) => !BAD.has(e)).map((e) => (
+            <button key={e} className="chip chip-sm" aria-pressed={e in want} onClick={() => setWant((w) => (e in w ? Object.fromEntries(Object.entries(w).filter(([k]) => k !== e)) : { ...w, [e]: 3 }))}>
+              {e}
+            </button>
+          ))}
+        </div>
+        {wanted.length > 0 && (
+          <div className="feel-sliders">
+            {wanted.map((e) => (
+              <label key={e} className="feel-row">
+                <span className="feel-name">{e}</span>
+                <input type="range" min={1} max={5} value={want[e]} onChange={(ev) => setWant({ ...want, [e]: Number(ev.target.value) })} />
+                <span className="feel-level small muted">{LEVEL[want[e]]}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="chips">
+          <span className="small muted">How</span>
+          {KINDS.map((k) => (
+            <button key={k.v} className="chip chip-sm" aria-pressed={kinds.includes(k.v)} onClick={() => setKinds(kinds.includes(k.v) ? kinds.filter((x) => x !== k.v) : [...kinds, k.v])}>
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <div className="chips">
+          <span className="small muted">Price</span>
+          {PRICES.map((p) => (
+            <button key={p.v} className="chip chip-sm" aria-pressed={budget === p.v} onClick={() => setBudget(budget === p.v ? null : p.v)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {ranked.length === 0 ? (
+          <p className="small muted">Nothing rated matches those. Rate a few things (tap one, then “Rate it”) and this gets smarter.</p>
+        ) : (
+          <ul className="mini-list">
+            {ranked.map(({ i, score, f }) => (
+              <li key={i.id}>
+                <button onClick={() => onPick(i.id)} style={{ border: "1px solid var(--line)" }}>
+                  <span className="mini-emoji">{label(KINDS, i.kind)?.split(" ")[0] ?? "🌿"}</span>
+                  <span className="grow">
+                    <strong>{i.name}</strong>
+                    <span className="small faint">
+                      {" "}
+                      {wanted
+                        .filter((e) => f[e] > 0)
+                        .map((e) => `${e.toLowerCase()} ${f[e].toFixed(1)}`)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span className={`small ${score >= 70 ? "soon" : "faint"}`}>{score}%</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Sheet>
   );
 }

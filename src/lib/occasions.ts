@@ -11,6 +11,7 @@ export interface Occasion {
   nth: number | null;
   weekday: number | null;
   note: string | null;
+  year: number | null;
   series_id: string | null;
 }
 type Rule = Pick<Occasion, "rule" | "month" | "day" | "nth" | "weekday">;
@@ -49,7 +50,7 @@ export const ruleText = (o: Rule) => (o.rule === "date" ? `${MON[o.month - 1]} $
 export { ORD, WD, MON };
 
 /** Common ones, one tap to add. */
-export const COMMON: (Omit<Occasion, "id" | "note" | "series_id" | "kind"> & { kind?: Occasion["kind"] })[] = [
+export const COMMON: (Omit<Occasion, "id" | "note" | "series_id" | "kind" | "year"> & { kind?: Occasion["kind"] })[] = [
   { title: "New Year's Day", emoji: "🎆", rule: "date", month: 1, day: 1, nth: null, weekday: null },
   { title: "Valentine's Day", emoji: "💘", rule: "date", month: 2, day: 14, nth: null, weekday: null },
   { title: "St. Patrick's Day", emoji: "☘️", rule: "date", month: 3, day: 17, nth: null, weekday: null },

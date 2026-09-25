@@ -12,6 +12,7 @@ import { Sticker } from "@/components/Sticker";
 import { PostCard } from "@/components/PostCard";
 import { usePhotoUrls } from "@/lib/photos";
 import { Dashboard } from "@/components/Dashboard";
+import { ThreadStrip } from "@/components/Threads";
 
 const PAGE = 30;
 
@@ -58,6 +59,7 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+      <ThreadStrip />
 
       {posts && posts.length === 0 && (
         <div className="empty">

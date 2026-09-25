@@ -10,6 +10,7 @@ import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
+import { ArchivedThreads } from "@/components/Threads";
 
 export default function SavedPage() {
   const { meId, toast } = useApp();
@@ -56,6 +57,7 @@ export default function SavedPage() {
           Make folder
         </button>
       </form>
+      <ArchivedThreads />
     </main>
   );
 }

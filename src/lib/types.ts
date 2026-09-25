@@ -67,6 +67,8 @@ export interface Post {
   kind: "post" | "star" | "lunch_you" | "plan" | "vibe";
   /** For "plan" posts: the time-block plan on the calendar. */
   plan_id: string | null;
+  /** A deck update (Nerd dungeon). */
+  deck_id?: string | null;
   /** Who a star / invite is for. */
   to_user: string | null;
   star_color: string | null;

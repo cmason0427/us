@@ -22,17 +22,29 @@ export function untilText(days: number) {
   return `in ${Math.round(days / 30)} months`;
 }
 
+/** A fixed title, or one worked out per year ("27th birthday"). */
+type Title = string | ((d: Date) => string);
+
+/** 1st, 2nd, 3rd, 4th… 11th, 12th, 13th, 21st. */
+export function ordinal(n: number) {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${s}`;
+}
+/** "🎂 jo's 34th birthday" when the birth year is known, else "🎂 jo's birthday". */
+export const birthdayTitle = (name: string, birthYear?: number | null) => (d: Date) =>
+  birthYear && d.getFullYear() > birthYear ? `🎂 ${name}'s ${ordinal(d.getFullYear() - birthYear)} birthday` : `🎂 ${name}'s birthday`;
+
 /**
  * Put a date on the calendar every year (all day, for both of you), starting
  * from its next time around. Returns the series id to remember it by.
  */
-export async function addYearly(title: string, iso: string, meId: string, notes?: string | null): Promise<string | null> {
+export async function addYearly(title: Title, iso: string, meId: string, notes?: string | null): Promise<string | null> {
   const first = nextOccurrence(iso);
   return addYearlyDates(title, occurrences(first, "yearly", addYears(first, 30)), meId, notes);
 }
 
 /** Same, for dates you've already worked out (Thanksgiving moves around). */
-export async function addYearlyDates(title: string, starts: Date[], meId: string, notes?: string | null): Promise<string | null> {
+export async function addYearlyDates(title: Title, starts: Date[], meId: string, notes?: string | null): Promise<string | null> {
   if (!starts.length) return null;
   const supabase = supabaseBrowser();
   const until = starts[starts.length - 1];
@@ -44,7 +56,7 @@ export async function addYearlyDates(title: string, starts: Date[], meId: string
   if (error || !series) return null;
   const { error: e2 } = await supabase.from("events").insert(
     starts.map((s) => ({
-      title,
+      title: typeof title === "function" ? title(s) : title,
       type: "confirmed",
       all_day: true,
       start_time: s.toISOString(),

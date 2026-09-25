@@ -4,7 +4,7 @@ import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
-import { addYearly, daysUntil, removeYearly, untilText, yearsAtNext } from "@/lib/annual";
+import { addYearly, birthdayTitle, daysUntil, removeYearly, untilText, yearsAtNext } from "@/lib/annual";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
 import { Sheet } from "./Sheet";
@@ -143,8 +143,7 @@ function AboutForm({ personId, facts, onDone }: { personId: string; facts: About
     const dateChanged = !!bdayFact && bdayFact.text !== bday;
     if (oldSeries && (!onCal || dateChanged || !bday)) await removeYearly(oldSeries);
     if (row && bday && onCal && (!oldSeries || dateChanged)) {
-      const title = personId === meId ? `🎂 ${nameOf(meId)}'s birthday` : `🎂 ${nameOf(personId)}'s birthday`;
-      const id = await addYearly(title, bday, meId);
+      const id = await addYearly(birthdayTitle(nameOf(personId), Number(bday.slice(0, 4))), bday, meId);
       await supabase.from("little_things").update({ series_id: id }).eq("id", row.id);
     } else if (row && oldSeries && (!onCal || dateChanged)) {
       await supabase.from("little_things").update({ series_id: null }).eq("id", row.id);

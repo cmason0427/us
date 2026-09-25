@@ -825,7 +825,7 @@ div.dash-row { cursor: default; }
 .lt-polaroid { background: #fffdf9; padding: 8px 8px 6px; border-radius: 6px; box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--plum) 45%, transparent); rotate: -3deg; display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
 .lt-caption { font-family: var(--font-display); font-style: italic; font-size: 0.95rem; color: var(--ink-soft); }
 .lt-card { --t: var(--rose); position: relative; margin-top: 10px; padding: 9px 10px 10px; border-radius: 16px; background: color-mix(in srgb, var(--t) 18%, var(--surface)); border: 1.5px dashed color-mix(in srgb, var(--t) 70%, transparent); }
-.lt-pink { --t: #f3a6bf; } .lt-butter { --t: #f2cc62; } .lt-sage { --t: #9fcf95; } .lt-lilac { --t: #c3a8ea; } .lt-gift { --t: #f0a07a; }
+.lt-pink { --t: #f3a6bf; } .lt-butter { --t: #f2cc62; } .lt-sage { --t: #9fcf95; } .lt-lilac { --t: #c3a8ea; } .lt-peach { --t: #f6b893; } .lt-gift { --t: #f0a07a; }
 .lt-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .lt-card-head h2 { flex: 1; font-size: 1rem; }
 .lt-card-head .icon-btn { width: 30px; height: 30px; font-size: 0.85rem; }
@@ -974,3 +974,72 @@ div.dash-row { cursor: default; }
 html, body, button, input, textarea, select, option { text-transform: lowercase; }
 .keep-case, .keep-case * { text-transform: none !important; }
 input[type="email"], input[type="url"] { text-transform: none; }
+
+/* ─── Address book & address links ─────────────────────────────────────── */
+.book-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.book-list li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px; }
+.book-name { border: 0; background: none; padding: 0; font: inherit; font-weight: 650; color: inherit; text-align: left; cursor: pointer; }
+.addr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.addr-text { border: 0; background: none; padding: 0; font: inherit; font-size: 0.85rem; color: var(--ink-soft); text-align: left; cursor: copy; white-space: pre-wrap; }
+.addr-actions { display: inline-flex; gap: 4px; }
+a.pantry-chip { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* ─── Threads ──────────────────────────────────────────────────────────── */
+.thread-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 10px; }
+.thread-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.82rem; font-weight: 650; color: var(--ink); cursor: pointer; }
+.thread-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.thread-chip.is-new { border-color: var(--terracotta); background: color-mix(in srgb, var(--rose) 30%, var(--surface)); }
+.thread-dot { color: var(--terracotta); font-size: 1.2rem; line-height: 0.6; }
+.thread-new { border-style: dashed; color: var(--ink-soft); }
+.thread-note { width: 100%; color: var(--ink-soft); }
+.thread-items { display: flex; flex-direction: column; gap: 6px; }
+.thread-item { position: relative; background: var(--surface-sunk); border-radius: 12px; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; margin-right: 28px; }
+.thread-item.mine { background: color-mix(in srgb, var(--butter) 35%, var(--surface)); margin: 0 0 0 28px; }
+.thread-who { font-size: 0.7rem; color: var(--ink-faint); font-weight: 650; }
+.thread-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.92rem; }
+.thread-photo { width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; }
+.thread-photo-wait { height: 140px; background: var(--line); }
+.thread-del { position: absolute; top: 4px; right: 6px; }
+.thread-compose { display: flex; gap: 6px; align-items: center; position: sticky; bottom: 0; background: var(--surface); padding-top: 4px; }
+
+/* Decks: whose (outline), which colors (pips). */
+.deck-box[data-owner="pink"] { outline: 2.5px solid var(--ev-pink); outline-offset: 1.5px; }
+.deck-box[data-owner="green"] { outline: 2.5px solid var(--ev-green); outline-offset: 1.5px; }
+.deck-box { -webkit-touch-callout: none; user-select: none; }
+.mana-pips { position: absolute; top: 4px; right: 4px; display: flex; flex-direction: column; gap: 2px; z-index: 1; }
+.mana-pips i, .mana-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.deck-sheet-pips .mana-pips, .row-between > .mana-pips { position: static; flex-direction: row; }
+.post-deck { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 650; color: var(--ink-soft); margin-bottom: 4px; }
+.post-deck .mana-pips { position: static; flex-direction: row; }
+
+/* Garden feelings */
+.feel-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding: 6px 10px; border-radius: 12px; background: var(--surface-sunk); }
+.feel-row { display: grid; grid-template-columns: 92px 1fr 76px; align-items: center; gap: 8px; font-size: 0.85rem; }
+.feel-row input[type="range"] { width: 100%; accent-color: var(--terracotta); }
+.feel-name { font-weight: 650; }
+.chip.chip-bad[aria-pressed="true"] { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
+.lunch-picks { display: flex; flex-wrap: wrap; gap: 4px; max-height: 132px; overflow-y: auto; }
+.plan-step { align-items: flex-start; }
+.plan-step .grow { display: flex; flex-direction: column; gap: 2px; }
+.plan-addr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.plan-addr-add { align-self: flex-start; padding: 0; font-size: 0.75rem; text-decoration: none; color: var(--ink-faint); }
+
+/* ─── My money ─────────────────────────────────────────────────────────── */
+.money-hero { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 16px; background: color-mix(in srgb, var(--sage) 45%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--sage) 80%, #000 10%); }
+.money-big { font-family: var(--font-display); font-size: 2.1rem; line-height: 1.05; }
+.money-spend { position: absolute; top: 12px; right: 12px; }
+.money-alert { font-size: 0.85rem; padding: 7px 10px; border-radius: 10px; background: color-mix(in srgb, var(--butter) 50%, var(--surface)); border: 1px solid var(--line); }
+.money-alert.over { background: color-mix(in srgb, var(--danger) 15%, var(--surface)); }
+.money-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; }
+.money-lines li { display: flex; justify-content: space-between; gap: 8px; }
+.money-lines li.strong { font-weight: 700; }
+.split-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-sunk); }
+.split-bar i { display: block; height: 100%; }
+.split-bar .bills { background: #d98c7a; } .split-bar .save { background: #8fbf8a; } .split-bar .budgets { background: #9fb4e0; } .split-bar .aside { background: #e6c46a; } .split-bar .fun { background: #e89ab8; }
+.money-cat { display: flex; flex-direction: column; gap: 4px; width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 7px 10px; font: inherit; font-size: 0.9rem; color: inherit; text-align: left; cursor: pointer; }
+.money-meter { display: block; height: 6px; border-radius: 999px; background: var(--surface-sunk); overflow: hidden; }
+.money-meter i { display: block; height: 100%; background: var(--sage); }
+.money-meter.close i { background: #e6b04a; } .money-meter.over i { background: var(--danger); }
+.money-facts { color: var(--ink-soft); }
+.money-input { display: flex; align-items: center; gap: 4px; }
+.money-input > span { font-weight: 700; color: var(--ink-soft); }

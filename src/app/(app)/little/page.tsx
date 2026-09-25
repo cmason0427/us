@@ -32,6 +32,7 @@ interface Thing {
 const SECTIONS: { key: string; title: string; emoji: string; tint: string; labels: string[]; ph: string }[] = [
   { key: "sizes", title: "Sizes", emoji: "👕", tint: "pink", labels: ["Shirt", "Pants", "Shoes", "Ring", "Hat", "Hoodie"], ph: "10" },
   { key: "favorites", title: "Favorites", emoji: "💛", tint: "butter", labels: ["Movie", "Show", "Song", "Color", "Flower", "Snack", "Candy", "Drink", "Coffee order", "Takeout order", "Scent"], ph: "Shrek" },
+  { key: "comfort", title: "Comfort", emoji: "🧸", tint: "peach", labels: ["Comfort food", "Comfort show", "Comfort movie", "Comfort song", "Comfort drink", "When sick", "When anxious", "When sad", "When overwhelmed", "Don't do", "Words that help"], ph: "Mac and cheese, a blanket, no questions" },
   { key: "prefs", title: "Preferences", emoji: "🌷", tint: "sage", labels: ["Loves", "Not a fan", "Allergy", "When I'm down", "Love language", "Perfect lazy day"], ph: "Being left alone for an hour, then snacks" },
   { key: "misc", title: "Miscellaneous", emoji: "✨", tint: "lilac", labels: [], ph: "Hates cilantro, loves the window seat…" },
 ];

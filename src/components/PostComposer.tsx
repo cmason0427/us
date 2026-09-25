@@ -1,5 +1,6 @@
 "use client";
 
+import { ManaPips, useDeckNames } from "./Decks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { shrinkImage } from "@/lib/image";
@@ -40,13 +41,18 @@ export function PostComposer({
   onDone,
   dogNote = false,
   initialDogs = [],
+  deckId,
 }: {
   onDone: () => void;
   dogNote?: boolean;
   initialDogs?: string[];
+  /** A deck update: the post says which deck ("pick" lets you choose). */
+  deckId?: string | "pick";
 }) {
   const { meId, toast } = useApp();
   const [dogs, setDogs] = useState<string[]>(initialDogs);
+  const [deck, setDeck] = useState<string | null>(deckId && deckId !== "pick" ? deckId : null);
+  const deckList = [...useDeckNames().values()];
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -59,6 +65,7 @@ export function PostComposer({
     e.preventDefault();
     if (!text.trim() && !files.length) return;
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
+    if (deckId === "pick" && !deck) return setError("Which deck is it about?");
     // Grab this now: React clears currentTarget once we await.
     const submitBtn = e.currentTarget.querySelector<HTMLElement>("button[type=submit]");
     setBusy(true);
@@ -68,7 +75,7 @@ export function PostComposer({
     try {
       const { data: post, error: postErr } = await supabase
         .from("posts")
-        .insert({ author: meId, text: text.trim() || null, dogs, as_dog: dogNote })
+        .insert({ author: meId, text: text.trim() || null, dogs, as_dog: dogNote, deck_id: deck })
         .select("id")
         .single();
       if (postErr) throw postErr;
@@ -106,9 +113,20 @@ export function PostComposer({
   return (
     <form className="stack" onSubmit={submit}>
       {dogNote && <DogChips value={dogs} onChange={setDogs} />}
+      {deckId === "pick" && (
+        <div className="chips">
+          {deckList
+            .sort((a, b) => Number(b.owner === meId) - Number(a.owner === meId) || a.name.localeCompare(b.name))
+            .map((d) => (
+              <button key={d.id} type="button" className="chip chip-sm" aria-pressed={deck === d.id} onClick={() => setDeck(d.id)}>
+                <ManaPips colors={d.colors ?? []} /> {d.name}
+              </button>
+            ))}
+        </div>
+      )}
       <textarea
         className="textarea"
-        placeholder={dogNote ? "Kodo had a runny poop, Wiley didn't eat breakfast…" : "What's the little update?"}
+        placeholder={dogNote ? "Kodo had a runny poop, Wiley didn't eat breakfast…" : deckId ? "Swapped in 3 cards, it won 2 games…" : "What's the little update?"}
         value={text}
         onChange={(e) => setText(e.target.value)}
         autoFocus

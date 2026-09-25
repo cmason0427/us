@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { usePhotoUrls } from "@/lib/photos";
@@ -9,6 +9,7 @@ import { notify } from "@/lib/notify";
 import { ago, useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import { PostComposer } from "./PostComposer";
 
 export interface Deck {
   id: string;
@@ -18,6 +19,7 @@ export interface Deck {
   color: string | null;
   cover_path: string | null;
   tags: string[];
+  colors: string[];
   shelf_id: string | null;
   position: number;
   commander: string | null;
@@ -77,6 +79,27 @@ export const DECK_COLORS: { v: string; label: string; hex: string }[] = [
   { v: "purple", label: "Purple", hex: "#8f6ccf" },
 ];
 const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+/** Magic's five colors plus colorless, in the usual WUBRG order. */
+export const MANA: { v: string; label: string; hex: string }[] = [
+  { v: "W", label: "white", hex: "#f4ecd0" },
+  { v: "U", label: "blue", hex: "#3f86d4" },
+  { v: "B", label: "black", hex: "#2f2a33" },
+  { v: "R", label: "red", hex: "#d9543a" },
+  { v: "G", label: "green", hex: "#3f9a55" },
+  { v: "C", label: "colorless", hex: "#b7aea6" },
+];
+/** The deck's colors as little mana pips. */
+export function ManaPips({ colors }: { colors: string[] }) {
+  const list = MANA.filter((m) => colors.includes(m.v));
+  if (!list.length) return null;
+  return (
+    <span className="mana-pips" aria-label={list.map((m) => m.label).join(", ")}>
+      {list.map((m) => (
+        <i key={m.v} style={{ background: m.hex }} />
+      ))}
+    </span>
+  );
+}
 const hexOf = (c: string | null) => DECK_COLORS.find((x) => x.v === c)?.hex ?? "#b9a58f";
 
 const EVIL_WORDS = ["", "Precious angel", "Wholesome", "Polite", "Mostly fair", "A little mean", "Spicy", "Rude", "Evil", "Truly evil", "Unforgivable"];
@@ -126,6 +149,11 @@ export function EvilMeter({ evil, big = false }: { evil: number; big?: boolean }
 
 /* ─── the shelves ───────────────────────────────────────────────────────── */
 
+// The in-progress drag gesture (one finger, one shelf view at a time); never rendered from.
+type Gesture = { hold: { timer: ReturnType<typeof setTimeout>; x: number; y: number } | null; lifted: boolean; justDragged: boolean };
+const gesture: Gesture = { hold: null, lifted: false, justDragged: false };
+const setGesture = (p: Partial<Gesture>) => Object.assign(gesture, p);
+
 export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
   const { meId, profiles, nameOf, toast } = useApp();
   const all = useNerd();
@@ -149,18 +177,55 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
   const personColor = (id: string) => profiles.find((p) => p.id === id)?.cal_color;
   const openDeck = open ? decks.find((d) => d.id === open.id) ?? null : null;
 
-  // Arrange mode: press a deck and drag it onto another deck (goes before it) or a shelf (goes at the end).
+  // Hold a deck (or press it in arrange mode) and drag it onto another deck
+  // (goes before it) or a shelf (goes at the end). Moving before the hold
+  // kicks in is just a scroll.
+
+  useEffect(() => {
+    // Once a deck is lifted, the page mustn't scroll under your finger.
+    const stop = (e: TouchEvent) => gesture.lifted && e.preventDefault();
+    document.addEventListener("touchmove", stop, { passive: false });
+    return () => document.removeEventListener("touchmove", stop);
+  }, []);
+  function lift(el: HTMLElement, pointerId: number, d: Deck, x: number, y: number) {
+    try {
+      el.setPointerCapture(pointerId);
+    } catch {}
+    setGesture({ lifted: true });
+    setDrag({ id: d.id, x, y });
+    navigator.vibrate?.(15);
+  }
   function onDown(e: React.PointerEvent, d: Deck) {
-    if (!arranging) return;
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDrag({ id: d.id, x: e.clientX, y: e.clientY });
+    const el = e.currentTarget as HTMLElement;
+    const { clientX: x, clientY: y, pointerId } = e;
+    if (arranging) {
+      e.preventDefault();
+      return lift(el, pointerId, d, x, y);
+    }
+    setGesture({ hold: { timer: setTimeout(() => lift(el, pointerId, d, x, y), 380), x, y } });
+  }
+  function tap(d: Deck) {
+    if (!arranging && !gesture.justDragged) setOpen(d);
+  }
+  function dropCancel() {
+    cancelHold();
+    setGesture({ lifted: false });
+    setDrag(null);
+  }
+  function cancelHold() {
+    if (gesture.hold) clearTimeout(gesture.hold.timer);
+    setGesture({ hold: null });
   }
   function onMove(e: React.PointerEvent) {
+    if (gesture.hold && !drag && Math.hypot(e.clientX - gesture.hold.x, e.clientY - gesture.hold.y) > 8) cancelHold();
     if (drag) setDrag({ ...drag, x: e.clientX, y: e.clientY });
   }
   async function onUp(e: React.PointerEvent) {
+    cancelHold();
+    setGesture({ lifted: false });
     if (!drag) return;
+    setGesture({ justDragged: true });
+    setTimeout(() => setGesture({ justDragged: false }), 50);
     const moving = decks.find((d) => d.id === drag.id);
     setDrag(null);
     if (!moving) return;
@@ -201,7 +266,7 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
           ＋ {cap(room.item_word)}
         </button>
         <button className="btn btn-sm" aria-pressed={arranging} onClick={() => setArranging((a) => !a)}>
-          {arranging ? "Done arranging" : "Arrange"}
+          {arranging ? "Done" : "Shelves"}
         </button>
         <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || !!owner || !!tag} onClick={() => setShowFilters((f) => !f)}>
           Filter{owner || tag ? " •" : ""}
@@ -209,7 +274,7 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
       </div>
       {arranging && (
         <p className="small muted">
-          Drag one onto another to put it there, or onto a shelf to add it at the end.{" "}
+          Drag decks around (or hold one anytime to move it). Drop on a deck to go before it, or on a shelf to go at the end.{" "}
           <button className="btn-link small" onClick={addShelf}>
             ＋ New shelf
           </button>
@@ -258,17 +323,19 @@ export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
                   key={d.id}
                   data-deck-id={d.id}
                   className={`deck-box${arranging ? " arranging" : ""}${drag?.id === d.id ? " lifted" : ""}`}
+                  data-owner={personColor(d.owner)}
                   style={{ ["--deck" as string]: hexOf(d.color) }}
-                  onClick={() => !arranging && setOpen(d)}
+                  onClick={() => tap(d)}
+                  onContextMenu={(e) => e.preventDefault()}
                   onPointerDown={(e) => onDown(e, d)}
                   onPointerMove={onMove}
                   onPointerUp={onUp}
-                  onPointerCancel={() => setDrag(null)}
+                  onPointerCancel={dropCancel}
                   aria-label={`${d.name}, ${nameOf(d.owner)}'s deck`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {d.cover_path && covers[d.cover_path] && <img src={covers[d.cover_path]} alt="" draggable={false} />}
-                  <span className="deck-owner" data-person={personColor(d.owner)} />
+                  <ManaPips colors={d.colors ?? []} />
                   <span className="deck-name">{d.name}</span>
                 </button>
               ))}
@@ -299,6 +366,7 @@ function DeckSheet({ room, deck, cover, shelves, tags, onClose }: { room: Room; 
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [editing, setEditing] = useState(false);
+  const [posting, setPosting] = useState(false);
   const [draft, setDraft] = useState("");
   const { data: chase = [] } = useLive<Chase[]>(
     `chase:${deck.id}`,
@@ -340,6 +408,7 @@ function DeckSheet({ room, deck, cover, shelves, tags, onClose }: { room: Room; 
             {mine ? `Your ${room.item_word}` : `${nameOf(deck.owner)}'s ${room.item_word}`}
             {deck.commander ? ` · ${deck.commander}` : ""}
           </span>
+          <ManaPips colors={deck.colors ?? []} />
         </div>
         {room.meter_label && (
           <div className="stack-sm">
@@ -396,9 +465,19 @@ function DeckSheet({ room, deck, cover, shelves, tags, onClose }: { room: Room; 
           </form>
         </div>
         {deck.notes && <p className="card" style={{ whiteSpace: "pre-wrap" }}>{deck.notes}</p>}
-        <button className="btn btn-block" onClick={() => setEditing(true)}>
-          Edit {room.item_word}
-        </button>
+        <div className="row">
+          <button className="btn grow" onClick={() => setEditing(true)}>
+            Edit {room.item_word}
+          </button>
+          <button className="btn btn-primary grow" onClick={() => setPosting(true)}>
+            📣 Send an update
+          </button>
+        </div>
+        {posting && (
+          <Sheet title={`🃏 ${deck.name} update`} onClose={() => setPosting(false)}>
+            <PostComposer deckId={deck.id} onDone={() => setPosting(false)} />
+          </Sheet>
+        )}
       </div>
     </Sheet>
   );
@@ -410,6 +489,7 @@ function DeckForm({ room, initial, shelves, tags, onDone, onDeleted }: { room: R
   const [commander, setCommander] = useState(initial?.commander ?? "");
   const [evil, setEvil] = useState(initial?.evil ?? 5);
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
+  const [colors, setColors] = useState<string[]>(initial?.colors ?? []);
   const [shelf, setShelf] = useState<string | null>(initial?.shelf_id ?? null);
   const [picked, setPicked] = useState<string[]>(initial?.tags ?? []);
   const [newTag, setNewTag] = useState("");
@@ -430,7 +510,7 @@ function DeckForm({ room, initial, shelves, tags, onDone, onDeleted }: { room: R
         cover_path = await uploadAvatar(meId, "deck", file);
         await removeOldAvatar(meId, initial?.cover_path);
       }
-      const row = { name: name.trim(), commander: commander.trim() || null, evil, color, shelf_id: shelf, tags: picked, notes: notes.trim() || null, cover_path };
+      const row = { name: name.trim(), commander: commander.trim() || null, evil, color, colors, shelf_id: shelf, tags: picked, notes: notes.trim() || null, cover_path };
       const { error } = initial ? await supabase.from("decks").update(row).eq("id", initial.id) : await supabase.from("decks").insert({ ...row, owner: meId, position: 999, room_id: room.id });
       if (error) throw error;
       refreshAll();
@@ -462,8 +542,20 @@ function DeckForm({ room, initial, shelves, tags, onDone, onDeleted }: { room: R
           <input type="range" min={1} max={10} value={evil} onChange={(e) => setEvil(Number(e.target.value))} className="evil-range" />
         </div>
       )}
+      {isMtg(room) && (
+        <div className="field">
+          <span>Mana</span>
+          <div className="chips">
+            {MANA.map((m) => (
+              <button key={m.v} type="button" className="chip chip-sm" aria-pressed={colors.includes(m.v)} onClick={() => setColors(colors.includes(m.v) ? colors.filter((x) => x !== m.v) : [...colors, m.v])}>
+                <i className="mana-dot" style={{ background: m.hex }} /> {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="field">
-        <span>Color</span>
+        <span>Box color</span>
         <div className="chips">
           {DECK_COLORS.map((c) => (
             <button key={c.v} type="button" className="chip chip-sm" aria-pressed={color === c.v} onClick={() => setColor(color === c.v ? null : c.v)} aria-label={c.label}>
@@ -672,4 +764,10 @@ function CallForm({ decks, onSend }: { decks: Deck[]; onSend: (deck: string | nu
       </button>
     </div>
   );
+}
+
+/** Deck names by id (feed posts about a deck show which one). */
+export function useDeckNames() {
+  const { decks } = useNerd();
+  return new Map(decks.map((d) => [d.id, d]));
 }

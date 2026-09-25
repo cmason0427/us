@@ -127,7 +127,8 @@ function UrgencySeg({ value, onChange }: { value: Urgency; onChange: (u: Urgency
 /** Tap a preset and it's on the list. No questions. */
 export function TaskPresets({ onAdded, only }: { onAdded?: () => void; only?: ListType }) {
   const { meId, toast } = useApp();
-  const presets = useTaskPresets().filter((p) => !only || p.list_type === only || (only === "shared" && p.list_type === "household"));
+  // Daily ones add themselves, so a quick-add chip would only make a duplicate.
+  const presets = useTaskPresets().filter((p) => !p.daily && (!only || p.list_type === only || (only === "shared" && p.list_type === "household")));
   if (!presets.length) return null;
 
   async function use(p: TaskPreset) {
@@ -277,7 +278,7 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
           </button>
         ) : list !== "personal" && title.trim() ? (
           <button type="button" className="btn btn-ghost btn-sm" onClick={saveAsPreset}>
-            ☆ Save as preset
+            📌 Save as preset
           </button>
         ) : (
           <span />

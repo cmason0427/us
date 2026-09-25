@@ -12,6 +12,7 @@ import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { Sortable } from "./Sortable";
 import { WhenPicker } from "./WhenPicker";
+import { AddressLinks } from "./AddressLinks";
 
 // Time-block plans: "Saturday 1–5pm: do savers, then scrapbook". Both of you
 // can change anything; it only reaches the feed when one of you sends it.
@@ -24,7 +25,7 @@ export interface DayPlan {
   title: string | null;
   sent_at: string | null;
   created_by: string;
-  day_plan_items: { id: string; text: string; activity_id: string | null; position: number }[];
+  day_plan_items: { id: string; text: string; activity_id: string | null; position: number; address?: string | null }[];
 }
 
 const hm = (t: string) => t.slice(0, 5);
@@ -38,7 +39,7 @@ export function usePlans(day: string) {
     async () => {
       const { data, error } = await supabaseBrowser()
         .from("day_plans")
-        .select("*, day_plan_items(id, text, activity_id, position)")
+        .select("*, day_plan_items(id, text, activity_id, position, address)")
         .eq("day", day)
         .order("start_at");
       if (error) throw error;
@@ -56,7 +57,7 @@ export function usePlansRange(from: string, to: string) {
     async () => {
       const { data, error } = await supabaseBrowser()
         .from("day_plans")
-        .select("*, day_plan_items(id, text, activity_id, position)")
+        .select("*, day_plan_items(id, text, activity_id, position, address)")
         .gte("day", from)
         .lte("day", to)
         .order("day")
@@ -109,7 +110,7 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
   const { data: plan } = useLive<DayPlan | null>(
     `plan:${id}`,
     async () => {
-      const { data } = await supabase.from("day_plans").select("*, day_plan_items(id, text, activity_id, position)").eq("id", id).maybeSingle();
+      const { data } = await supabase.from("day_plans").select("*, day_plan_items(id, text, activity_id, position, address)").eq("id", id).maybeSingle();
       return data as DayPlan | null;
     },
     ["day_plans", "day_plan_items"],
@@ -213,9 +214,12 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
                 getId={(i) => i.id}
                 onReorder={reorder}
                 render={(i, handle) => (
-                  <div className="task">
+                  <div className="task plan-step">
                     <span className="batch-num">{items.indexOf(i) + 1}</span>
-                    <span className="grow task-title">{i.text}</span>
+                    <span className="grow">
+                      <span className="task-title">{i.text}</span>
+                      <StepAddress id={i.id} address={i.address ?? null} />
+                    </span>
                     <button className="icon-btn" onClick={() => removeItem(i.id)} aria-label={`Remove ${i.text}`}>
                       ×
                     </button>
@@ -283,5 +287,40 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
         </button>
       </div>
     </Sheet>
+  );
+}
+
+/** An optional address for one step of a plan: tap to add, then copy / open in maps. */
+function StepAddress({ id, address }: { id: string; address: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const save = async (v: string) => {
+    setEditing(false);
+    if ((v.trim() || null) === address) return;
+    await supabaseBrowser().from("day_plan_items").update({ address: v.trim() || null }).eq("id", id);
+    refreshAll();
+  };
+  if (editing)
+    return (
+      <input
+        className="input input-sm"
+        defaultValue={address ?? ""}
+        autoFocus
+        placeholder="address (optional)"
+        onBlur={(e) => save(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), save(e.currentTarget.value))}
+        aria-label="Address"
+      />
+    );
+  return address ? (
+    <span className="plan-addr">
+      <AddressLinks address={address} />
+      <button className="btn-link small" onClick={() => setEditing(true)}>
+        edit
+      </button>
+    </span>
+  ) : (
+    <button className="btn-link small plan-addr-add" onClick={() => setEditing(true)}>
+      📍 add address
+    </button>
   );
 }

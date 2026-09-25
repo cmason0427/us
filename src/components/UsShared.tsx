@@ -4,9 +4,10 @@ import { useState } from "react";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { addYearly, daysUntil, removeYearly, untilText, yearsAtNext } from "@/lib/annual";
+import { addYearly, birthdayTitle, daysUntil, removeYearly, untilText, yearsAtNext } from "@/lib/annual";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import { AddressLinks } from "./AddressLinks";
 
 interface UsDate {
   id: string;
@@ -338,7 +339,7 @@ function PersonSheet({ person, onDone }: { person?: Person; onDone: () => void }
       await removeYearly(series);
       series = null;
     }
-    if (want && !series) series = await addYearly(`🎂 ${row.name}'s birthday`, row.birthday!, meId);
+    if (want && !series) series = await addYearly(birthdayTitle(row.name, Number(row.birthday!.slice(0, 4))), row.birthday!, meId);
     if (series !== (person?.series_id ?? null)) await supabase.from("people").update({ series_id: series }).eq("id", id!);
     setBusy(false);
     refreshAll();
@@ -378,9 +379,7 @@ function PersonSheet({ person, onDone }: { person?: Person; onDone: () => void }
             <div>
               <dt>Address</dt>
               <dd>
-                <a href={`https://maps.apple.com/?q=${encodeURIComponent(person.address)}`} target="_blank" rel="noreferrer">
-                  {person.address}
-                </a>
+                <AddressLinks address={person.address} />
               </dd>
             </div>
           )}

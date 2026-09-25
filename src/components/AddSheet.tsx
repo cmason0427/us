@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
+import { NewThread } from "./Threads";
+import { SpendForm } from "./Budget";
 import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
 import { Sticker, type StickerName } from "./Sticker";
@@ -30,6 +32,8 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "star", emoji: "⭐", label: "Send a star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
       { kind: "status", emoji: "🚗", label: "On my way" },
+      { kind: "thread", emoji: "🗒️", label: "New thread" },
+      { kind: "deck-update", emoji: "🃏", label: "Deck update" },
     ],
   },
   {
@@ -37,7 +41,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "event", emoji: "📅", label: "Event" },
       { kind: "requests", emoji: "💌", label: "Requests" },
-      { kind: "event-preset", emoji: "☆", label: "Presets" },
+      { kind: "event-preset", emoji: "📌", label: "Presets" },
     ],
   },
   {
@@ -55,6 +59,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "shop", emoji: "🛒", label: "Shopping" },
       { kind: "activity", emoji: "✨", label: "Activity idea", art: "kodo_walk" },
       { kind: "goal", emoji: "💰", label: "Savings goal" },
+      { kind: "spend", emoji: "💸", label: "I spent money" },
     ],
   },
   {
@@ -62,7 +67,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "dog-note", emoji: "🐾", label: "Dog note", art: "duo_faces" },
       { kind: "dog-task", emoji: "🦴", label: "Dog to-do", art: "kodo_sleep" },
-      { kind: "dog-preset", emoji: "☆", label: "New dog preset", art: "wiley_down" },
+      { kind: "dog-preset", emoji: "📌", label: "New dog preset", art: "wiley_down" },
     ],
   },
 ];
@@ -87,6 +92,9 @@ const TITLES: Record<AddKind, string> = {
   status: "Heads-up",
   little: "Little things",
   vibe: "Vibe check",
+  "deck-update": "Deck update",
+  thread: "New thread",
+  spend: "I spent money (just you)",
 };
 
 /** "Just one" or "Add several" for things that come in batches. */
@@ -139,6 +147,9 @@ export function AddSheet() {
   return (
     <Sheet title={TITLES[addOpen]} onClose={closeAdd}>
       {addOpen === "post" && <PostComposer onDone={closeAdd} />}
+      {addOpen === "deck-update" && <PostComposer deckId="pick" onDone={closeAdd} />}
+      {addOpen === "thread" && <NewThread bare onDone={closeAdd} />}
+      {addOpen === "spend" && <SpendForm onDone={closeAdd} />}
       {addOpen === "event" && <EventForm onDone={closeAdd} />}
       {addOpen === "star" && <StarForm onDone={closeAdd} />}
       {addOpen === "dog-note" && <PostComposer dogNote onDone={closeAdd} />}

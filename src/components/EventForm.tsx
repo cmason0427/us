@@ -380,7 +380,7 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
 
       {!initial && title.trim() && (
         <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={saveAsDefault}>
-          ☆ Save as a default
+          📌 Save as a default
         </button>
       )}
       {error && <p className="error">{error}</p>}

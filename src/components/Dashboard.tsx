@@ -15,6 +15,8 @@ import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./
 import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { GoalsView, useGoalCheckins } from "./Goals";
 import { TaskList } from "./TaskList";
+import { SpendForm, useBudget } from "./Budget";
+import { money } from "@/lib/budget";
 import { usePartnerStatus } from "./Status";
 
 /**
@@ -29,7 +31,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "goals" } | null;
+type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "goals" } | { kind: "spend" } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -45,6 +47,8 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const dogTodos = useDogTodoCount();
   const checkins = useGoalCheckins();
   const status = usePartnerStatus();
+  const budget = useBudget();
+  const overCats = budget.cats.filter((c) => c.state === "over" || c.state === "close");
   const { openAdd } = useApp();
   const them = partner?.display_name ?? "Them";
 
@@ -95,6 +99,14 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
         </Row>
       )}
 
+      {budget.safe && budget.plan.current && (
+        <Row icon="💸" label="Safe to spend (just you)" onClick={() => setOpen({ kind: "spend" })}>
+          {money(budget.safe.left)}
+          <span className="small faint"> · about {money(budget.safe.perDay)}/day</span>
+          {overCats.length > 0 && <span className="small"> · {overCats.map((c) => `${c.c.emoji ?? ""}${c.c.name} ${Math.round(c.pct)}%`).join(", ")}</span>}
+        </Row>
+      )}
+
       {checkins > 0 && (
         <Row icon="💰" label="Savings" onClick={() => setOpen({ kind: "goals" })}>
           {checkins === 1 ? "A savings check-in is waiting" : `${checkins} savings check-ins are waiting`}
@@ -116,6 +128,14 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       {open?.kind === "dogs" && (
         <Sheet title="🐾 Dog to-dos" onClose={() => setOpen(null)}>
           <TaskList listType="dogs" title="" hint="" />
+        </Sheet>
+      )}
+      {open?.kind === "spend" && (
+        <Sheet title="💸 I spent" onClose={() => setOpen(null)}>
+          <SpendForm onDone={() => setOpen(null)} />
+          <Link href="/money" className="btn-link small" style={{ display: "inline-block", marginTop: 10 }}>
+            open my money →
+          </Link>
         </Sheet>
       )}
       {open?.kind === "goals" && (

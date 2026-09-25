@@ -48,6 +48,16 @@ and photo storage, and Web Push for notifications.
 
 Names are never hardcoded. Each person's display name lives in `profiles` and can be edited in Settings.
 
+## Newer pieces
+
+| Where | What |
+| --- | --- |
+| `src/components/Threads.tsx` | Threads: shared brainstorm boards (`threads`, `thread_items`, per-person `thread_reads` for the unseen dot). Never posts or pushes; chips sit above the feed; archived ones live in Saved |
+| `src/app/(app)/places` | Shared address book (`address_book`); `AddressLinks` = copy / Apple Maps / Google Maps, also used on plan steps and people |
+| `src/app/(app)/money` + `src/lib/budget.ts` | Personal budget, owner-only RLS on every `budget_*` table. `buildPlan` walks pay periods: bills due before the next payday, savings off the top, category ceilings prorated, gaps backfilled from earlier checks, then fun money evened out across paychecks. `safeToSpend` = this period's fun money minus uncategorized spending minus the cushion |
+| Decks | `decks.colors` (WUBRG+C pips), owner outline, hold-to-drag between shelves, `posts.deck_id` for deck updates |
+| Garden | `garden_reviews.feel` (effect → 1–5); 🎯 Match a mood ranks rated items by closeness |
+
 ## Deployment
 
 - **Hosting:** Netlify site `us-little-corner`. Site env vars: the VAPID keys, `CRON_SECRET`, `VAPID_SUBJECT`, `PIN_PEPPER`,

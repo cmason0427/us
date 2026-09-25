@@ -7,20 +7,23 @@ import { useMeals } from "@/lib/foodData";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { addToShopping, useShopping } from "./Shopping";
+import { Sortable } from "./Sortable";
 
-type Row = { name: string; have: boolean; low: boolean; area: string | null; type: string | null };
+type Row = { name: string; have: boolean; low: boolean; area: string | null; areas: string[]; type: string | null };
 
 /** Where it lives. Anything you type becomes its own spot. */
 export const AREAS = ["Fridge", "Freezer", "Pantry", "Lazy susan", "Counter", "Spice rack", "Cabinet"];
 /** What kind of thing it is. */
 export const TYPES = ["Fruit & veg", "Meat & fish", "Dairy & eggs", "Bread & bakery", "Pasta, rice & grains", "Canned & jarred", "Sauces & condiments", "Spices", "Baking", "Snacks", "Frozen meals", "Drinks", "Other"];
 const rank = (list: string[], v: string) => list.indexOf(v) + 1 || 99;
+/** Where to look, most likely first (older rows only have the one `area`). */
+const spots = (r: Row) => (r.areas?.length ? r.areas : r.area ? [r.area] : []);
 
 function usePantryRows() {
   const { data = [] } = useLive<Row[]>(
     "pantry_rows",
     async () => {
-      const { data, error } = await supabaseBrowser().from("pantry").select("name, have, low, area, type").order("name");
+      const { data, error } = await supabaseBrowser().from("pantry").select("name, have, low, area, areas, type").order("name");
       if (error) throw error;
       return data as Row[];
     },
@@ -57,15 +60,15 @@ export function Pantry() {
 
   const onList = new Set(shopping.filter((s) => !s.bought).map((s) => s.name.trim().toLowerCase()));
   const q = search.trim().toLowerCase();
-  const shown = rows.filter((r) => (!q || r.name.includes(q)) && (!areaF || r.area === areaF) && (!typeF || r.type === typeF));
+  const shown = rows.filter((r) => (!q || r.name.includes(q)) && (!areaF || spots(r).includes(areaF)) && (!typeF || r.type === typeF));
   const low = shown.filter((r) => r.have && r.low);
   const out = shown.filter((r) => !r.have);
   const have = shown.filter((r) => r.have && !r.low);
-  const areas = [...new Set([...AREAS, ...rows.map((r) => r.area).filter((a): a is string => !!a)])];
+  const areas = [...new Set([...AREAS, ...rows.flatMap(spots)])];
   const types = [...new Set([...TYPES, ...rows.map((r) => r.type).filter((t): t is string => !!t)])];
   const filterCount = (areaF ? 1 : 0) + (typeF ? 1 : 0);
 
-  const keyOf = (r: Row) => (group === "area" ? r.area : group === "type" ? r.type : null);
+  const keyOf = (r: Row) => (group === "area" ? (spots(r)[0] ?? null) : group === "type" ? r.type : null);
   const order = group === "area" ? areas : types;
   const groups =
     group === "az"
@@ -80,7 +83,7 @@ export function Pantry() {
     if (!name) return;
     const { error } = await supabaseBrowser()
       .from("pantry")
-      .upsert({ name, have: true, low: false, area: newArea || null, type: newType || null, updated_at: new Date().toISOString() });
+      .upsert({ name, have: true, low: false, area: newArea || null, areas: newArea ? [newArea] : [], type: newType || null, updated_at: new Date().toISOString() });
     if (error) return toast(error.message);
     setDraft("");
     refreshAll();
@@ -97,8 +100,10 @@ export function Pantry() {
     toast(`${name} → grocery list 🛒`);
   }
 
-  const row = (r: Row) => {
-    const meta = [group !== "area" && r.area, group !== "type" && r.type].filter(Boolean).join(" · ");
+  // In the grouped lists the heading already says the first spot; Out / Almost out show them all.
+  const row = (r: Row, grouped = true) => {
+    const where = spots(r);
+    const meta = [group !== "area" || !grouped ? where.join(" › ") : where.slice(1).map((w) => `or ${w}`).join(" "), (group !== "type" || !grouped) && r.type].filter(Boolean).join(" · ");
     return (
       <li key={r.name} className={`pantry-row${r.low ? " is-low" : ""}${r.have ? "" : " is-out"}`}>
         <input type="checkbox" className="check check-sm" checked={r.have} onChange={(e) => patch(r.name, { have: e.target.checked, low: false })} aria-label={`Have ${r.name}`} />
@@ -195,13 +200,13 @@ export function Pantry() {
       {low.length > 0 && (
         <div className="pantry-group">
           <h3 className="pantry-h">Almost out · {low.length}</h3>
-          <ul className="pantry-list">{low.map(row)}</ul>
+          <ul className="pantry-list">{low.map((r) => row(r, false))}</ul>
         </div>
       )}
       {out.length > 0 && (
         <div className="pantry-group">
           <h3 className="pantry-h">Out · {out.length}</h3>
-          <ul className="pantry-list">{out.map(row)}</ul>
+          <ul className="pantry-list">{out.map((r) => row(r, false))}</ul>
         </div>
       )}
       {groups.map((g) =>
@@ -210,7 +215,7 @@ export function Pantry() {
             <h3 className="pantry-h">
               {group === "az" ? "Have" : (g.name ?? (group === "area" ? "Somewhere" : "Uncategorized"))} · {g.list.length}
             </h3>
-            <ul className="pantry-list">{g.list.map(row)}</ul>
+            <ul className="pantry-list">{g.list.map((r) => row(r))}</ul>
           </div>
         ) : null,
       )}
@@ -282,7 +287,50 @@ function PantryItemSheet({
   return (
     <Sheet title={row.name} onClose={onClose}>
       <div className="stack">
-        {picker("Where it lives", areas, row.area, "area", customArea, setCustomArea, "+ other")}
+        <div className="field">
+          <span>Where it might be (most likely first; drag to reorder)</span>
+          {spots(row).length > 0 && (
+            <div className="pantry-list" style={{ padding: "0 8px" }}>
+              <Sortable
+                items={spots(row)}
+                getId={(a) => a}
+                onReorder={(ids) => onPatch({ areas: ids, area: ids[0] ?? null })}
+                render={(a, handle) => (
+                  <div className="pantry-row">
+                    <span className="batch-num">{spots(row).indexOf(a) + 1}</span>
+                    <span className="grow">{a}</span>
+                    <button className="lt-x" onClick={() => onPatch({ areas: spots(row).filter((x) => x !== a), area: spots(row).filter((x) => x !== a)[0] ?? null })} aria-label={`Not in ${a}`}>
+                      ×
+                    </button>
+                    {handle}
+                  </div>
+                )}
+              />
+            </div>
+          )}
+          <div className="chips">
+            {areas
+              .filter((a) => !spots(row).includes(a))
+              .map((a) => (
+                <button key={a} type="button" className="chip chip-sm" onClick={() => onPatch({ areas: [...spots(row), a], area: spots(row)[0] ?? a })}>
+                  + {a}
+                </button>
+              ))}
+            <input
+              className="input chip-input"
+              value={customArea}
+              onChange={(e) => setCustomArea(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !customArea.trim()) return;
+                e.preventDefault();
+                onPatch({ areas: [...spots(row), customArea.trim()], area: spots(row)[0] ?? customArea.trim() });
+                setCustomArea("");
+              }}
+              placeholder="+ other"
+              aria-label="Another spot"
+            />
+          </div>
+        </div>
         {picker("What kind", types, row.type, "type", customType, setCustomType, "+ other")}
         {usedIn.length > 0 && <p className="small muted">In: {usedIn.join(", ")}</p>}
         <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", color: "var(--danger)" }} onClick={onRemove}>

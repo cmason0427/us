@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
-import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconKey, IconList, IconPaw, IconSparkle } from "./Art";
+import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
 type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -13,17 +13,20 @@ type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSV
 /** The drawer, in groups so it stays scannable. Add new sections here. */
 export const GROUPS: { title?: string; items: Section[] }[] = [
   {
+    title: "Life",
     items: [
       { href: "/", label: "Home", Icon: IconHome },
       { href: "/calendar", label: "Calendar", Icon: IconCalendar },
       { href: "/lists", label: "To-dos", Icon: IconList },
       { href: "/shopping", label: "Shopping", Icon: IconBag },
       { href: "/eat", label: "Food", Icon: IconFork },
+      { href: "/money", label: "My money", Icon: IconWallet },
     ],
   },
   {
     title: "Us",
     items: [
+      { href: "/little", label: "Little things", Icon: IconHeart },
       { href: "/dogs", label: "Dogs", Icon: IconPaw },
       { href: "/do", label: "Do something", Icon: IconSparkle },
       { href: "/goals", label: "Goals", Icon: IconPiggy },
@@ -73,6 +76,9 @@ export function SideMenu() {
           <Link href="/saved" className="icon-btn" aria-label="Saved" aria-current={isHere(path, "/saved") ? "page" : undefined}>
             <IconBookmark />
           </Link>
+          <Link href="/places" className="icon-btn" aria-label="Address book" aria-current={isHere(path, "/places") ? "page" : undefined}>
+            <IconPin />
+          </Link>
           <Link href="/keys" className="icon-btn" aria-label="Keys" aria-current={isHere(path, "/keys") ? "page" : undefined}>
             <IconKey />
           </Link>
@@ -91,10 +97,6 @@ export function SideMenu() {
             ))}
           </div>
         ))}
-        {/* Tucked away on purpose: there when you want it, never a to-do. */}
-        <Link href="/little" className="drawer-quiet" aria-current={isHere(path, "/little") ? "page" : undefined}>
-          💝 Little things
-        </Link>
       </nav>
     </>
   );
