@@ -5,20 +5,35 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
-import { IconBag, IconPiggy, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconList, IconPaw, IconSparkle } from "./Art";
+import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHome, IconList, IconPaw, IconSparkle } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
-export const SECTIONS: { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
-  { href: "/", label: "Home", Icon: IconHome },
-  { href: "/calendar", label: "Calendar", Icon: IconCalendar },
-  { href: "/do", label: "Do something", Icon: IconSparkle },
-  { href: "/eat", label: "Food", Icon: IconFork },
-  { href: "/shopping", label: "Shopping", Icon: IconBag },
-  { href: "/lists", label: "To-dos", Icon: IconList },
-  { href: "/goals", label: "Goals", Icon: IconPiggy },
-  { href: "/dogs", label: "Dogs", Icon: IconPaw },
-  { href: "/spicy", label: "Spicy", Icon: IconFlame },
+type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
+
+/** The drawer, in groups so it stays scannable. Add new sections here. */
+export const GROUPS: { title?: string; items: Section[] }[] = [
+  {
+    items: [
+      { href: "/", label: "Home", Icon: IconHome },
+      { href: "/calendar", label: "Calendar", Icon: IconCalendar },
+      { href: "/lists", label: "To-dos", Icon: IconList },
+      { href: "/shopping", label: "Shopping", Icon: IconBag },
+      { href: "/eat", label: "Food", Icon: IconFork },
+    ],
+  },
+  {
+    title: "Us",
+    items: [
+      { href: "/dogs", label: "Dogs", Icon: IconPaw },
+      { href: "/do", label: "Do something", Icon: IconSparkle },
+      { href: "/goals", label: "Goals", Icon: IconPiggy },
+      { href: "/nerd", label: "Nerd dungeon", Icon: IconDice },
+      { href: "/garden", label: "Garden", Icon: IconLeaf },
+    ],
+  },
+  { title: "Just us", items: [{ href: "/spicy", label: "Spicy", Icon: IconFlame }] },
 ];
+export const SECTIONS: Section[] = GROUPS.flatMap((g) => g.items);
 
 const isHere = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
@@ -62,11 +77,16 @@ export function SideMenu() {
             <IconGear />
           </Link>
         </div>
-        {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href} className="drawer-item" aria-current={isHere(path, s.href) ? "page" : undefined}>
-            <s.Icon width={22} height={22} />
-            <span>{s.label}</span>
-          </Link>
+        {GROUPS.map((g, gi) => (
+          <div key={gi} className="drawer-group">
+            {g.title && <div className="drawer-heading">{g.title}</div>}
+            {g.items.map((s) => (
+              <Link key={s.href} href={s.href} className="drawer-item" aria-current={isHere(path, s.href) ? "page" : undefined}>
+                <s.Icon width={22} height={22} />
+                <span>{s.label}</span>
+              </Link>
+            ))}
+          </div>
         ))}
         {/* Tucked away on purpose: there when you want it, never a to-do. */}
         <Link href="/little" className="drawer-quiet" aria-current={isHere(path, "/little") ? "page" : undefined}>

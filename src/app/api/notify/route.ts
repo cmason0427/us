@@ -21,6 +21,7 @@ type Body =
   | { kind: "plan"; id: string }
   | { kind: "energy_request" }
   | { kind: "status" }
+  | { kind: "deck"; id: string }
   | { kind: "test" };
 
 /**
@@ -174,6 +175,20 @@ export async function POST(req: Request) {
       url: "/",
       tag: `vibe-${v.id}`,
     });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "deck") {
+    const { data: c } = await supabase.from("deck_calls").select("*").eq("id", body.id).single();
+    if (!c || (c.from_user !== me.id && c.to_user !== me.id)) return NextResponse.json({ error: "not yours" }, { status: 400 });
+    const ids = [c.my_deck, c.their_deck].filter(Boolean);
+    const { data: ds } = ids.length ? await supabase.from("decks").select("id, name").in("id", ids) : { data: [] as { id: string; name: string }[] };
+    const name = (id: string | null) => ds?.find((d) => d.id === id)?.name;
+    const answering = c.to_user === me.id;
+    const text = answering
+      ? `${myName} is bringing ${name(c.their_deck) ?? "a deck"} 🎲`
+      : [c.my_deck ? `${myName} is bringing ${name(c.my_deck) ?? "a deck"}.` : null, c.asking ? "Which are you bringing?" : null].filter(Boolean).join(" ");
+    const sent = await sendPushToUser(partner.id, { title: "🎲 Game night", body: text || `${myName} called their deck`, url: "/nerd", tag: `deck-${c.id}` });
     return NextResponse.json({ sent });
   }
 

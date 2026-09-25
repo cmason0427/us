@@ -25,7 +25,9 @@ and photo storage, and Web Push for notifications.
 | `src/lib/series.ts` | Repeating events: every occurrence is its own `events` row sharing `series_id`; edit or delete one, or it and all later |
 | `src/components/DailyRoutines.tsx` | To-do presets marked daily add themselves each day (unique `template_id`+`for_day`); yesterday's unchecked ones clear |
 | `src/components/Status.tsx` | "On my way": one line per person (`statuses`), a quiet push, shown on Home for 3 hours |
-| `src/app/(app)/little` | Little things about each other (shared facts) and gift ideas (author-only in RLS). Linked quietly from the drawer |
+| `src/app/(app)/little` | A cute profile per person (sizes, favorites, preferences as `little_things` rows labelled `field:<key>`, plus misc) and gift ideas (author-only in RLS). Linked quietly from the drawer |
+| `src/app/(app)/nerd` + `src/components/Decks.tsx` | Nerd dungeon: MTG decks (owner, 1–10 evil, color, cover, tags, chase list) on draggable shelves; "Game night" deck calls (`deck_calls`). D&D can move in later |
+| `src/app/(app)/garden` | Garden: products bought (`garden_items`) and each person's own rating (`garden_reviews`: high, worth it, effects) |
 | `src/components/WhenPicker.tsx` | The one day-and-time picker: a line until tapped, then a small calendar + times |
 | `src/components/TaskForm.tsx` | To-do add/edit sheet and one-tap presets (`task_templates`) |
 | `src/app/(app)/saved` | Private folders of saved photos |

@@ -812,10 +812,84 @@ div.dash-row { cursor: default; }
 /* Photo stickers as art accents */
 .sticker-img { display: inline-block; flex-shrink: 0; filter: drop-shadow(0 3px 6px color-mix(in srgb, var(--plum) 22%, transparent)); }
 .head-title-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.head-art { flex-shrink: 0; margin: -18px 0 -14px auto; }
+.head-art { flex-shrink: 0; margin: -4px 0 -14px auto; }
 .head-art .sticker-img { display: block; }
 .tile .sticker-img { margin: -6px 0; }
 .post-more { font-size: 1.2rem; line-height: 1; }
 .post-counter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px 8px 14px; border-radius: 14px; background: color-mix(in srgb, var(--butter) 50%, var(--surface)); border: 1.5px solid var(--line); }
 .post-counter-label { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; font: inherit; font-weight: 650; color: var(--ink); cursor: pointer; }
 .post-counter-n { font-family: var(--font-display); font-size: 1.5rem; color: var(--terracotta); min-width: 1.5ch; text-align: right; }
+
+/* ─── Little things: cute profile cards ─────────────────────────────────── */
+.lt-hero { display: flex; align-items: center; gap: 16px; margin: 16px 0 6px; }
+.lt-polaroid { background: #fffdf9; padding: 8px 8px 6px; border-radius: 6px; box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--plum) 45%, transparent); rotate: -3deg; display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.lt-caption { font-family: var(--font-display); font-style: italic; font-size: 0.95rem; color: var(--ink-soft); }
+.lt-card { --t: var(--rose); position: relative; margin-top: 16px; padding: 14px 14px 12px; border-radius: 22px; background: color-mix(in srgb, var(--t) 22%, var(--surface)); border: 2px dashed color-mix(in srgb, var(--t) 70%, transparent); }
+.lt-pink { --t: #f3a6bf; } .lt-butter { --t: #f2cc62; } .lt-sage { --t: #9fcf95; } .lt-lilac { --t: #c3a8ea; } .lt-gift { --t: #f0a07a; }
+.lt-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.lt-card-head h2 { flex: 1; font-size: 1.2rem; }
+.lt-badge { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 1.2rem; background: #fffdf9; box-shadow: 0 2px 0 color-mix(in srgb, var(--t) 80%, #000 10%); rotate: -6deg; }
+.lt-edit { background: #fffdf9; }
+.lt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.lt-tile { background: #fffdf9; border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 2px 0 color-mix(in srgb, var(--t) 55%, transparent); }
+.lt-tile:nth-child(odd) { rotate: -0.6deg; } .lt-tile:nth-child(even) { rotate: 0.6deg; }
+.lt-tile-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+.lt-tile-value { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; }
+.lt-empty { width: 100%; padding: 12px; border-radius: 14px; border: 1.5px dashed color-mix(in srgb, var(--t) 80%, transparent); background: color-mix(in srgb, #fffdf9 70%, transparent); font: inherit; color: var(--ink-soft); cursor: pointer; }
+.lt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lt-list li { display: flex; align-items: center; gap: 8px; background: #fffdf9; border-radius: 12px; padding: 6px 6px 6px 12px; }
+.lt-list li::before { content: "♡"; color: color-mix(in srgb, var(--t) 90%, #000 20%); }
+.lt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ─── Nerd dungeon: deck boxes on shelves ───────────────────────────────── */
+.shelf { display: flex; flex-direction: column; gap: 6px; }
+.shelf-head { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-display); font-weight: 650; font-size: 1.05rem; }
+.shelf-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 10px 10px 14px; min-height: 90px;
+  border-radius: 14px; background: color-mix(in srgb, var(--butter) 30%, var(--surface));
+  box-shadow: inset 0 -8px 0 color-mix(in srgb, #8a6a4a 35%, transparent);
+}
+@media (min-width: 560px) { .shelf-row { grid-template-columns: repeat(5, 1fr); } }
+.shelf-empty { grid-column: 1 / -1; align-self: center; text-align: center; }
+.deck-box {
+  position: relative; aspect-ratio: 5 / 7; border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer;
+  border: 2px solid color-mix(in srgb, var(--deck) 70%, #000 25%); background: var(--deck);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--deck) 60%, #000 35%), 0 6px 10px -6px rgba(0, 0, 0, 0.35);
+  display: flex; align-items: flex-end; font: inherit; color: #fff; text-align: left;
+}
+.deck-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.deck-name {
+  position: relative; width: 100%; padding: 14px 5px 4px; font-size: 0.68rem; font-weight: 700; line-height: 1.15;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72)); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.deck-owner { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; z-index: 1; background: var(--ink-faint); }
+.deck-owner[data-person="pink"] { background: var(--ev-pink); } .deck-owner[data-person="green"] { background: var(--ev-green); }
+.deck-box.arranging { touch-action: none; animation: deck-wiggle 0.5s ease-in-out infinite alternate; }
+.deck-box.arranging:nth-child(even) { animation-delay: 0.25s; }
+.deck-box.lifted { opacity: 0.35; }
+@keyframes deck-wiggle { from { rotate: -1.2deg; } to { rotate: 1.2deg; } }
+.deck-ghost { position: fixed; width: 72px; z-index: 90; pointer-events: none; rotate: 4deg; opacity: 0.95; }
+.deck-hero { height: 180px; border-radius: 14px; background: var(--deck); overflow: hidden; border: 2px solid color-mix(in srgb, var(--deck) 70%, #000 25%); }
+.deck-hero img { width: 100%; height: 100%; object-fit: cover; }
+.evil { display: inline-flex; gap: 3px; }
+.evil i { width: 8px; height: 12px; border-radius: 3px; background: var(--surface-sunk); box-shadow: inset 0 0 0 1px var(--line); }
+.evil i.on { background: color-mix(in srgb, #5e9e62, #c0392b calc(var(--i) * 11%)); box-shadow: none; }
+.evil-big i { width: 14px; height: 18px; }
+.evil-range { width: 100%; accent-color: #c0392b; }
+.game-night { border-top: 4px solid #8f6ccf; }
+.drawer-group { display: flex; flex-direction: column; gap: 2px; }
+.drawer-group + .drawer-group { margin-top: 8px; padding-top: 8px; border-top: 1.5px solid var(--line); }
+.drawer-heading { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); padding: 2px 10px 4px; }
+
+/* ─── Garden ────────────────────────────────────────────────────────────── */
+.garden-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.garden-card { position: relative; display: flex; flex-direction: column; gap: 3px; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 12px; border-top: 4px solid #7fb069; }
+.garden-kind { position: absolute; top: 8px; right: 10px; font-size: 1.2rem; }
+.garden-card strong { padding-right: 26px; }
+.garden-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: auto; color: #c9971c; }
+.garden-meta .small { color: var(--ink-soft); }
+.garden-stars { color: #c9971c; letter-spacing: 1px; }
+.garden-review { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+.garden-star-pick { display: flex; gap: 4px; }
+.garden-star-pick button { background: none; border: 0; font-size: 2rem; line-height: 1; color: #c9971c; cursor: pointer; padding: 0 2px; }

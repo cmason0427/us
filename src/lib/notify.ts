@@ -1,7 +1,7 @@
 "use client";
 
 /** Fire-and-forget: ask the server to push the partner about something we just did. */
-export function notify(body: { kind: "ask" | "ask_answered" | "post" | "lunch" | "vibe" | "spicy" | "star" | "spicy_item" | "plan"; id: string } | { kind: "energy_request" | "test" | "status" }) {
+export function notify(body: { kind: "ask" | "ask_answered" | "post" | "lunch" | "vibe" | "spicy" | "star" | "spicy_item" | "plan" | "deck"; id: string } | { kind: "energy_request" | "test" | "status" }) {
   return fetch("/api/notify", {
     method: "POST",
     headers: { "content-type": "application/json" },

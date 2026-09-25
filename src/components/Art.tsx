@@ -45,6 +45,20 @@ export const IconPiggy = (p: P) => (
     <circle cx="16" cy="11" r="0.6" fill="currentColor" />
   </svg>
 );
+export const IconDice = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z" />
+    <path d="M4 7.4 12 12l8-4.6M12 12v9.2" />
+  </svg>
+);
+export const IconLeaf = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M12 21v-7" />
+    <path d="M12 14c-1.5-3.5-1.5-7.5 0-11 1.5 3.5 1.5 7.5 0 11z" />
+    <path d="M12 14c-2.4-1.4-5.8-1.6-8.5-.3 2 2.2 5.6 2.6 8.5.3zM12 14c2.4-1.4 5.8-1.6 8.5-.3-2 2.2-5.6 2.6-8.5.3z" />
+    <path d="M12 12.5c-2.6-2.2-4.2-5.4-4.3-8.6 2.4 1.6 3.9 4.9 4.3 8.6zM12 12.5c2.6-2.2 4.2-5.4 4.3-8.6-2.4 1.6-3.9 4.9-4.3 8.6z" />
+  </svg>
+);
 export const IconBag = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
 );
