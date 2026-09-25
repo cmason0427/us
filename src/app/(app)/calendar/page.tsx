@@ -101,7 +101,7 @@ export default function CalendarPage() {
   const [planId, setPlanId] = useState<string | null>(params.get("plan"));
   const [editing, setEditing] = useState<CalEvent | "new" | null>(null);
 
-  const { meId, toast } = useApp();
+  const { meId, toast, profiles } = useApp();
   const [from, to] = rangeFor(view, cursor, agenda);
   const [showFilters, setShowFilters] = useState(false);
   const [whoFilter, setWhoFilter] = useState<Who[]>([]);
@@ -238,11 +238,22 @@ export default function CalendarPage() {
       {showFilters && <CalendarFilters who={whoFilter} setWho={setWhoFilter} colors={colorFilter} setColors={setColorFilter} />}
 
       <div className="legend">
-        {(["confirmed", "solo", "ask", "radar"] as EventType[]).map((t) => (
+        <span>
+          <i className="swatch" data-type="confirmed" /> {EVENT_TYPE_LABEL.confirmed}
+        </span>
+        {profiles.map((p) => (
+          <span key={p.id}>
+            <i className="swatch" data-type="solo" data-person={p.cal_color} /> Just {p.id === meId ? "me" : p.display_name}
+          </span>
+        ))}
+        {(["ask", "radar"] as EventType[]).map((t) => (
           <span key={t}>
             <i className="swatch" data-type={t} /> {EVENT_TYPE_LABEL[t]}
           </span>
         ))}
+        <span>
+          <i className="swatch swatch-plan" /> Time block
+        </span>
       </div>
 
       {view === "agenda" && <Agenda events={events} from={from} to={to} onOpen={open} plansOn={plansOn} onOpenPlan={setPlanId} />}
@@ -503,6 +514,12 @@ function EventBadges({ e }: { e: CalEvent }) {
   return null;
 }
 
+/** Whose color a "just one of us" plan gets (pink / green, the same on both phones). */
+function usePersonColor() {
+  const { profiles } = useApp();
+  return (e: CalEvent) => (effectiveType(e) === "solo" ? profiles.find((p) => p.id === e.created_by)?.cal_color : undefined);
+}
+
 /** The color marker, as a CSS variable the stripe reads. */
 const markStyle = (e: CalEvent) => (e.color ? ({ "--mark": colorVar(e.color) } as React.CSSProperties) : undefined);
 
@@ -559,11 +576,13 @@ function CalendarFilters({ who, setWho, colors, setColors }: { who: Who[]; setWh
 
 function EventCard({ e, onOpen, showDate = false }: { e: CalEvent; onOpen: (e: CalEvent) => void; showDate?: boolean }) {
   const { meId } = useApp();
+  const personColor = usePersonColor();
   const t = effectiveType(e);
   return (
     <div
       className="ev ev-card"
       data-type={t}
+      data-person={personColor(e)}
       data-color={e.color ?? undefined}
       style={markStyle(e)}
       role="button"
@@ -696,6 +715,7 @@ function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan }: { events: Cal
 function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(cursor)), end: endOfWeek(endOfMonth(cursor)) });
   const selected = sortEvents(events.filter((e) => onDay(e, cursor)));
+  const personColor = usePersonColor();
   return (
     <>
       <div className="month">
@@ -712,7 +732,7 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cur
               <span className="mnum">{format(d, "d")}</span>
               <span className="mdots">
                 {list.slice(0, 3).map((e) => (
-                  <i key={e.id} className="mdot ev" data-type={effectiveType(e)} />
+                  <i key={e.id} className="mdot ev" data-type={effectiveType(e)} data-person={personColor(e)} data-color={e.color ?? undefined} style={markStyle(e)} />
                 ))}
               </span>
               {list.length > 3 && <span className="mmore">+{list.length - 3}</span>}
@@ -768,6 +788,7 @@ function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { curs
 
 function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; plans: DayPlan[]; onOpenPlan: (id: string) => void }) {
   const list = events.filter((e) => onDay(e, day));
+  const personColor = usePersonColor();
   const allDay = list.filter((e) => e.all_day);
   const timed = list.filter((e) => !e.all_day).sort((a, b) => startOf(a).getTime() - startOf(b).getTime());
   const dayStart = startOfDay(day);
@@ -828,6 +849,7 @@ function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: Ca
               key={e.id}
               className="ev dayev"
               data-type={t}
+              data-person={personColor(e)}
               data-color={e.color ?? undefined}
               style={{ ...markStyle(e), top, height, left: `calc(48px + (100% - 48px) * ${lane / laneCount})`, width: `calc((100% - 48px) / ${laneCount} - 3px)`, right: "auto" }}
               onClick={() => onOpen(e)}

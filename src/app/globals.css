@@ -60,10 +60,18 @@
   --focus: color-mix(in srgb, var(--terracotta) 55%, transparent);
 
   /* event types */
-  --ev-confirmed: var(--plum);
-  --ev-confirmed-ink: var(--surface);
+  /* Both of us: a warm clay, darker than the pastels but not near-black. */
+  --ev-confirmed: #c47b5f;
+  --ev-confirmed-ink: #fffaf6;
+  /* Just one of us: each person's own color (profiles.cal_color). */
   --ev-solo: var(--sage);
   --ev-solo-ink: var(--on-soft);
+  --ev-pink: #f5bccb;
+  --ev-pink-ink: #5c1d33;
+  --ev-green: #b9dcb2;
+  --ev-green-ink: #1f3f24;
+  /* Time-block plans: a soft yellow wash behind everything. */
+  --ev-plan: #f3d36b;
   --ev-ask: var(--butter);
   --ev-ask-ink: var(--on-butter);
   --ev-radar: color-mix(in srgb, var(--rose) 40%, var(--surface));
@@ -482,10 +490,15 @@ p { margin: 0; }
   border-radius: 14px;
 }
 .ev[data-type="solo"] { --c: var(--ev-solo); --ci: var(--ev-solo-ink); }
+.ev[data-type="solo"][data-person="pink"] { --c: var(--ev-pink); --ci: var(--ev-pink-ink); }
+.ev[data-type="solo"][data-person="green"] { --c: var(--ev-green); --ci: var(--ev-green-ink); }
 .ev[data-type="ask"] { --c: var(--ev-ask); --ci: var(--ev-ask-ink); }
 .ev[data-type="radar"] { --c: var(--ev-radar); --ci: var(--ev-radar-ink); border: 2px dashed var(--ev-radar-edge); }
 .swatch[data-type="confirmed"] { background: var(--ev-confirmed); }
 .swatch[data-type="solo"] { background: var(--ev-solo); }
+.swatch[data-type="solo"][data-person="pink"] { background: var(--ev-pink); }
+.swatch[data-type="solo"][data-person="green"] { background: var(--ev-green); }
+.swatch-plan { background: color-mix(in srgb, var(--ev-plan) 45%, transparent); border: 1.5px dashed color-mix(in srgb, var(--ev-plan) 90%, #000 10%); }
 .swatch[data-type="ask"] { background: var(--ev-ask); }
 .swatch[data-type="radar"] { background: var(--ev-radar); border: 1.5px dashed var(--ev-radar-edge); }
 
@@ -711,19 +724,19 @@ div.dash-row { cursor: default; }
 .plan-bg {
   position: absolute; left: 48px; right: 0; z-index: 1; padding: 4px 10px; overflow: hidden; text-align: left;
   font: inherit; font-size: 0.8rem; color: var(--ink-soft); cursor: pointer;
-  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--sage) 26%, transparent) 0 8px, color-mix(in srgb, var(--sage) 14%, transparent) 8px 16px);
-  border: 1.5px dashed color-mix(in srgb, var(--pop-green) 45%, transparent); border-radius: 10px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ev-plan) 34%, transparent) 0 8px, color-mix(in srgb, var(--ev-plan) 20%, transparent) 8px 16px);
+  border: 1.5px dashed color-mix(in srgb, var(--ev-plan) 85%, #000 15%); border-radius: 10px;
 }
 .plan-bg strong { display: block; font-weight: 650; color: var(--ink); opacity: 0.8; }
 .plan-card-bg {
   display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; cursor: pointer; font: inherit; color: var(--ink-soft);
   padding: 8px 12px; border-radius: 12px; opacity: 0.85;
-  background: color-mix(in srgb, var(--sage) 18%, transparent);
-  border: 1.5px dashed color-mix(in srgb, var(--pop-green) 45%, transparent);
+  background: color-mix(in srgb, var(--ev-plan) 26%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--ev-plan) 85%, #000 15%);
 }
 .plan-card-bg strong { color: var(--ink); font-weight: 650; }
 .mcell { position: relative; }
-.mplan { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--pop-green) 45%, transparent); }
+.mplan { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--ev-plan) 70%, transparent); }
 
 /* ─── Day + time: one line until tapped, then a small calendar ─────────── */
 .when-line {
@@ -789,3 +802,7 @@ div.dash-row { cursor: default; }
 .ev[data-color] { box-shadow: inset 6px 0 0 var(--mark); padding-left: 14px; }
 .settings-link { text-decoration: none; color: inherit; }
 .cal-filters { padding: 10px 12px; margin-bottom: 10px; }
+
+/* Month view: each thing is a bar in its who-color, with its color marker as a cap on the left. */
+.mcell .mdot { height: 7px; }
+.mdot.ev[data-color] { background: linear-gradient(90deg, var(--mark) 0 38%, var(--c) 38%); padding-left: 0; box-shadow: none; }

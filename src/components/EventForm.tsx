@@ -62,7 +62,8 @@ const ALL_DAY_REMINDERS = [
 ];
 
 export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent; defaultDate?: Date; onDone: () => void }) {
-  const { meId, partner, toast } = useApp();
+  const { meId, partner, toast, profiles } = useApp();
+  const myColor = profiles.find((p) => p.id === meId)?.cal_color;
   const seedStart = initial ? new Date(initial.start_time) : nextHalfHour(defaultDate);
   // All-day ends are stored as the midnight *after* the last day; show the last day.
   const seedEnd = initial?.end_time
@@ -238,7 +239,7 @@ export function EventForm({ initial, defaultDate, onDone }: { initial?: CalEvent
         <div className="chips" role="group">
           {TYPES.map((t) => (
             <button key={t} type="button" className="chip" aria-pressed={type === t} onClick={() => setType(t)}>
-              <span className="swatch" data-type={t} />
+              <span className="swatch" data-type={t} data-person={t === "solo" ? myColor : undefined} />
               {EVENT_TYPE_LABEL[t]}
             </button>
           ))}

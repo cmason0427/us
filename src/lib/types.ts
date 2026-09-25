@@ -14,6 +14,8 @@ export interface Profile {
   notify_partner_posts: boolean;
   /** Profile photo in the photos bucket. */
   avatar_path: string | null;
+  /** Their color for "just me" calendar plans. */
+  cal_color: "pink" | "green";
   notify_reminders: boolean;
   notify_asks: boolean;
   notify_energy: boolean;
