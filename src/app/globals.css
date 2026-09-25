@@ -893,3 +893,4 @@ div.dash-row { cursor: default; }
 .garden-review { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
 .garden-star-pick { display: flex; gap: 4px; }
 .garden-star-pick button { background: none; border: 0; font-size: 2rem; line-height: 1; color: #c9971c; cursor: pointer; padding: 0 2px; }
+.room-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }

@@ -8,7 +8,7 @@ import { notify } from "@/lib/notify";
 import { useApp } from "./AppProvider";
 
 // A status stops showing on Home after this long.
-export const STATUS_MS = 3 * 60 * 60 * 1000;
+export const STATUS_MS = 60 * 60 * 1000;
 const PRESETS = ["🚗 Leaving now", "🏡 Home in ~20", "⏰ Running a little late", "💼 Stuck at work a bit longer", "🛒 Stopping at the store", "🏠 Home"];
 
 export function useStatuses() {
@@ -46,7 +46,7 @@ export function StatusPicker({ onDone }: { onDone: () => void }) {
   }
   return (
     <div className="stack">
-      <p className="small muted">A quick heads-up for {partner?.display_name ?? "them"}. It shows on Home for a few hours; no reply needed.</p>
+      <p className="small muted">A quick heads-up for {partner?.display_name ?? "them"}. It shows on Home for an hour; no reply needed.</p>
       <div className="stack-sm">
         {PRESETS.map((p) => (
           <button key={p} className="btn btn-block" onClick={() => send(p)}>

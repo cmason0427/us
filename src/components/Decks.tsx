@@ -22,12 +22,30 @@ export interface Deck {
   position: number;
   commander: string | null;
   notes: string | null;
+  room_id: string | null;
 }
 interface Shelf {
   id: string;
   name: string;
   position: number;
+  room_id: string | null;
 }
+
+/**
+ * A room in the dungeon. MTG decks are built in (id null); every other hobby
+ * is a row in nerd_rooms, with its own words for things. Adding a hobby is
+ * just making a room: shelves, covers, tags, wishlist and meter all come along.
+ */
+export interface Room {
+  id: string | null;
+  name: string;
+  emoji: string | null;
+  item_word: string;
+  meter_label: string | null;
+  subtitle_label: string | null;
+}
+export const MTG_ROOM: Room = { id: null, name: "Decks", emoji: "🃏", item_word: "deck", meter_label: "How evil", subtitle_label: "Commander" };
+const isMtg = (room: Room) => room.id === null;
 interface Chase {
   id: string;
   deck_id: string;
@@ -59,6 +77,7 @@ export const DECK_COLORS: { v: string; label: string; hex: string }[] = [
   { v: "pink", label: "Pink", hex: "#e98bb0" },
   { v: "purple", label: "Purple", hex: "#8f6ccf" },
 ];
+const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 const hexOf = (c: string | null) => DECK_COLORS.find((x) => x.v === c)?.hex ?? "#b9a58f";
 
 const EVIL_WORDS = ["", "Precious angel", "Wholesome", "Polite", "Mostly fair", "A little mean", "Spicy", "Rude", "Evil", "Truly evil", "Unforgivable"];
@@ -92,7 +111,16 @@ export function useNerd() {
     },
     ["deck_calls"],
   );
-  return { decks, shelves, calls };
+  const { data: rooms = [] } = useLive<Room[]>(
+    "nerd_rooms",
+    async () => {
+      const { data, error } = await supabase.from("nerd_rooms").select("*").order("position").order("created_at");
+      if (error) throw error;
+      return data as Room[];
+    },
+    ["nerd_rooms"],
+  );
+  return { decks, shelves, calls, rooms };
 }
 
 /** 😈 7/10 as ten little pips. */
@@ -108,9 +136,11 @@ export function EvilMeter({ evil, big = false }: { evil: number; big?: boolean }
 
 /* ─── the shelves ───────────────────────────────────────────────────────── */
 
-export function DeckShelves() {
+export function DeckShelves({ room = MTG_ROOM }: { room?: Room }) {
   const { meId, profiles, nameOf, toast } = useApp();
-  const { decks, shelves } = useNerd();
+  const all = useNerd();
+  const decks = all.decks.filter((d) => (d.room_id ?? null) === room.id);
+  const shelves = all.shelves.filter((s) => (s.room_id ?? null) === room.id);
   const covers = usePhotoUrls(decks.flatMap((d) => (d.cover_path ? [d.cover_path] : [])));
   const [open, setOpen] = useState<Deck | null>(null);
   const [adding, setAdding] = useState(false);
@@ -158,9 +188,9 @@ export function DeckShelves() {
   }
 
   async function addShelf() {
-    const name = window.prompt("Name the shelf", "Commander");
+    const name = window.prompt("Name the shelf", isMtg(room) ? "Commander" : "Favorites");
     if (!name?.trim()) return;
-    const { error } = await supabase.from("nerd_shelves").insert({ name: name.trim(), position: shelves.length, created_by: meId });
+    const { error } = await supabase.from("nerd_shelves").insert({ name: name.trim(), position: shelves.length, room_id: room.id, created_by: meId });
     if (error) return toast(error.message);
     refreshAll();
   }
@@ -178,7 +208,7 @@ export function DeckShelves() {
     <div className="stack">
       <div className="row wrap">
         <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
-          ＋ Deck
+          ＋ {cap(room.item_word)}
         </button>
         <button className="btn btn-sm" aria-pressed={arranging} onClick={() => setArranging((a) => !a)}>
           {arranging ? "Done arranging" : "Arrange"}
@@ -189,7 +219,7 @@ export function DeckShelves() {
       </div>
       {arranging && (
         <p className="small muted">
-          Drag a deck onto another to put it there, or onto a shelf to add it at the end.{" "}
+          Drag one onto another to put it there, or onto a shelf to add it at the end.{" "}
           <button className="btn-link small" onClick={addShelf}>
             ＋ New shelf
           </button>
@@ -219,7 +249,7 @@ export function DeckShelves() {
       )}
 
       {decks.length === 0 ? (
-        <p className="muted">No decks yet. Add one and give it a cover.</p>
+        <p className="muted">Nothing here yet. Add a {room.item_word} and give it a cover.</p>
       ) : (
         groups.map((g) => (
           <section key={g.id || "none"} className="shelf" data-shelf-id={g.id}>
@@ -264,18 +294,18 @@ export function DeckShelves() {
       )}
 
       {adding && (
-        <Sheet title="New deck" onClose={() => setAdding(false)}>
-          <DeckForm shelves={shelves} tags={allTags} onDone={() => setAdding(false)} />
+        <Sheet title={`New ${room.item_word}`} onClose={() => setAdding(false)}>
+          <DeckForm room={room} shelves={shelves} tags={allTags} onDone={() => setAdding(false)} />
         </Sheet>
       )}
-      {openDeck && <DeckSheet deck={openDeck} cover={openDeck.cover_path ? covers[openDeck.cover_path] : undefined} shelves={shelves} tags={allTags} onClose={() => setOpen(null)} />}
+      {openDeck && <DeckSheet room={room} deck={openDeck} cover={openDeck.cover_path ? covers[openDeck.cover_path] : undefined} shelves={shelves} tags={allTags} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
 /* ─── one deck ──────────────────────────────────────────────────────────── */
 
-function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?: string; shelves: Shelf[]; tags: string[]; onClose: () => void }) {
+function DeckSheet({ room, deck, cover, shelves, tags, onClose }: { room: Room; deck: Deck; cover?: string; shelves: Shelf[]; tags: string[]; onClose: () => void }) {
   const { meId, nameOf, toast } = useApp();
   const supabase = supabaseBrowser();
   const [editing, setEditing] = useState(false);
@@ -303,7 +333,7 @@ function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?
   if (editing) {
     return (
       <Sheet title={`Edit ${deck.name}`} onClose={() => setEditing(false)}>
-        <DeckForm initial={deck} shelves={shelves} tags={tags} onDone={() => setEditing(false)} onDeleted={onClose} />
+        <DeckForm room={room} initial={deck} shelves={shelves} tags={tags} onDone={() => setEditing(false)} onDeleted={onClose} />
       </Sheet>
     );
   }
@@ -317,16 +347,16 @@ function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?
         </div>
         <div className="row-between">
           <span className="small muted">
-            {mine ? "Your deck" : `${nameOf(deck.owner)}'s deck`}
+            {mine ? `Your ${room.item_word}` : `${nameOf(deck.owner)}'s ${room.item_word}`}
             {deck.commander ? ` · ${deck.commander}` : ""}
           </span>
         </div>
-        <div className="stack-sm">
-          <EvilMeter evil={deck.evil} big />
-          <span className="small muted">
-            😈 {deck.evil}/10 · {EVIL_WORDS[deck.evil]}
-          </span>
-        </div>
+        {room.meter_label && (
+          <div className="stack-sm">
+            <EvilMeter evil={deck.evil} big />
+            <span className="small muted">{isMtg(room) ? `😈 ${deck.evil}/10 · ${EVIL_WORDS[deck.evil]}` : `${room.meter_label}: ${deck.evil}/10`}</span>
+          </div>
+        )}
         {deck.tags.length > 0 && (
           <div className="chips">
             {deck.tags.map((t) => (
@@ -338,7 +368,7 @@ function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?
         )}
 
         <div className="field">
-          <span>Chase list</span>
+          <span>{isMtg(room) ? "Chase list" : "Wishlist"}</span>
           {chase.length > 0 && (
             <div className="card" style={{ padding: "2px 12px" }}>
               {chase.map((c) => (
@@ -369,7 +399,7 @@ function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?
             </div>
           )}
           <form className="quick-add" onSubmit={addCard}>
-            <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="A card you're hunting…" aria-label="Add to chase list" />
+            <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={isMtg(room) ? "A card you're hunting…" : "Something you're after…"} aria-label="Add to the list" />
             <button className="btn" disabled={!draft.trim()}>
               Add
             </button>
@@ -377,14 +407,14 @@ function DeckSheet({ deck, cover, shelves, tags, onClose }: { deck: Deck; cover?
         </div>
         {deck.notes && <p className="card" style={{ whiteSpace: "pre-wrap" }}>{deck.notes}</p>}
         <button className="btn btn-block" onClick={() => setEditing(true)}>
-          Edit deck
+          Edit {room.item_word}
         </button>
       </div>
     </Sheet>
   );
 }
 
-function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Deck; shelves: Shelf[]; tags: string[]; onDone: () => void; onDeleted?: () => void }) {
+function DeckForm({ room, initial, shelves, tags, onDone, onDeleted }: { room: Room; initial?: Deck; shelves: Shelf[]; tags: string[]; onDone: () => void; onDeleted?: () => void }) {
   const { meId, toast } = useApp();
   const [name, setName] = useState(initial?.name ?? "");
   const [commander, setCommander] = useState(initial?.commander ?? "");
@@ -397,7 +427,7 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const tagOptions = [...new Set([...tags, "baby deck", "work in progress", "identity crisis", ...picked])];
+  const tagOptions = [...new Set([...tags, ...(isMtg(room) ? ["baby deck", "work in progress", "identity crisis"] : []), ...picked])];
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -411,10 +441,10 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
         await removeOldAvatar(meId, initial?.cover_path);
       }
       const row = { name: name.trim(), commander: commander.trim() || null, evil, color, shelf_id: shelf, tags: picked, notes: notes.trim() || null, cover_path };
-      const { error } = initial ? await supabase.from("decks").update(row).eq("id", initial.id) : await supabase.from("decks").insert({ ...row, owner: meId, position: 999 });
+      const { error } = initial ? await supabase.from("decks").update(row).eq("id", initial.id) : await supabase.from("decks").insert({ ...row, owner: meId, position: 999, room_id: room.id });
       if (error) throw error;
       refreshAll();
-      toast(initial ? "Saved" : "On the shelf 🃏");
+      toast(initial ? "Saved" : `On the shelf ${room.emoji ?? "✨"}`);
       onDone();
     } catch (err) {
       toast((err as Error).message);
@@ -423,7 +453,7 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
   }
 
   async function remove() {
-    if (!initial || !confirm(`Delete "${initial.name}"? Its chase list goes too.`)) return;
+    if (!initial || !confirm(`Delete "${initial.name}"? Its list goes too.`)) return;
     await supabaseBrowser().from("decks").delete().eq("id", initial.id);
     refreshAll();
     onDone();
@@ -432,16 +462,18 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
 
   return (
     <form className="stack" onSubmit={submit}>
-      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Deck name" autoFocus={!initial} required />
-      <input className="input" value={commander} onChange={(e) => setCommander(e.target.value)} placeholder="Commander (optional)" aria-label="Commander" />
+      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={`${cap(room.item_word)} name`} autoFocus={!initial} required />
+      {room.subtitle_label && (
+        <input className="input" value={commander} onChange={(e) => setCommander(e.target.value)} placeholder={`${room.subtitle_label} (optional)`} aria-label={room.subtitle_label} />
+      )}
+      {room.meter_label && (
+        <div className="field">
+          <span>{isMtg(room) ? `How evil: 😈 ${evil}/10 · ${EVIL_WORDS[evil]}` : `${room.meter_label}: ${evil}/10`}</span>
+          <input type="range" min={1} max={10} value={evil} onChange={(e) => setEvil(Number(e.target.value))} className="evil-range" />
+        </div>
+      )}
       <div className="field">
-        <span>
-          How evil: 😈 {evil}/10 · {EVIL_WORDS[evil]}
-        </span>
-        <input type="range" min={1} max={10} value={evil} onChange={(e) => setEvil(Number(e.target.value))} className="evil-range" />
-      </div>
-      <div className="field">
-        <span>Box color</span>
+        <span>Color</span>
         <div className="chips">
           {DECK_COLORS.map((c) => (
             <button key={c.v} type="button" className="chip chip-sm" aria-pressed={color === c.v} onClick={() => setColor(color === c.v ? null : c.v)} aria-label={c.label}>
@@ -506,7 +538,7 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
           <span />
         )}
         <button className="btn btn-primary" disabled={busy || !name.trim()}>
-          {busy ? "Saving…" : initial ? "Save" : "Add deck"}
+          {busy ? "Saving…" : initial ? "Save" : `Add ${room.item_word}`}
         </button>
       </div>
     </form>
@@ -518,7 +550,9 @@ function DeckForm({ initial, shelves, tags, onDone, onDeleted }: { initial?: Dec
 /** "I'm bringing X, which are you bringing?" and the answer. Shows the latest one from the last two days. */
 export function GameNight() {
   const { meId, partner, nameOf, toast } = useApp();
-  const { decks, calls } = useNerd();
+  const nerd = useNerd();
+  const decks = nerd.decks.filter((d) => !d.room_id);
+  const calls = nerd.calls;
   const [sending, setSending] = useState(false);
   const [answering, setAnswering] = useState<Call | null>(null);
   const now = useNow()?.getTime() ?? 0;
@@ -647,5 +681,88 @@ function CallForm({ decks, onSend }: { decks: Deck[]; onSend: (deck: string | nu
         Send
       </button>
     </div>
+  );
+}
+
+/* ─── new rooms ─────────────────────────────────────────────────────────── */
+
+const ROOM_IDEAS: Omit<Room, "id">[] = [
+  { name: "D&D", emoji: "🐉", item_word: "character", meter_label: "Level", subtitle_label: "Class & race" },
+  { name: "Board games", emoji: "🎲", item_word: "game", meter_label: "How much we love it", subtitle_label: "Players" },
+  { name: "Video games", emoji: "🎮", item_word: "game", meter_label: "How much we love it", subtitle_label: "Platform" },
+  { name: "Minis", emoji: "⚔️", item_word: "mini", meter_label: "Painted", subtitle_label: "Army" },
+  { name: "Books", emoji: "📚", item_word: "book", meter_label: "Rating", subtitle_label: "Author" },
+];
+
+/** Make a new hobby room: pick an idea to fill it in, or name your own. */
+export function RoomForm({ initial, onDone }: { initial?: Room; onDone: (id?: string) => void }) {
+  const { meId, toast } = useApp();
+  const [f, setF] = useState<Omit<Room, "id">>(initial ?? { name: "", emoji: "", item_word: "", meter_label: "", subtitle_label: "" });
+  const set = (k: keyof Omit<Room, "id">, v: string) => setF({ ...f, [k]: v });
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!f.name.trim()) return;
+    const row = {
+      name: f.name.trim(),
+      emoji: f.emoji?.trim() || null,
+      item_word: f.item_word.trim().toLowerCase() || "item",
+      meter_label: f.meter_label?.trim() || null,
+      subtitle_label: f.subtitle_label?.trim() || null,
+    };
+    const supabase = supabaseBrowser();
+    const res = initial?.id
+      ? await supabase.from("nerd_rooms").update(row).eq("id", initial.id).select("id").single()
+      : await supabase.from("nerd_rooms").insert({ ...row, created_by: meId, position: 99 }).select("id").single();
+    if (res.error) return toast(res.error.message);
+    refreshAll();
+    onDone(res.data.id);
+  }
+  async function remove() {
+    if (!initial?.id || !confirm(`Delete the "${initial.name}" room and everything in it?`)) return;
+    await supabaseBrowser().from("nerd_rooms").delete().eq("id", initial.id);
+    refreshAll();
+    onDone();
+  }
+  return (
+    <form className="stack" onSubmit={submit}>
+      {!initial && (
+        <div className="chips">
+          {ROOM_IDEAS.map((r) => (
+            <button key={r.name} type="button" className="chip chip-sm" onClick={() => setF({ ...r })}>
+              {r.emoji} {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="row">
+        <input className="input" style={{ width: 64, textAlign: "center" }} value={f.emoji ?? ""} onChange={(e) => set("emoji", e.target.value.slice(0, 4))} placeholder="🐉" aria-label="Emoji" />
+        <input className="input grow" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Room name (D&D, Board games…)" required />
+      </div>
+      <label className="field">
+        <span>Each thing in it is a…</span>
+        <input className="input" value={f.item_word} onChange={(e) => set("item_word", e.target.value)} placeholder="character, game, book…" />
+      </label>
+      <label className="field">
+        <span>A line under the name (optional)</span>
+        <input className="input" value={f.subtitle_label ?? ""} onChange={(e) => set("subtitle_label", e.target.value)} placeholder="Class, Author, Platform…" />
+      </label>
+      <label className="field">
+        <span>A 1–10 meter (optional)</span>
+        <input className="input" value={f.meter_label ?? ""} onChange={(e) => set("meter_label", e.target.value)} placeholder="Level, How much we love it…" />
+      </label>
+      <p className="small muted">Every room gets shelves, covers, colors, tags and a wishlist.</p>
+      <div className="row-between">
+        {initial?.id ? (
+          <button type="button" className="btn btn-ghost" onClick={remove}>
+            Delete room
+          </button>
+        ) : (
+          <span />
+        )}
+        <button className="btn btn-primary" disabled={!f.name.trim()}>
+          {initial ? "Save" : "Make the room"}
+        </button>
+      </div>
+    </form>
   );
 }
