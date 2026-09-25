@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "@/components/AppProvider";
@@ -42,7 +42,7 @@ const OLD_FIELD: Record<string, string> = {
 };
 const labelOf = (t: Thing) => (t.label?.startsWith("field:") ? OLD_FIELD[t.label.slice(6)] ?? null : t.label && t.label !== "misc" ? t.label : null);
 
-type Editing = { mode: "add"; kind: "fact" | "gift"; section: string } | { mode: "edit"; thing: Thing };
+type Editing = { mode: "add"; kind: "fact" | "gift"; section: string; label?: string } | { mode: "edit"; thing: Thing };
 
 export default function LittleThingsPage() {
   const { meId, partner, profiles, toast } = useApp();
@@ -66,33 +66,70 @@ export default function LittleThingsPage() {
   const inSection = (key: string) => facts.filter((f) => (f.section ?? "misc") === key);
   const gifts = things.filter((t) => t.kind === "gift" && t.about_user === partner.id && t.author === meId);
 
-  async function save(v: { label: string; text: string; note: string }) {
-    if (!editing) return;
-    const row = { label: v.label.trim() || null, text: v.text.trim(), note: v.note.trim() || null };
-    const { error } =
-      editing.mode === "edit"
-        ? await supabase.from("little_things").update(row).eq("id", editing.thing.id)
-        : await supabase
-            .from("little_things")
-            .insert({ ...row, about_user: editing.kind === "gift" ? partner!.id : person!.id, author: meId, kind: editing.kind, section: editing.kind === "gift" ? null : editing.section });
+  async function add(v: { label: string; text: string; note: string }) {
+    if (editing?.mode !== "add") return false;
+    const { error } = await supabase.from("little_things").insert({
+      label: v.label.trim() || null,
+      text: v.text.trim(),
+      note: v.note.trim() || null,
+      about_user: editing.kind === "gift" ? partner!.id : person!.id,
+      author: meId,
+      kind: editing.kind,
+      section: editing.kind === "gift" ? null : editing.section,
+    });
+    if (error) {
+      toast(error.message);
+      return false;
+    }
+    refreshAll();
+    return true;
+  }
+  async function saveEdit(v: { label: string; text: string; note: string }) {
+    if (editing?.mode !== "edit") return;
+    const { error } = await supabase
+      .from("little_things")
+      .update({ label: v.label.trim() || null, text: v.text.trim(), note: v.note.trim() || null })
+      .eq("id", editing.thing.id);
     if (error) return toast(error.message);
     refreshAll();
     setEditing(null);
   }
-  async function remove(t: Thing) {
+  async function remove(t: Thing, close = true) {
     if (!confirm(`Remove “${t.text}”?`)) return;
     await supabase.from("little_things").delete().eq("id", t.id);
     refreshAll();
-    setEditing(null);
+    if (close) setEditing(null);
   }
 
-  const tile = (t: Thing) => (
-    <button key={t.id} className="lt-tile" onClick={() => setEditing({ mode: "edit", thing: t })}>
-      {labelOf(t) && <span className="lt-tile-label">{labelOf(t)}</span>}
-      <span className="lt-tile-value">{t.text}</span>
-      {t.note && <span className="lt-tile-note">{t.note}</span>}
-    </button>
-  );
+  // Things under the same heading share one tile ("Shoes: 10 · 10.5 in boots").
+  const tiles = (list: Thing[], kind: "fact" | "gift", section: string) => {
+    const groups: { label: string | null; items: Thing[] }[] = [];
+    for (const t of list) {
+      const label = labelOf(t);
+      const g = label ? groups.find((x) => x.label?.toLowerCase() === label.toLowerCase()) : undefined;
+      if (g) g.items.push(t);
+      else groups.push({ label, items: [t] });
+    }
+    return (
+      <div className="lt-grid">
+        {groups.map((g) => (
+          <div key={g.label ?? g.items[0].id} className="lt-tile">
+            {g.label && (
+              <button className="lt-tile-label" onClick={() => setEditing({ mode: "add", kind, section, label: g.label! })} aria-label={`Add another ${g.label}`}>
+                {g.label} <span aria-hidden>＋</span>
+              </button>
+            )}
+            {g.items.map((t) => (
+              <button key={t.id} className="lt-val" onClick={() => setEditing({ mode: "edit", thing: t })}>
+                <span className="lt-tile-value">{t.text}</span>
+                {t.note && <span className="lt-tile-note">{t.note}</span>}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const editSection = editing ? SECTIONS.find((s) => s.key === (editing.mode === "add" ? editing.section : (editing.thing.section ?? "misc"))) : undefined;
   const isGift = editing?.mode === "add" ? editing.kind === "gift" : editing?.thing.kind === "gift";
@@ -132,7 +169,7 @@ export default function LittleThingsPage() {
               </button>
             </div>
             {list.length ? (
-              <div className="lt-grid">{list.map(tile)}</div>
+              tiles(list, "fact", s.key)
             ) : (
               <button className="lt-empty" onClick={() => setEditing({ mode: "add", kind: "fact", section: s.key })}>
                 Nothing yet. Tap to add one ✏️
@@ -155,7 +192,7 @@ export default function LittleThingsPage() {
             Just for you. {partner.display_name} will never see these.
           </p>
           {gifts.length ? (
-            <div className="lt-grid">{gifts.map(tile)}</div>
+            tiles(gifts, "gift", "gift")
           ) : (
             <button className="lt-empty" onClick={() => setEditing({ mode: "add", kind: "gift", section: "gift" })}>
               That candle they smelled twice… 🕯️
@@ -169,16 +206,129 @@ export default function LittleThingsPage() {
           title={isGift ? "🎁 Gift idea" : `${editSection?.emoji ?? "✨"} ${editSection?.title ?? "Something"}`}
           onClose={() => setEditing(null)}
         >
-          <ThingForm
-            labels={isGift ? [] : (editSection?.labels ?? [])}
-            placeholder={isGift ? "That candle they smelled twice…" : (editSection?.ph ?? "")}
-            initial={editing.mode === "edit" ? editing.thing : undefined}
-            onSave={save}
-            onRemove={editing.mode === "edit" ? () => remove(editing.thing) : undefined}
-          />
+          {editing.mode === "add" ? (
+            <AddThings
+              labels={isGift ? [] : (editSection?.labels ?? [])}
+              placeholder={isGift ? "That candle they smelled twice…" : (editSection?.ph ?? "")}
+              initialLabel={editing.label ?? ""}
+              existing={editing.kind === "gift" ? gifts : inSection(editing.section)}
+              onAdd={add}
+              onRemove={(t) => remove(t, false)}
+              onDone={() => setEditing(null)}
+            />
+          ) : (
+            <ThingForm
+              labels={isGift ? [] : (editSection?.labels ?? [])}
+              placeholder={isGift ? "That candle they smelled twice…" : (editSection?.ph ?? "")}
+              initial={editing.thing}
+              onSave={saveEdit}
+              onRemove={() => remove(editing.thing)}
+            />
+          )}
         </Sheet>
       )}
     </main>
+  );
+}
+
+/**
+ * Add a run of things without leaving the sheet: pick a heading (Shirt), type
+ * one, hit enter, it's added and the box clears for the next. The heading
+ * sticks until you pick another, so three scents is three enters.
+ */
+function AddThings({
+  labels,
+  placeholder,
+  initialLabel,
+  existing,
+  onAdd,
+  onRemove,
+  onDone,
+}: {
+  labels: string[];
+  placeholder: string;
+  initialLabel: string;
+  existing: Thing[];
+  onAdd: (v: { label: string; text: string; note: string }) => Promise<boolean>;
+  onRemove: (t: Thing) => void;
+  onDone: () => void;
+}) {
+  const [label, setLabel] = useState(initialLabel);
+  const [text, setText] = useState("");
+  const [note, setNote] = useState("");
+  const [showNote, setShowNote] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const key = label.trim().toLowerCase();
+  const already = existing.filter((t) => (labelOf(t) ?? "").toLowerCase() === key);
+  const chips = [...new Set([...labels, ...existing.map(labelOf).filter((l): l is string => !!l)])];
+  return (
+    <form
+      className="stack"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!text.trim() || busy) return;
+        setBusy(true);
+        const ok = await onAdd({ label, text, note });
+        setBusy(false);
+        if (!ok) return;
+        setText("");
+        setNote("");
+        setShowNote(false);
+        input.current?.focus();
+      }}
+    >
+      {chips.length > 0 && (
+        <div className="chips">
+          {chips.map((l) => (
+            <button key={l} type="button" className="chip chip-sm" aria-pressed={key === l.toLowerCase()} onClick={() => (setLabel(key === l.toLowerCase() ? "" : l), input.current?.focus())}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+      <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Little heading (optional): Movie, Shoes…" aria-label="Heading" />
+      {already.length > 0 && (
+        <div className="chips" aria-label={label ? `Already under ${label}` : "Already here"}>
+          {already.map((t) => (
+            <span key={t.id} className="sticker lt-added">
+              {t.text}
+              <button type="button" className="lt-x" onClick={() => onRemove(t)} aria-label={`Remove ${t.text}`}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="quick-add">
+        <input
+          ref={input}
+          className="input grow"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={already.length ? "Another one…" : placeholder}
+          autoFocus
+          enterKeyHint="enter"
+          aria-label="The thing"
+        />
+        <button className="btn btn-primary" disabled={!text.trim() || busy}>
+          Add
+        </button>
+      </div>
+      {showNote ? (
+        <textarea className="textarea" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Longer note for this one (optional)" aria-label="Note" />
+      ) : (
+        <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setShowNote(true)}>
+          + Longer note
+        </button>
+      )}
+      <div className="row-between">
+        <span className="small faint">Enter adds it. Keep going.</span>
+        <button type="button" className="btn" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </form>
   );
 }
 

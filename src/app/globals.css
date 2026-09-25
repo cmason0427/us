@@ -898,5 +898,9 @@ div.dash-row { cursor: default; }
 .theater-list { display: flex; flex-direction: column; gap: 8px; }
 .theater-item { display: flex; align-items: flex-start; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 12px 14px; }
 .theater-kind { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 1.15rem; background: color-mix(in srgb, #8f6ccf 16%, var(--surface)); flex-shrink: 0; }
-.lt-tile { border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.lt-tile-label { border: 0; background: none; padding: 0; font-family: inherit; text-align: left; cursor: pointer; }
+.lt-val { border: 0; background: none; padding: 2px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
+.lt-val + .lt-val { border-top: 1px dashed color-mix(in srgb, var(--t, var(--line)) 70%, transparent); }
+.lt-added { display: inline-flex; align-items: center; gap: 4px; }
+.lt-x { border: 0; background: none; padding: 0 2px; font: inherit; color: var(--ink-soft); cursor: pointer; line-height: 1; }
 .lt-tile-note { font-size: 0.82rem; color: var(--ink-soft); white-space: pre-wrap; margin-top: 2px; }
