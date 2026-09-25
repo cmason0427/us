@@ -42,7 +42,13 @@ const OLD_FIELD: Record<string, string> = {
 };
 const labelOf = (t: Thing) => (t.label?.startsWith("field:") ? OLD_FIELD[t.label.slice(6)] ?? null : t.label && t.label !== "misc" ? t.label : null);
 
-type Editing = { mode: "add"; kind: "fact" | "gift"; section: string; label?: string } | { mode: "edit"; thing: Thing };
+type Editing =
+  | { mode: "add"; kind: "fact" | "gift"; section: string; label?: string }
+  | { mode: "section"; section: string; focus?: string }
+  | { mode: "edit"; thing: Thing };
+
+// Hints for the empty box under a heading.
+const PH: Record<string, string> = { Shirt: "M", Pants: "32x30", Shoes: "10", Ring: "7", Candy: "Tootsie rolls, apparently", Movie: "Shrek" };
 
 export default function LittleThingsPage() {
   const { meId, partner, profiles, toast } = useApp();
@@ -66,16 +72,15 @@ export default function LittleThingsPage() {
   const inSection = (key: string) => facts.filter((f) => (f.section ?? "misc") === key);
   const gifts = things.filter((t) => t.kind === "gift" && t.about_user === partner.id && t.author === meId);
 
-  async function add(v: { label: string; text: string; note: string }) {
-    if (editing?.mode !== "add") return false;
+  async function insert(kind: "fact" | "gift", section: string, v: { label: string; text: string; note: string }) {
     const { error } = await supabase.from("little_things").insert({
       label: v.label.trim() || null,
       text: v.text.trim(),
       note: v.note.trim() || null,
-      about_user: editing.kind === "gift" ? partner!.id : person!.id,
+      about_user: kind === "gift" ? partner!.id : person!.id,
       author: meId,
-      kind: editing.kind,
-      section: editing.kind === "gift" ? null : editing.section,
+      kind,
+      section: kind === "gift" ? null : section,
     });
     if (error) {
       toast(error.message);
@@ -83,6 +88,12 @@ export default function LittleThingsPage() {
     }
     refreshAll();
     return true;
+  }
+  const add = (v: { label: string; text: string; note: string }) => (editing?.mode === "add" ? insert(editing.kind, editing.section, v) : Promise.resolve(false));
+  async function updateText(t: Thing, text: string) {
+    const { error } = await supabase.from("little_things").update({ text: text.trim() }).eq("id", t.id);
+    if (error) toast(error.message);
+    refreshAll();
   }
   async function saveEdit(v: { label: string; text: string; note: string }) {
     if (editing?.mode !== "edit") return;
@@ -102,6 +113,8 @@ export default function LittleThingsPage() {
   }
 
   // Things under the same heading share one tile ("Shoes: 10 · 10.5 in boots").
+  const open = (kind: "fact" | "gift", section: string, label?: string) =>
+    setEditing(kind === "fact" && SECTIONS.find((x) => x.key === section)?.labels.length ? { mode: "section", section, focus: label } : { mode: "add", kind, section, label });
   const tiles = (list: Thing[], kind: "fact" | "gift", section: string) => {
     const groups: { label: string | null; items: Thing[] }[] = [];
     for (const t of list) {
@@ -115,7 +128,7 @@ export default function LittleThingsPage() {
         {groups.map((g) => (
           <div key={g.label ?? g.items[0].id} className="lt-tile">
             {g.label && (
-              <button className="lt-tile-label" onClick={() => setEditing({ mode: "add", kind, section, label: g.label! })} aria-label={`Add another ${g.label}`}>
+              <button className="lt-tile-label" onClick={() => open(kind, section, g.label!)} aria-label={`Edit ${g.label}`}>
                 {g.label} <span aria-hidden>＋</span>
               </button>
             )}
@@ -131,8 +144,8 @@ export default function LittleThingsPage() {
     );
   };
 
-  const editSection = editing ? SECTIONS.find((s) => s.key === (editing.mode === "add" ? editing.section : (editing.thing.section ?? "misc"))) : undefined;
-  const isGift = editing?.mode === "add" ? editing.kind === "gift" : editing?.thing.kind === "gift";
+  const editSection = editing ? SECTIONS.find((s) => s.key === (editing.mode === "edit" ? (editing.thing.section ?? "misc") : editing.section)) : undefined;
+  const isGift = editing?.mode === "add" ? editing.kind === "gift" : editing?.mode === "edit" && editing.thing.kind === "gift";
 
   return (
     <main className="page">
@@ -164,14 +177,14 @@ export default function LittleThingsPage() {
             <div className="lt-card-head">
               <span className="lt-badge">{s.emoji}</span>
               <h2>{s.title}</h2>
-              <button className="icon-btn lt-edit" onClick={() => setEditing({ mode: "add", kind: "fact", section: s.key })} aria-label={`Add to ${s.title}`}>
-                ＋
+              <button className="icon-btn lt-edit" onClick={() => open("fact", s.key)} aria-label={`Edit ${s.title}`}>
+                {s.labels.length ? "✏️" : "＋"}
               </button>
             </div>
             {list.length ? (
               tiles(list, "fact", s.key)
             ) : (
-              <button className="lt-empty" onClick={() => setEditing({ mode: "add", kind: "fact", section: s.key })}>
+              <button className="lt-empty" onClick={() => open("fact", s.key)}>
                 Nothing yet. Tap to add one ✏️
               </button>
             )}
@@ -206,7 +219,17 @@ export default function LittleThingsPage() {
           title={isGift ? "🎁 Gift idea" : `${editSection?.emoji ?? "✨"} ${editSection?.title ?? "Something"}`}
           onClose={() => setEditing(null)}
         >
-          {editing.mode === "add" ? (
+          {editing.mode === "section" ? (
+            <SectionForm
+              labels={editSection?.labels ?? []}
+              things={inSection(editing.section)}
+              focus={editing.focus}
+              onAdd={(label, text) => insert("fact", editing.section, { label, text, note: "" })}
+              onUpdate={updateText}
+              onRemove={(t) => remove(t, false)}
+              onDone={() => setEditing(null)}
+            />
+          ) : editing.mode === "add" ? (
             <AddThings
               labels={isGift ? [] : (editSection?.labels ?? [])}
               placeholder={isGift ? "That candle they smelled twice…" : (editSection?.ph ?? "")}
@@ -228,6 +251,136 @@ export default function LittleThingsPage() {
         </Sheet>
       )}
     </main>
+  );
+}
+
+/**
+ * The whole section on one screen, like a form: every heading with what's
+ * under it. Type under a heading and hit enter to add it there (several
+ * shirts is several enters); tap one to fix it, × to take it off.
+ */
+function SectionForm({
+  labels,
+  things,
+  focus,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onDone,
+}: {
+  labels: string[];
+  things: Thing[];
+  focus?: string;
+  onAdd: (label: string, text: string) => Promise<boolean>;
+  onUpdate: (t: Thing, text: string) => Promise<void>;
+  onRemove: (t: Thing) => void;
+  onDone: () => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [fixing, setFixing] = useState<{ id: string; text: string } | null>(null);
+  const [extra, setExtra] = useState<string[]>([]);
+  const [newLabel, setNewLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const under = (l: string) => things.filter((t) => (labelOf(t) ?? "").toLowerCase() === l.toLowerCase());
+  const known = new Set(labels.map((l) => l.toLowerCase()));
+  // Headings you made up (or older ones like "Show / movie") get a row too.
+  const custom = [...new Set([...things.map(labelOf).filter((l): l is string => !!l), ...extra])].filter((l) => !known.has(l.toLowerCase()));
+  const all = [...labels, ...custom];
+  const loose = things.filter((t) => !labelOf(t));
+
+  async function commit(label: string) {
+    const text = (drafts[label] ?? "").trim();
+    if (!text) return;
+    setBusy(true);
+    const ok = await onAdd(label, text);
+    setBusy(false);
+    if (ok) setDrafts((d) => ({ ...d, [label]: "" }));
+  }
+  async function saveFix(t: Thing) {
+    if (!fixing) return;
+    const text = fixing.text.trim();
+    setFixing(null);
+    if (!text) onRemove(t);
+    else if (text !== t.text) await onUpdate(t, text);
+  }
+  async function done() {
+    // Anything typed but not entered still counts.
+    for (const l of all) await commit(l);
+    onDone();
+  }
+
+  const chip = (t: Thing) =>
+    fixing?.id === t.id ? (
+      <input
+        key={t.id}
+        className="input"
+        value={fixing.text}
+        autoFocus
+        onChange={(e) => setFixing({ id: t.id, text: e.target.value })}
+        onBlur={() => saveFix(t)}
+        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), saveFix(t))}
+        aria-label={`Fix ${t.text}`}
+      />
+    ) : (
+      <span key={t.id} className="sticker lt-added">
+        <button type="button" className="lt-fix" onClick={() => setFixing({ id: t.id, text: t.text })}>
+          {t.text}
+        </button>
+        <button type="button" className="lt-x" onClick={() => onRemove(t)} aria-label={`Remove ${t.text}`}>
+          ×
+        </button>
+      </span>
+    );
+
+  return (
+    <div className="stack">
+      <div className="lt-form">
+        {all.map((l) => {
+          const list = under(l);
+          return (
+            <div key={l} className="field lt-field">
+              <span>{l}</span>
+              {list.length > 0 && <div className="chips">{list.map(chip)}</div>}
+              <input
+                className="input"
+                value={drafts[l] ?? ""}
+                onChange={(e) => setDrafts((d) => ({ ...d, [l]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                  e.preventDefault();
+                  if (!busy) commit(l);
+                }}
+                placeholder={list.length ? "+ another" : (PH[l] ?? "")}
+                autoFocus={l === focus}
+                enterKeyHint="enter"
+                aria-label={`Add a ${l}`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {loose.length > 0 && <div className="chips">{loose.map(chip)}</div>}
+      <form
+        className="quick-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const l = newLabel.trim();
+          if (l && !all.some((x) => x.toLowerCase() === l.toLowerCase())) setExtra((x) => [...x, l]);
+          setNewLabel("");
+        }}
+      >
+        <input className="input grow" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Another heading (Socks, Perfume…)" aria-label="New heading" />
+        <button className="btn btn-sm" disabled={!newLabel.trim()}>
+          Add
+        </button>
+      </form>
+      <div className="row-between">
+        <span className="small faint">Enter adds it under that heading.</span>
+        <button type="button" className="btn btn-primary" onClick={done} disabled={busy}>
+          Done
+        </button>
+      </div>
+    </div>
   );
 }
 

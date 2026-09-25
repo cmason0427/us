@@ -839,7 +839,8 @@ div.dash-row { cursor: default; }
 .lt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .lt-list li { display: flex; align-items: center; gap: 8px; background: #fffdf9; border-radius: 12px; padding: 6px 6px 6px 12px; }
 .lt-list li::before { content: "♡"; color: color-mix(in srgb, var(--t) 90%, #000 20%); }
-.lt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+.lt-form > * { min-width: 0; }
 
 /* ─── Nerd dungeon: deck boxes on shelves ───────────────────────────────── */
 .shelf { display: flex; flex-direction: column; gap: 6px; }
@@ -901,6 +902,8 @@ div.dash-row { cursor: default; }
 .lt-tile-label { border: 0; background: none; padding: 0; font-family: inherit; text-align: left; cursor: pointer; }
 .lt-val { border: 0; background: none; padding: 2px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
 .lt-val + .lt-val { border-top: 1px dashed color-mix(in srgb, var(--t, var(--line)) 70%, transparent); }
-.lt-added { display: inline-flex; align-items: center; gap: 4px; }
+.lt-added { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; white-space: normal; text-align: left; }
+.lt-fix { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: text; text-align: left; }
+.lt-field .chips { gap: 4px; }
 .lt-x { border: 0; background: none; padding: 0 2px; font: inherit; color: var(--ink-soft); cursor: pointer; line-height: 1; }
 .lt-tile-note { font-size: 0.82rem; color: var(--ink-soft); white-space: pre-wrap; margin-top: 2px; }
