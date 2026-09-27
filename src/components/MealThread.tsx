@@ -4,7 +4,8 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { useNow } from "@/lib/dates";
+import { timeLabel, useNow } from "@/lib/dates";
+import { mealForTime, setMealTime, useMealTime } from "@/lib/mealTimes";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { describeFilters, type FoodFilters } from "@/lib/food";
@@ -173,6 +174,7 @@ export function MealPanel({ t }: { t: MealThreadState }) {
 
   return (
     <div className="stack-sm lunch">
+      <MealTimeLine day={t.day} meal={meal} />
       {meal === "lunch" && (
         <>
           <div className="row-between">
@@ -278,14 +280,46 @@ export function MealPanel({ t }: { t: MealThreadState }) {
   );
 }
 
-/** Start a breakfast or dinner suggestion (from the ＋ menu). */
+/**
+ * Start a meal (from the ＋ menu). Give it a time and it names itself
+ * (before 10:30 breakfast, before 3 lunch, then dinner) and goes on the
+ * calendar; the food can be figured out now or later.
+ */
 export function MealStart({ onDone }: { onDone: () => void }) {
+  const { meId, toast } = useApp();
   const now = useNow();
   const [picked, setMeal] = useState<Meal | null>(null);
-  const meal = picked ?? (now ? currentMeal(now).meal : "lunch");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   if (!now) return null;
+  const meal = picked ?? (time ? mealForTime(time) : currentMeal(now).meal);
+  const day = date || dayFor(meal, now);
+  async function putOnCalendar() {
+    const err = await setMealTime(day, meal, time, meId);
+    if (err) return toast(err);
+    toast(`${MEAL_LABEL[meal]} at ${timeLabel(new Date(`${day}T${time}`))} is on the calendar 📅`);
+  }
   return (
     <div className="stack">
+      <div className="grid-2">
+        <label className="field">
+          <span>Day</span>
+          <input className="input input-sm" type="date" value={day} onChange={(e) => setDate(e.target.value)} aria-label="Day" />
+        </label>
+        <label className="field">
+          <span>Time (optional)</span>
+          <input
+            className="input input-sm"
+            type="time"
+            value={time}
+            onChange={(e) => {
+              setTime(e.target.value);
+              setMeal(null);
+            }}
+            aria-label="Time"
+          />
+        </label>
+      </div>
       <div className="seg" role="group" aria-label="Which meal">
         {(["breakfast", "lunch", "dinner"] as Meal[]).map((m) => (
           <button key={m} aria-pressed={meal === m} onClick={() => setMeal(m)}>
@@ -293,8 +327,51 @@ export function MealStart({ onDone }: { onDone: () => void }) {
           </button>
         ))}
       </div>
-      <MealStartFor key={meal} day={dayFor(meal, now)} meal={meal} onDone={onDone} />
+      {time && (
+        <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={putOnCalendar}>
+          📅 Put {MEAL_LABEL[meal].toLowerCase()} at {timeLabel(new Date(`${day}T${time}`))} on the calendar
+        </button>
+      )}
+      <MealStartFor key={`${day}|${meal}`} day={day} meal={meal} onDone={onDone} />
     </div>
+  );
+}
+
+/** "🕐 7 pm · change" for a meal: an optional set time, which puts it on the calendar. */
+export function MealTimeLine({ day, meal }: { day: string; meal: Meal }) {
+  const { meId, toast } = useApp();
+  const mt = useMealTime(day, meal);
+  const [editing, setEditing] = useState(false);
+  const save = async (v: string) => {
+    setEditing(false);
+    if ((v || null) === (mt ? mt.at.slice(0, 5) : null)) return;
+    const err = await setMealTime(day, meal, v || null, meId);
+    if (err) toast(err);
+  };
+  if (editing)
+    return (
+      <span className="row" style={{ gap: 6 }}>
+        <input
+          className="input input-sm"
+          type="time"
+          autoFocus
+          defaultValue={mt ? mt.at.slice(0, 5) : meal === "breakfast" ? "08:30" : meal === "lunch" ? "12:00" : "18:30"}
+          onBlur={(e) => save(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), save(e.currentTarget.value))}
+          aria-label="Meal time"
+          style={{ width: 130 }}
+        />
+        {mt && (
+          <button className="btn-link small" onMouseDown={(e) => e.preventDefault()} onClick={() => save("")}>
+            no set time
+          </button>
+        )}
+      </span>
+    );
+  return (
+    <button className="btn-link small plan-addr-add" onClick={() => setEditing(true)}>
+      🕐 {mt ? `${timeLabel(new Date(`${day}T${mt.at.slice(0, 5)}`))} · on the calendar · change` : "set a time (puts it on the calendar)"}
+    </button>
   );
 }
 

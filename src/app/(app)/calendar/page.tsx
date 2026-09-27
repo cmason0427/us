@@ -31,6 +31,9 @@ import { Sheet } from "@/components/Sheet";
 import { EventForm } from "@/components/EventForm";
 import { AskActions, EventBadges, EventDetail, endOf, startOf, whenText } from "@/components/EventDetail";
 import { IconChevron, IconPlus, Wavy } from "@/components/Art";
+import { MEAL_EMOJI, useMealTimesRange, type MealTime } from "@/lib/mealTimes";
+import { timeLabel } from "@/lib/dates";
+import { MEAL_LABEL, MealPanel, useMealThread } from "@/components/MealThread";
 
 type View = "day" | "week" | "month" | "agenda";
 type AgendaRange = "today" | "week" | "month" | "upcoming";
@@ -113,6 +116,10 @@ export default function CalendarPage() {
   // Plans are things together: they stay unless a filter rules that out.
   const plansVisible = !colorFilter.length && (!whoFilter.length || whoFilter.includes("both"));
   const plansOn = (d: Date) => (plansVisible ? plans.filter((p) => p.day === format(d, "yyyy-MM-dd")) : []);
+  // Meals with a set time ("dinner at 7") are together things too.
+  const mealTimes = useMealTimesRange(format(from, "yyyy-MM-dd"), format(to, "yyyy-MM-dd"));
+  const mealsOn = (d: Date) => (plansVisible ? mealTimes.filter((m) => m.day === format(d, "yyyy-MM-dd")) : []);
+  const [openMeal, setOpenMeal] = useState<MealTime | null>(null);
 
   // Pending asks waiting on me, regardless of the visible range.
   const { data: waiting = [] } = useLive<CalEvent[]>(
@@ -238,8 +245,8 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {view === "agenda" && <Agenda events={events} from={from} to={to} onOpen={open} plansOn={plansOn} onOpenPlan={setPlanId} />}
-      {view === "month" && <Month cursor={cursor} events={events} onOpen={open} onPickDay={setCursor} plansOn={plansOn} onOpenPlan={setPlanId} />}
+      {view === "agenda" && <Agenda events={events} from={from} to={to} onOpen={open} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} />}
+      {view === "month" && <Month cursor={cursor} events={events} onOpen={open} onPickDay={setCursor} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} />}
       {view === "week" && (
         <Week
           cursor={cursor}
@@ -251,9 +258,11 @@ export default function CalendarPage() {
           }}
           plansOn={plansOn}
           onOpenPlan={setPlanId}
+          mealsOn={mealsOn}
+          onOpenMeal={setOpenMeal}
         />
       )}
-      {view === "day" && <Day day={cursor} events={events} onOpen={open} plans={plansOn(cursor)} onOpenPlan={setPlanId} />}
+      {view === "day" && <Day day={cursor} events={events} onOpen={open} plans={plansOn(cursor)} onOpenPlan={setPlanId} meals={mealsOn(cursor)} onOpenMeal={setOpenMeal} />}
       {(view === "day" || view === "month") && (
         <button
           className="btn btn-sm"
@@ -269,6 +278,7 @@ export default function CalendarPage() {
           + Plan a time block
         </button>
       )}
+      {openMeal && <CalMealSheet m={openMeal} onClose={() => setOpenMeal(null)} />}
       {planId && (
         <PlanSheet
           id={planId}
@@ -426,23 +436,55 @@ function dayEmoji(list: CalEvent[]) {
   return null;
 }
 
-type PlanProps = { plansOn: (d: Date) => DayPlan[]; onOpenPlan: (id: string) => void };
+type PlanProps = { plansOn: (d: Date) => DayPlan[]; onOpenPlan: (id: string) => void; mealsOn: (d: Date) => MealTime[]; onOpenMeal: (m: MealTime) => void };
 
-function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan }: { events: CalEvent[]; from: Date; to: Date; onOpen: (e: CalEvent) => void } & PlanProps) {
+const mealWhen = (m: MealTime) => timeLabel(new Date(`${m.day}T${m.at.slice(0, 5)}`));
+
+/** A meal with a set time: "🍝 Dinner · 7 pm", and where the food stands. */
+function MealCard({ m, onOpen }: { m: MealTime; onOpen: (m: MealTime) => void }) {
+  const t = useMealThread(m.day, m.meal);
+  return (
+    <button className="plan-card-bg meal-card" onClick={() => onOpen(m)}>
+      <span className="small muted">
+        {MEAL_EMOJI[m.meal]} {mealWhen(m)}
+      </span>
+      <strong>{MEAL_LABEL[m.meal]}</strong>
+      <span className="small">{t.summary ?? "Nothing picked yet."}</span>
+    </button>
+  );
+}
+
+function CalMealSheet({ m, onClose }: { m: MealTime; onClose: () => void }) {
+  const t = useMealThread(m.day, m.meal);
+  return (
+    <Sheet title={`${MEAL_LABEL[m.meal]} · ${format(new Date(`${m.day}T12:00`), "EEE, MMM d")}`} onClose={onClose}>
+      <MealPanel t={t} />
+    </Sheet>
+  );
+}
+
+/** Plans and timed meals for a day, in time order. */
+function Together({ plans, meals, onOpenPlan, onOpenMeal }: { plans: DayPlan[]; meals: MealTime[]; onOpenPlan: (id: string) => void; onOpenMeal: (m: MealTime) => void }) {
+  const items = [...plans.map((p) => ({ at: p.start_at, el: <PlanCard key={p.id} p={p} onOpen={onOpenPlan} /> })), ...meals.map((m) => ({ at: m.at, el: <MealCard key={m.meal} m={m} onOpen={onOpenMeal} /> }))];
+  return <>{items.sort((a, b) => a.at.localeCompare(b.at)).map((x) => x.el)}</>;
+}
+
+function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { events: CalEvent[]; from: Date; to: Date; onOpen: (e: CalEvent) => void } & PlanProps) {
   const days = useMemo(() => {
-    const out: { day: Date; list: CalEvent[]; plans: DayPlan[] }[] = [];
+    const out: { day: Date; list: CalEvent[]; plans: DayPlan[]; meals: MealTime[] }[] = [];
     for (const day of eachDayOfInterval({ start: from, end: to })) {
       const list = sortEvents(events.filter((e) => onDay(e, day)));
       const plans = plansOn(day);
-      if (list.length || plans.length) out.push({ day, list, plans });
+      const meals = mealsOn(day);
+      if (list.length || plans.length || meals.length) out.push({ day, list, plans, meals });
     }
     return out;
-  }, [events, from, to, plansOn]);
+  }, [events, from, to, plansOn, mealsOn]);
 
   if (!days.length) return <Empty text="Wide open. Nothing planned." />;
   return (
     <div className="agenda">
-      {days.map(({ day, list, plans }) => (
+      {days.map(({ day, list, plans, meals }) => (
         <section key={day.toISOString()} className="agenda-day">
           <h3>
             {format(day, "EEEE, MMM d")}
@@ -452,9 +494,7 @@ function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan }: { events: Cal
             {list.map((e) => (
               <EventCard key={e.id} e={e} onOpen={onOpen} />
             ))}
-            {plans.map((p) => (
-              <PlanCard key={p.id} p={p} onOpen={onOpenPlan} />
-            ))}
+            <Together plans={plans} meals={meals} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
           </div>
         </section>
       ))}
@@ -462,7 +502,7 @@ function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan }: { events: Cal
   );
 }
 
-function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
+function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(cursor)), end: endOfWeek(endOfMonth(cursor)) });
   const selected = sortEvents(events.filter((e) => onDay(e, cursor)));
   const personColor = usePersonColor();
@@ -489,20 +529,18 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cur
                 ))}
               </span>
               {list.length > 3 && <span className="mmore">+{list.length - 3}</span>}
-              {plansOn(d).length > 0 && <span className="mplan" aria-hidden />}
+              {(plansOn(d).length > 0 || mealsOn(d).length > 0) && <span className="mplan" aria-hidden />}
             </button>
           );
         })}
       </div>
       <h3 style={{ margin: "18px 0 8px" }}>{format(cursor, "EEEE, MMM d")}</h3>
-      {selected.length || plansOn(cursor).length ? (
+      {selected.length || plansOn(cursor).length || mealsOn(cursor).length ? (
         <div className="stack-sm">
           {selected.map((e) => (
             <EventCard key={e.id} e={e} onOpen={onOpen} />
           ))}
-          {plansOn(cursor).map((p) => (
-            <PlanCard key={p.id} p={p} onOpen={onOpenPlan} />
-          ))}
+          <Together plans={plansOn(cursor)} meals={mealsOn(cursor)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
         </div>
       ) : (
         <p className="muted">Nothing that day.</p>
@@ -511,7 +549,7 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cur
   );
 }
 
-function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
+function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(cursor) });
   return (
     <div className="card" style={{ padding: "4px 12px" }}>
@@ -527,10 +565,8 @@ function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { curs
               {list.map((e) => (
                 <EventCard key={e.id} e={e} onOpen={onOpen} />
               ))}
-              {plansOn(d).map((p) => (
-                <PlanCard key={p.id} p={p} onOpen={onOpenPlan} />
-              ))}
-              {!list.length && !plansOn(d).length && <span className="faint small" style={{ paddingTop: 8 }}>—</span>}
+              <Together plans={plansOn(d)} meals={mealsOn(d)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
+              {!list.length && !plansOn(d).length && !mealsOn(d).length && <span className="faint small" style={{ paddingTop: 8 }}>—</span>}
             </div>
           </div>
         );
@@ -539,14 +575,14 @@ function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan }: { curs
   );
 }
 
-function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; plans: DayPlan[]; onOpenPlan: (id: string) => void }) {
+function Day({ day, events, onOpen, plans, onOpenPlan, meals, onOpenMeal }: { day: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; plans: DayPlan[]; onOpenPlan: (id: string) => void; meals: MealTime[]; onOpenMeal: (m: MealTime) => void }) {
   const list = events.filter((e) => onDay(e, day));
   const personColor = usePersonColor();
   const allDay = list.filter((e) => e.all_day);
   const timed = list.filter((e) => !e.all_day).sort((a, b) => startOf(a).getTime() - startOf(b).getTime());
   const dayStart = startOfDay(day);
 
-  const firstHour = Math.min(7, ...timed.map((e) => (startOf(e) < dayStart ? 0 : startOf(e).getHours())), ...plans.map((p) => planStart(p).getHours()));
+  const firstHour = Math.min(7, ...timed.map((e) => (startOf(e) < dayStart ? 0 : startOf(e).getHours())), ...plans.map((p) => planStart(p).getHours()), ...meals.map((m) => Number(m.at.slice(0, 2))));
   const hours = Array.from({ length: 24 - firstHour }, (_, i) => firstHour + i);
 
   // Greedy lanes so overlapping plans sit side by side.
@@ -593,6 +629,15 @@ function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: Ca
             </button>
           );
         })}
+        {/* Timed meals: a small tag at their time, on the right, above plans. */}
+        {meals.map((m) => {
+          const top = (Number(m.at.slice(0, 2)) + Number(m.at.slice(3, 5)) / 60 - firstHour) * HOUR_PX;
+          return (
+            <button key={m.meal} className="meal-tag" style={{ top }} onClick={() => onOpenMeal(m)}>
+              {MEAL_EMOJI[m.meal]} {MEAL_LABEL[m.meal]} · {mealWhen(m)}
+            </button>
+          );
+        })}
         {placed.map(({ e, s, en, lane }) => {
           const top = (differenceInMinutes(s, dayStart) / 60 - firstHour) * HOUR_PX;
           const height = Math.max(26, (differenceInMinutes(en, s) / 60) * HOUR_PX - 2);
@@ -613,7 +658,7 @@ function Day({ day, events, onOpen, plans, onOpenPlan }: { day: Date; events: Ca
           );
         })}
       </div>
-      {list.length === 0 && plans.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Nothing planned — a free day.</p>}
+      {list.length === 0 && plans.length === 0 && meals.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Nothing planned — a free day.</p>}
     </div>
   );
 }

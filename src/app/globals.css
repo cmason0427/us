@@ -1192,3 +1192,5 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .plan-step-extras { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 12px; row-gap: 4px; }
 .plan-step-extras > .stack-sm { flex-basis: 100%; }
 .plan-step-time { font-weight: 700; color: var(--terracotta); }
+.meal-card { background: color-mix(in srgb, var(--butter) 45%, transparent); border-color: color-mix(in srgb, var(--terracotta) 55%, transparent); }
+.meal-tag { position: absolute; right: 4px; z-index: 3; transform: translateY(-50%); padding: 3px 9px; border-radius: 999px; font: inherit; font-size: 0.72rem; font-weight: 650; color: var(--ink); cursor: pointer; background: color-mix(in srgb, var(--butter) 80%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--terracotta) 60%, transparent); box-shadow: 0 2px 6px rgb(0 0 0 / 0.08); }

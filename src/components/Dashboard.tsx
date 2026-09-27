@@ -14,6 +14,8 @@ import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { TaskList } from "./TaskList";
+import { useMealTimesRange } from "@/lib/mealTimes";
+import { timeLabel } from "@/lib/dates";
 import { ChecklistPrompt, useChecklistPrompts } from "./Checklists";
 import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
 
@@ -45,7 +47,13 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   // options ("dinner?" at lunchtime), so nobody has to wait for the clock.
   const lunchLater = useMealThread(mealDay, "lunch");
   const dinnerLater = useMealThread(mealDay, "dinner");
-  const later = (meal === "breakfast" ? [lunchLater, dinnerLater] : meal === "lunch" ? [dinnerLater] : []).filter((t) => t.latest);
+  // "Dinner · 7 pm" when a meal has a set time.
+  const times = useMealTimesRange(mealDay, mealDay);
+  const at = (m: Meal) => {
+    const x = times.find((y) => y.meal === m);
+    return x ? ` · ${timeLabel(new Date(`${mealDay}T${x.at.slice(0, 5)}`))}` : "";
+  };
+  const later = (meal === "breakfast" ? [lunchLater, dinnerLater] : meal === "lunch" ? [dinnerLater] : []).filter((t) => t.latest || times.some((x) => x.meal === t.meal));
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
   const status = usePartnerStatus();
@@ -74,13 +82,13 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
         </Row>
       )}
 
-      <Row icon={MEAL_ICON[meal]} label={day === mealDay ? mealName : `${mealName} tomorrow`} onClick={() => setOpen({ kind: "meal" })}>
+      <Row icon={MEAL_ICON[meal]} label={(day === mealDay ? mealName : `${mealName} tomorrow`) + at(meal)} onClick={() => setOpen({ kind: "meal" })}>
         {food.summary ?? <span className="muted">No {mealName.toLowerCase()} plans yet. Any ideas?</span>}
       </Row>
 
       {later.map((t) => (
-        <Row key={t.meal} icon={MEAL_ICON[t.meal]} label={day === mealDay ? MEAL_LABEL[t.meal] : `${MEAL_LABEL[t.meal]} tomorrow`} onClick={() => setOpen({ kind: "later-meal", meal: t.meal })}>
-          {t.summary}
+        <Row key={t.meal} icon={MEAL_ICON[t.meal]} label={(day === mealDay ? MEAL_LABEL[t.meal] : `${MEAL_LABEL[t.meal]} tomorrow`) + at(t.meal)} onClick={() => setOpen({ kind: "later-meal", meal: t.meal })}>
+          {t.summary ?? <span className="muted">Nothing picked yet.</span>}
         </Row>
       ))}
 
