@@ -529,6 +529,17 @@ export interface DayAllowance {
   /** Fun money logged that day. */
   spent: number;
   periodStart: string;
+  /** You set this day's amount yourself. */
+  set: boolean;
+}
+/** One paycheck's days: its total, what you've set by hand, and what the other days share. */
+export interface PaySplit {
+  start: string;
+  end: string;
+  total: number;
+  setTotal: number;
+  unsetDays: number;
+  perUnset: number;
 }
 export interface Ledger {
   days: DayAllowance[];
@@ -539,6 +550,7 @@ export interface Ledger {
   /** What to write back: this paycheck's locked rate (first time, or after a balance check-in) and the next one's. */
   lock: { cur: { period_start: string; rate: number; ledger_from: string } | null; next: { period_start: string; rate: number; ledger_from: string } | null };
   ledgerFrom: string;
+  splits: PaySplit[];
 }
 
 /**
@@ -555,21 +567,29 @@ export function dayLedger(opts: {
   rates: Rate[];
   moves: Move[];
   spends: Spend[];
+  /** Days you've set an amount for by hand. */
+  amounts?: { day: string; amount: number }[];
   balanceAsOf: Date | null;
   today?: Date;
   days?: number;
 }): Ledger {
   const { fp0, moves } = opts;
+  const amounts = opts.amounts ?? [];
   const today = startOfDay(opts.today ?? new Date());
   const t = iso(today);
   const n = opts.days ?? 14;
   const cur = fp0.periods[0];
   const net = (day: string) => moves.reduce((a, m) => a + (m.to_day === day ? Number(m.amount) : 0) - (m.from_day === day ? Number(m.amount) : 0), 0);
   const funSpent = (day: string) => opts.spends.filter((s) => !s.category_id && s.spent_on === day).reduce((a, s) => a + Number(s.amount), 0);
+  const setOn = (day: string) => amounts.find((a) => a.day === day);
+  const daysBetween = (a: string, b: string) => {
+    const out: string[] = [];
+    for (let d = parseISO(a); iso(d) < b; d = addDays(d, 1)) out.push(iso(d));
+    return out;
+  };
   const future = Array.from({ length: n - 1 }, (_, i) => iso(addDays(today, i + 1)));
   // Every day left before payday, even past what's shown (monthly pay).
-  const curFuture: string[] = [];
-  for (let d = addDays(today, 1); iso(d) < cur.end; d = addDays(d, 1)) curFuture.push(iso(d));
+  const curFuture = daysBetween(iso(addDays(today, 1)), cur.end);
   const daysInCur = 1 + curFuture.length;
 
   // This paycheck's rate: keep the locked one, unless there isn't one yet or
@@ -579,22 +599,39 @@ export function dayLedger(opts: {
   const fresh = !row || checkedSince;
   const curRate = fresh ? Math.max(0, Math.floor((fp0.left / daysInCur) * 100) / 100) : Number(row!.rate);
   const ledgerFrom = fresh ? t : row!.ledger_from ?? cur.start;
-  const rateOn = (day: string) => {
-    if (day >= cur.start) return curRate;
-    const r = opts.rates.filter((x) => x.period_start <= day).sort((a, b) => b.period_start.localeCompare(a.period_start))[0];
-    return r ? Number(r.rate) : 0;
+
+  // A paycheck's days share its total: days you set get exactly that, the
+  // rest split what's left evenly.
+  const splitOf = (start: string, end: string, rate: number): PaySplit => {
+    const ds = daysBetween(start, end);
+    const setDays = ds.filter((d) => setOn(d));
+    const total = rate * ds.length;
+    const setTotal = setDays.reduce((a, d) => a + Number(setOn(d)!.amount), 0);
+    const unsetDays = ds.length - setDays.length;
+    return { start, end, total, setTotal, unsetDays, perUnset: unsetDays ? Math.max(0, total - setTotal) / unsetDays : 0 };
   };
-  const inLedger = (day: string) => day >= ledgerFrom;
+  const curSplit = splitOf(ledgerFrom > cur.start ? ledgerFrom : cur.start, cur.end, curRate);
+  // Earlier paychecks still in the ledger (their locked rates).
+  const pastRows = opts.rates.filter((r) => r.period_start < cur.start).sort((a, b) => a.period_start.localeCompare(b.period_start));
+  const pastSplits = pastRows.map((r, i) => {
+    const end = pastRows[i + 1]?.period_start ?? cur.start;
+    const start = r.period_start < ledgerFrom ? ledgerFrom : r.period_start;
+    return splitOf(start, end > start ? end : start, Number(r.rate));
+  });
+  const baseOn = (day: string, sp: PaySplit) => (setOn(day) ? Number(setOn(day)!.amount) : sp.perUnset);
+  const splitFor = (day: string) => (day >= cur.start ? curSplit : pastSplits.find((sp) => day >= sp.start && day < sp.end));
 
   // Everything from the ledger's start through today: allowances in, spending out.
   let todayRaw = 0;
   for (let d = parseISO(ledgerFrom); iso(d) <= t; d = addDays(d, 1)) {
     const k = iso(d);
-    todayRaw += rateOn(k) + net(k) - funSpent(k);
+    const sp = splitFor(k);
+    todayRaw += (sp ? baseOn(k, sp) : 0) + net(k) - funSpent(k);
   }
+  const inLedger = (day: string) => day >= ledgerFrom;
   // Money moved (from any day in the ledger) past this paycheck is spoken for.
   const outflow = moves.filter((m) => inLedger(m.from_day) && m.from_day < cur.end && m.to_day >= cur.end).reduce((a, m) => a + Number(m.amount), 0);
-  const curFutureSum = curFuture.reduce((a, d) => a + Math.max(0, curRate + net(d)), 0);
+  const curFutureSum = curFuture.reduce((a, d) => a + Math.max(0, baseOn(d, curSplit) + net(d)), 0);
   const curFun = Math.max(0, todayRaw) + curFutureSum + outflow;
   const fp = opts.replan(curFun) ?? fp0;
   // Never plan to go under the floor: today gives back whatever's too much.
@@ -603,23 +640,33 @@ export function dayLedger(opts: {
   const held = todayRaw > 0 && todayAmount < todayRaw ? todayRaw - todayAmount : 0;
 
   const todaySpent = funSpent(t);
+  const todayBase = baseOn(t, curSplit);
   const out: DayAllowance[] = [
     {
       day: t,
       amount: Math.max(0, todayAmount),
-      base: curRate,
+      base: todayBase,
       moved: net(t),
-      carried: Math.round(todayAmount + todaySpent - curRate - net(t)),
+      carried: Math.round(todayAmount + todaySpent - todayBase - net(t)),
       spent: todaySpent,
       periodStart: cur.start,
+      set: !!setOn(t),
     },
   ];
+  // Later paychecks split the same way, from the plan's daily rate.
+  const splits: PaySplit[] = [curSplit];
+  const laterSplit = (p: FloorPlan["periods"][number]) => {
+    let sp = splits.find((x) => x.start === p.start);
+    if (!sp) splits.push((sp = splitOf(p.start, p.end, p.perDay)));
+    return sp;
+  };
   // Overspending carries into the next days until it's made up.
   let debt = Math.min(0, todayAmount);
   const periodOf = (day: string) => fp.periods.find((p) => day >= p.start && day < p.end) ?? fp.periods[fp.periods.length - 1];
   for (const d of future) {
     const p = periodOf(d);
-    const base = p.start === cur.start ? curRate : p.perDay;
+    const sp = p.start === cur.start ? curSplit : laterSplit(p);
+    const base = baseOn(d, sp);
     let amount = Math.max(0, base + net(d));
     let carried = 0;
     if (debt < 0) {
@@ -628,7 +675,7 @@ export function dayLedger(opts: {
       debt += take;
       carried = -take;
     }
-    out.push({ day: d, amount, base, moved: net(d), carried, spent: funSpent(d), periodStart: p.start });
+    out.push({ day: d, amount, base, moved: net(d), carried, spent: funSpent(d), periodStart: p.start, set: !!setOn(d) });
   }
 
   const next = fp.periods[1];
@@ -637,6 +684,7 @@ export function dayLedger(opts: {
     fp,
     held,
     ledgerFrom,
+    splits,
     lock: {
       cur: fresh ? { period_start: cur.start, rate: curRate, ledger_from: ledgerFrom } : null,
       next: next ? { period_start: next.start, rate: Math.round(next.perDay * 100) / 100, ledger_from: ledgerFrom } : null,

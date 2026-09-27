@@ -72,12 +72,13 @@ export function useBudget() {
   const bal = balanceNow({ balance, spends, incomes, paychecks, oneoffs });
   const rates = useRows<Rate>("budget_rates", "period_start");
   const moves = useRows<Move>("budget_moves", "created_at");
+  const amounts = useRows<{ day: string; amount: number }>("budget_day_amounts", "day");
   // The floor plan decides what's safe; the day-by-day ledger decides how
   // this paycheck's share is spread (leftovers roll to the next day), and
   // later paychecks are planned around that. Breakdowns follow.
   const planWith = (curFun?: number) => floorPlan({ plan, incomes, paychecks, oneoffs, spends, categories, settings, balance: bal, curFun, bills });
   const fp0 = planWith();
-  const ledger = fp0 ? dayLedger({ fp0, replan: planWith, rates, moves, spends, balanceAsOf: balance ? new Date(balance.as_of) : null }) : null;
+  const ledger = fp0 ? dayLedger({ fp0, replan: planWith, rates, moves, spends, amounts, balanceAsOf: balance ? new Date(balance.as_of) : null }) : null;
   const fp = ledger?.fp ?? fp0;
   if (fp)
     for (const p of plan.periods) {
@@ -90,7 +91,7 @@ export function useBudget() {
   // Left today, and what's there until payday (today + the days before it).
   const curDays = ledger && plan.current ? ledger.days.filter((x) => x.periodStart === ledger.days[0].periodStart) : [];
   const safe = ledger && fp ? { today: ledger.days[0].amount, untilPay: curDays.reduce((a, x) => a + x.amount, 0), daysLeft: fp.daysLeft, held: ledger.held } : null;
-  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, oneoffs, bal, fp, ledger, rates, moves };
+  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, oneoffs, bal, fp, ledger, rates, moves, amounts };
 }
 
 const db = () => supabaseBrowser();
@@ -275,7 +276,7 @@ export function MoneyView() {
           </button>
         </section>
       )}
-      {cur && b.fp && b.ledger && <DayByDay fp={b.fp} ledger={b.ledger} rates={b.rates} moves={b.moves} spends={b.spends} />}
+      {cur && b.fp && b.ledger && <DayByDay fp={b.fp} ledger={b.ledger} rates={b.rates} moves={b.moves} spends={b.spends} amounts={b.amounts} />}
       <div className="row wrap" style={{ gap: 12 }}>
         <button className="btn-link small" onClick={() => setSheet("oneoff")}>
           ＋ extra money or a surprise bill

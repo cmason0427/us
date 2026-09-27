@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { addDays, format, parseISO } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
-import { iso, money, type DayAllowance, type FloorPlan, type Ledger, type Move, type Rate, type Spend } from "@/lib/budget";
+import { iso, money, type DayAllowance, type FloorPlan, type Ledger, type Move, type PaySplit, type Rate, type Spend } from "@/lib/budget";
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
@@ -21,7 +21,7 @@ const dayName = (day: string, today: string) => (day === today ? "today" : day =
  * itself. Hold a day and drag it onto another to move money there, or tap a
  * day to log what you spent, mark it a no-spend day, or move some.
  */
-export function DayByDay({ fp, ledger, rates, moves, spends }: { fp: FloorPlan; ledger: Ledger; rates: Rate[]; moves: Move[]; spends: Spend[] }) {
+export function DayByDay({ fp, ledger, rates, moves, spends, amounts }: { fp: FloorPlan; ledger: Ledger; rates: Rate[]; moves: Move[]; spends: Spend[]; amounts: { day: string; amount: number }[] }) {
   const { meId, toast } = useApp();
   const now = useNow();
   const { data: marks = [] } = useLive<{ day: string }[]>(
@@ -128,12 +128,16 @@ export function DayByDay({ fp, ledger, rates, moves, spends }: { fp: FloorPlan; 
           >
             <span className="money-dayt-w">{d.day === today ? "today" : format(parseISO(d.day), "EEE")}</span>
             <span className="money-dayt-n">{format(parseISO(d.day), "M/d")}</span>
-            <span className="money-dayt-a">{money(d.amount)}</span>
+            <span className="money-dayt-a">
+              {money(d.amount)}
+              {d.set && <span className="money-dayt-set" aria-label="set by you">✎</span>}
+            </span>
             {d.day === today && d.carried > 0 && <span className="money-dayt-x">+{money(d.carried)} rolled</span>}
             {d.spent > 0 ? <span className="money-dayt-x">spent {money(d.spent)}</span> : marks.some((m) => m.day === d.day) ? <span className="money-dayt-x">✓ none</span> : null}
           </button>
         ))}
       </div>
+      <SplitLine sp={ledger.splits[0]} />
       <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(yesterday)}>
         Yesterday: {ySpent ? `spent ${money(ySpent)}` : marks.some((m) => m.day === yesterday) ? "✓ no spending" : "nothing logged"} · fix
       </button>
@@ -145,7 +149,7 @@ export function DayByDay({ fp, ledger, rates, moves, spends }: { fp: FloorPlan; 
 
       {open && (
         <Sheet title={open === today ? "Today" : format(parseISO(open), "EEEE M/d")} onClose={() => setOpen(null)}>
-          <DaySheet day={open} a={openDay} today={today} days={days} held={open === today ? ledger.held : 0} marked={marks.some((m) => m.day === open)} moves={moves} spends={spends} onMove={(to) => setMoveDraft({ from: open, to })} />
+          <DaySheet day={open} a={openDay} today={today} days={days} held={open === today ? ledger.held : 0} split={openDay ? ledger.splits.find((x) => openDay.day >= x.start && openDay.day < x.end) ?? null : null} setAmount={amounts.find((x) => x.day === open)?.amount ?? null} marked={marks.some((m) => m.day === open)} moves={moves} spends={spends} onMove={(to) => setMoveDraft({ from: open, to })} />
         </Sheet>
       )}
       {moveDraft && (
@@ -157,7 +161,7 @@ export function DayByDay({ fp, ledger, rates, moves, spends }: { fp: FloorPlan; 
   );
 }
 
-function DaySheet({ day, a, today, days, held, marked, moves, spends, onMove }: { day: string; a: DayAllowance | null; today: string; days: DayAllowance[]; held: number; marked: boolean; moves: Move[]; spends: Spend[]; onMove: (to: string) => void }) {
+function DaySheet({ day, a, today, days, held, split, setAmount, marked, moves, spends, onMove }: { day: string; a: DayAllowance | null; today: string; days: DayAllowance[]; held: number; split: PaySplit | null; setAmount: number | null; marked: boolean; moves: Move[]; spends: Spend[]; onMove: (to: string) => void }) {
   const { meId, toast } = useApp();
   const logged = spends.filter((s) => !s.category_id && s.spent_on === day).reduce((x, s) => x + Number(s.amount), 0);
   const [total, setTotal] = useState(logged ? String(logged) : "");
@@ -193,7 +197,7 @@ function DaySheet({ day, a, today, days, held, marked, moves, spends, onMove }: 
       {a && (
         <ul className="money-lines small">
           <li>
-            <span>Normal day</span>
+            <span>{a.set ? "You set this day" : "Normal day"}</span>
             <span>{money(a.base)}</span>
           </li>
           {a.carried !== 0 && (
@@ -246,6 +250,7 @@ function DaySheet({ day, a, today, days, held, marked, moves, spends, onMove }: 
           <span className="small faint">What you don&apos;t spend rolls onto the next day by itself. Fun money only; bills and categories are separate.</span>
         </div>
       )}
+      {a && day >= today && split && <SetDay day={day} split={split} current={setAmount} base={a.base} />}
       {a && a.amount > 0 && (
         <div className="field">
           <span>Move some to another day</span>
@@ -327,6 +332,67 @@ function MoveForm({ draft, days, today, fp, onDone, toast }: { draft: { from: st
       <button className="btn btn-primary btn-block" disabled={!(Number(amount) > 0) || max <= 0} onClick={save}>
         Move it
       </button>
+    </div>
+  );
+}
+
+/** "This paycheck: $70 · you set $30 · the other 5 days share $40 ($8 each)." */
+function SplitLine({ sp }: { sp: PaySplit | undefined }) {
+  if (!sp || !sp.setTotal) return null;
+  return (
+    <p className="small faint" style={{ margin: 0 }}>
+      Until payday: {money(sp.total)} · you set {money(sp.setTotal)}
+      {sp.unsetDays ? ` · the other ${sp.unsetDays} day${sp.unsetDays === 1 ? "" : "s"} share ${money(Math.max(0, sp.total - sp.setTotal))} (${money(sp.perUnset)} each)` : ""}
+      {sp.setTotal > sp.total ? ` · that's ${money(sp.setTotal - sp.total)} more than this paycheck has` : ""}
+    </p>
+  );
+}
+
+/** Set what one day gets. The paycheck's total stays put; the days you haven't set share the rest. */
+function SetDay({ day, split, current, base }: { day: string; split: PaySplit; current: number | null; base: number }) {
+  const { meId, toast } = useApp();
+  const [v, setV] = useState(current != null ? String(current) : "");
+  const db = supabaseBrowser();
+  // What's free to hand out: the total minus the other days you've set.
+  const others = split.setTotal - (current ?? 0);
+  const free = Math.max(0, split.total - others);
+  async function save() {
+    const n = Number(v);
+    if (v === "" || !(n >= 0)) return;
+    if (n > free + 0.005) return toast(`This paycheck only has ${money(free)} left to hand out (the other days you set take the rest).`);
+    const { error } = await db.from("budget_day_amounts").upsert({ owner: meId, day, amount: Math.round(n * 100) / 100 });
+    if (error) return toast(error.message);
+    refreshAll();
+    toast(split.unsetDays > 1 || current == null ? "Set. The other days even out." : "Set.");
+  }
+  async function clear() {
+    await db.from("budget_day_amounts").delete().eq("owner", meId).eq("day", day);
+    setV("");
+    refreshAll();
+  }
+  return (
+    <div className="field">
+      <span>Set this day&apos;s amount</span>
+      <div className="row">
+        <div className="money-input grow">
+          <span>$</span>
+          <input className="input" inputMode="decimal" value={v} placeholder={String(Math.round(base))} onChange={(e) => setV(e.target.value.replace(/[^\d.]/g, ""))} aria-label="This day's amount" />
+        </div>
+        <button className="btn btn-sm btn-primary" disabled={v === "" || Number(v) === current} onClick={save}>
+          Set
+        </button>
+      </div>
+      <span className="small faint">
+        Up to {money(free)}. Days you don&apos;t set share what&apos;s left of this paycheck evenly.
+        {current != null && (
+          <>
+            {" "}
+            <button className="btn-link small" onClick={clear}>
+              Back to automatic
+            </button>
+          </>
+        )}
+      </span>
     </div>
   );
 }
