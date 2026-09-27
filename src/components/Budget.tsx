@@ -9,6 +9,7 @@ import {
   balanceNow,
   buildPlan,
   floorPlan,
+  dayLedger,
   categoryStatus,
   iso,
   money,
@@ -26,6 +27,8 @@ import {
   type IncomeFreq,
   type Paycheck,
   type FloorPlan,
+  type Move,
+  type Rate,
   type Period,
   type Settings,
   type Spend,
@@ -33,6 +36,7 @@ import {
 import { useNow } from "@/lib/dates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
+import { DayByDay } from "./MoneyDays";
 
 /* ─── data ──────────────────────────────────────────────────────────────── */
 
@@ -66,8 +70,15 @@ export function useBudget() {
   const plan = buildPlan({ incomes, paychecks, bills, paid, categories, settings, oneoffs });
   const cats = categoryStatus(categories, spends);
   const bal = balanceNow({ balance, spends, incomes, paychecks, oneoffs });
-  // The floor plan decides what's safe; the per-paycheck breakdowns follow it.
-  const fp = floorPlan({ plan, incomes, paychecks, oneoffs, spends, categories, settings, balance: bal });
+  const rates = useRows<Rate>("budget_rates", "period_start");
+  const moves = useRows<Move>("budget_moves", "created_at");
+  // The floor plan decides what's safe; the day-by-day ledger decides how
+  // this paycheck's share is spread (leftovers roll to the next day), and
+  // later paychecks are planned around that. Breakdowns follow.
+  const planWith = (curFun?: number) => floorPlan({ plan, incomes, paychecks, oneoffs, spends, categories, settings, balance: bal, curFun, bills });
+  const fp0 = planWith();
+  const ledger = fp0 ? dayLedger({ fp0, replan: planWith, rates, moves, spends, balanceAsOf: balance ? new Date(balance.as_of) : null }) : null;
+  const fp = ledger?.fp ?? fp0;
   if (fp)
     for (const p of plan.periods) {
       const fun = fp.funByPeriod.get(iso(p.start)) ?? 0;
@@ -76,8 +87,10 @@ export function useBudget() {
       p.setAside = Math.max(0, Math.round(rest));
       p.fromEarlier = Math.max(0, Math.round(-rest));
     }
-  const safe = fp ? { left: fp.left, perDay: fp.perDay, daysLeft: fp.daysLeft } : null;
-  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, oneoffs, bal, fp };
+  // Left today, and what's there until payday (today + the days before it).
+  const curDays = ledger && plan.current ? ledger.days.filter((x) => x.periodStart === ledger.days[0].periodStart) : [];
+  const safe = ledger && fp ? { today: ledger.days[0].amount, untilPay: curDays.reduce((a, x) => a + x.amount, 0), daysLeft: fp.daysLeft, held: ledger.held } : null;
+  return { incomes, paychecks, bills, paid, categories, spends, settings, plan, safe, cats, balance, oneoffs, bal, fp, ledger, rates, moves };
 }
 
 const db = () => supabaseBrowser();
@@ -211,9 +224,9 @@ export function MoneyView() {
           )}
           {cur && b.fp && (
             <span>
-              Why {money(b.fp.left)} is safe: starting from {money(b.fp.start)} {b.fp.fromBalance ? "in your account" : "left from this paycheck"}, then adding each paycheck the day it lands and taking out
+              Why {money(b.safe?.untilPay ?? b.fp.left)} is safe until payday: starting from {money(b.fp.start)} {b.fp.fromBalance ? "in your account" : "left from this paycheck"}, then adding each paycheck the day it lands and taking out
               bills, savings and category budgets on their dates, the tightest spot ahead is {b.fp.low ? `${money(b.fp.low.amount)} on ${d(b.fp.low.at)} (after ${b.fp.low.after})` : "today"}.
-              Spending {money(b.fp.left)} before payday {d(cur.end)} keeps you above your {money(Number(b.settings.cushion))} floor the whole way, with the same kind of room left for the paychecks after.{" "}
+              Spending {money(b.safe?.untilPay ?? b.fp.left)} before payday {d(cur.end)} keeps you above your {money(Number(b.settings.cushion))} floor the whole way, with the same kind of room left for the paychecks after.{" "}
               <button className="btn-link small" onClick={() => setSheet("settings")}>
                 set my floor
               </button>
@@ -238,11 +251,13 @@ export function MoneyView() {
       </details>
       {cur && b.safe && (
         <section className="money-hero">
-          <span className="small">safe to spend</span>
-          <strong className="money-big">{money(b.safe.left)}</strong>
+          <span className="small">left to spend today</span>
+          <strong className="money-big">{money(b.safe.today)}</strong>
           <span className="small">
-            until payday {d(cur.end)} · about {money(b.safe.perDay)}/day for {b.safe.daysLeft} day{b.safe.daysLeft === 1 ? "" : "s"}
+            {b.safe.daysLeft > 1 ? `${money(b.safe.untilPay)} in all until payday ${d(cur.end)}` : `payday is ${d(cur.end)}`}
+            {b.ledger && b.ledger.days[0].carried > 0 ? ` · includes ${money(b.ledger.days[0].carried)} you didn't spend earlier` : ""}
           </span>
+          {b.safe.held > 0 && <span className="small">Holding back {money(b.safe.held)} of leftovers so you stay above your floor.</span>}
           {b.plan.periods[1] && b.fp && (
             <span className="small">
               then {money(b.fp.funByPeriod.get(iso(b.plan.periods[1].start)) ?? 0)} from the {d(b.plan.periods[1].start)} paycheck
@@ -260,6 +275,7 @@ export function MoneyView() {
           </button>
         </section>
       )}
+      {cur && b.fp && b.ledger && <DayByDay fp={b.fp} ledger={b.ledger} rates={b.rates} moves={b.moves} spends={b.spends} />}
       <div className="row wrap" style={{ gap: 12 }}>
         <button className="btn-link small" onClick={() => setSheet("oneoff")}>
           ＋ extra money or a surprise bill

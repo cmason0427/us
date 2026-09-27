@@ -15,6 +15,7 @@ import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
 import { ShopAdd } from "./Shopping";
 import { RequestsList } from "./Requests";
+import { FoodRequests } from "./FoodRequests";
 import { GoalForm } from "./Goals";
 import { StatusPicker } from "./Status";
 import { TaskPresetForm } from "./TaskForm";
@@ -48,6 +49,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "Food",
     items: [
       { kind: "meal-suggest", emoji: "🍽️", label: "Suggest a meal" },
+      { kind: "food-requests", emoji: "💌", label: "Food requests" },
       { kind: "meal", emoji: "🍳", label: "Home meal" },
       { kind: "place", emoji: "📍", label: "Place" },
     ],
@@ -92,6 +94,7 @@ const TITLES: Record<AddKind, string> = {
   shop: "Shopping list",
   "meal-suggest": "Suggest a meal",
   requests: "Requests",
+  "food-requests": "Food requests",
   "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
@@ -167,6 +170,7 @@ export function AddSheet() {
       {addOpen === "status" && <StatusPicker onDone={closeAdd} />}
       {addOpen === "goal" && <GoalForm onDone={closeAdd} />}
       {addOpen === "requests" && <RequestsList onDone={closeAdd} />}
+      {addOpen === "food-requests" && <FoodRequests />}
       {addOpen === "event-preset" && (
         <div className="stack">
           <Link href="/presets" className="btn btn-block" onClick={closeAdd}>

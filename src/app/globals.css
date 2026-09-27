@@ -1171,7 +1171,24 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 /* Checklists under a to-do */
 .checklist { margin: 4px 0 6px; padding-left: 2px; }
 .checklist-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.9rem; }
-.checklist-item.done .grow { text-decoration: line-through; color: var(--faint, #999); }
+.checklist-item.done .grow { text-decoration: line-through; color: var(--ink-faint); }
 .chip-pair { display: inline-flex; gap: 0; }
 .chip-pair .chip:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .chip-pair .chip-edit { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 0 8px; }
+
+/* Money, day by day: 7 across, hold one and drag it onto another */
+.money-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.money-dayt { min-height: 58px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 3px 2px; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 0; cursor: pointer; line-height: 1.15; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.money-dayt.today { border-color: var(--terracotta); border-width: 2px; }
+.money-dayt.got { background: color-mix(in srgb, var(--butter) 55%, var(--surface)); }
+.money-dayt.lifting { opacity: 0.4; }
+.money-dayt-w { font-size: 0.6rem; color: var(--ink-faint); font-weight: 700; }
+.money-dayt-n { font-size: 0.58rem; color: var(--ink-faint); }
+.money-dayt-a { font-family: var(--font-display); font-weight: 700; font-size: 0.86rem; }
+.money-dayt-x { font-size: 0.52rem; color: var(--ink-faint); text-align: center; }
+.money-ghost { position: fixed; z-index: 90; width: 68px; min-height: 40px; justify-content: center; pointer-events: none; box-shadow: 0 8px 22px rgb(0 0 0 / 0.18); }
+.spicy-dur { position: absolute; right: 5px; bottom: 4px; color: #fff; font-size: 0.66rem; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.6); pointer-events: none; }
+.spicy-loading { min-height: 180px; display: grid; place-items: center; border-radius: 14px; background: var(--surface); }
+.plan-step-extras { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 12px; row-gap: 4px; }
+.plan-step-extras > .stack-sm { flex-basis: 100%; }
+.plan-step-time { font-weight: 700; color: var(--terracotta); }

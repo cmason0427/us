@@ -332,6 +332,8 @@ export interface FloorPlan {
   comingThisMonth: { paychecks: number; extra: number; items: { name: string; amount: number; on: Date; extra: boolean }[] };
   byDay: Map<string, { in: number; out: number; items: string[] }>; // yyyy-MM-dd → what moves that day
   endBal: Map<string, number>; // yyyy-MM-dd → balance at the end of that day (before fun money)
+  periods: { start: string; end: string; perDay: number }[]; // today's stretch first, then each paycheck ahead
+  room: number; // the most this paycheck's stretch can spend without ever dipping under the floor
 }
 
 /**
@@ -353,6 +355,10 @@ export function floorPlan(opts: {
   settings: Settings;
   balance: ReturnType<typeof balanceNow>;
   today?: Date;
+  /** What this paycheck's stretch will actually spend (from the day-by-day ledger); later paychecks are planned around it. */
+  curFun?: number;
+  /** All bills, to roll an older balance check-in forward past the bills due since. */
+  bills?: Bill[];
 }): FloorPlan | null {
   const { plan } = opts;
   const cur = plan.current;
@@ -364,9 +370,21 @@ export function floorPlan(opts: {
   // Starting point: a real balance if you've checked one in since this paycheck, else this paycheck minus what's gone out.
   let start: number;
   let fromBalance = false;
-  if (opts.balance && opts.balance.asOf >= cur.start) {
+  // An older check-in (before this paycheck) still beats guessing: roll it
+  // forward. balanceNow already added the paychecks that landed and took off
+  // what you logged; here the bills due in between come off (paid or not,
+  // that money's spoken for) and this paycheck's savings are set aside.
+  const stale = !!opts.balance && opts.balance.asOf < cur.start;
+  if (opts.balance && (!stale || opts.bills)) {
     start = opts.balance.now;
     fromBalance = true;
+    if (stale) {
+      const from = addDays(startOfDay(opts.balance.asOf), 1);
+      const until = addDays(cur.start, -1);
+      for (const b of opts.bills ?? []) start -= dueDates(b, from, until).length * Number(b.amount);
+      start -= opts.oneoffs.filter((o) => o.kind === "out" && o.on_date >= iso(from) && o.on_date < iso(cur.start)).reduce((a, o) => a + Number(o.amount), 0);
+      start -= cur.savings;
+    }
   } else {
     const spent = opts.spends.filter((s) => s.spent_on >= iso(cur.start) && s.spent_on <= t).reduce((a, s) => a + Number(s.amount), 0);
     const paidBills = cur.bills.filter((b) => iso(b.due) < t || b.paid).reduce((a, b) => a + Number(b.bill.amount), 0);
@@ -387,7 +405,8 @@ export function floorPlan(opts: {
       if (p.budgets) evs.push({ on: pay, amount: -p.budgets, label: "category budgets" });
     }
     for (const b of p.bills) {
-      if (b.paid) continue;
+      // With an older check-in, this paycheck's bills so far aren't reflected in it yet, even if paid.
+      if (b.paid && !(n === 0 && stale && fromBalance)) continue;
       const on = iso(b.due) < t ? t : iso(b.due);
       if (n === 0 && !fromBalance && iso(b.due) < t) continue; // already counted as paid above
       evs.push({ on, amount: -Number(b.bill.amount), label: b.bill.name });
@@ -442,7 +461,7 @@ export function floorPlan(opts: {
         binding = p;
       }
     }
-    const fun = Math.floor(Number.isFinite(perDay) ? perDay * spanDays[k] : 0);
+    const fun = k === 0 && opts.curFun != null ? Math.max(0, opts.curFun) : Math.floor(Number.isFinite(perDay) ? perDay * spanDays[k] : 0);
     if (k === 0 && binding) low = { at: parseISO(binding.on), amount: binding.bal, after: binding.after };
     funByPeriod.set(k === 0 ? iso(cur.start) : pd, fun);
     taken += fun;
@@ -474,5 +493,153 @@ export function floorPlan(opts: {
   items.sort((a, b) => a.on.getTime() - b.on.getTime());
   const comingThisMonth = { paychecks: items.filter((x) => !x.extra).reduce((a, x) => a + x.amount, 0), extra: items.filter((x) => x.extra).reduce((a, x) => a + x.amount, 0), items };
 
-  return { start, fromBalance, left, perDay: left / daysLeft, daysLeft, nextPay: cur.end, low, funByPeriod, comingThisMonth, byDay, endBal };
+  const periods = paydays.map((pd, k) => ({
+    start: k === 0 ? iso(cur.start) : pd,
+    end: paydays[k + 1] ?? iso(addDays(parseISO(pd), spanDays[k])),
+    perDay: (funByPeriod.get(k === 0 ? iso(cur.start) : pd) ?? 0) / spanDays[k],
+  }));
+
+  const room = Math.min(...(near.length ? near : points).map((p) => p.bal - floor));
+
+  return { start, fromBalance, left, perDay: left / daysLeft, daysLeft, nextPay: cur.end, low, funByPeriod, comingThisMonth, byDay, endBal, periods, room };
+}
+
+export interface Move {
+  id: string;
+  from_day: string;
+  to_day: string;
+  amount: number;
+}
+export interface Rate {
+  period_start: string;
+  rate: number;
+  locked_at: string;
+  ledger_from: string | null;
+}
+export interface DayAllowance {
+  day: string;
+  /** What's there to spend that day (today: what's left of it). */
+  amount: number;
+  /** The normal daily amount for that paycheck. */
+  base: number;
+  /** Moved in (+) or out (−) by hand. */
+  moved: number;
+  /** Leftovers from earlier days (+) or overspending (−) landing on this day. */
+  carried: number;
+  /** Fun money logged that day. */
+  spent: number;
+  periodStart: string;
+}
+export interface Ledger {
+  days: DayAllowance[];
+  /** The plan with this paycheck's stretch set to what the ledger will spend. */
+  fp: FloorPlan;
+  /** Today was trimmed so you stay above your floor. */
+  held: number;
+  /** What to write back: this paycheck's locked rate (first time, or after a balance check-in) and the next one's. */
+  lock: { cur: { period_start: string; rate: number; ledger_from: string } | null; next: { period_start: string; rate: number; ledger_from: string } | null };
+  ledgerFrom: string;
+}
+
+/**
+ * Fun money as a running ledger, one day at a time. Each day gets its
+ * paycheck's normal daily amount (locked in when that paycheck lands, so it
+ * doesn't wobble), plus or minus money you moved by hand. Whatever you don't
+ * spend rolls onto the next day; overspending comes out of the next days.
+ * Later paychecks are planned around what this one will really spend, and
+ * today is trimmed if it would ever put you under your floor.
+ */
+export function dayLedger(opts: {
+  fp0: FloorPlan;
+  replan: (curFun: number) => FloorPlan | null;
+  rates: Rate[];
+  moves: Move[];
+  spends: Spend[];
+  balanceAsOf: Date | null;
+  today?: Date;
+  days?: number;
+}): Ledger {
+  const { fp0, moves } = opts;
+  const today = startOfDay(opts.today ?? new Date());
+  const t = iso(today);
+  const n = opts.days ?? 14;
+  const cur = fp0.periods[0];
+  const net = (day: string) => moves.reduce((a, m) => a + (m.to_day === day ? Number(m.amount) : 0) - (m.from_day === day ? Number(m.amount) : 0), 0);
+  const funSpent = (day: string) => opts.spends.filter((s) => !s.category_id && s.spent_on === day).reduce((a, s) => a + Number(s.amount), 0);
+  const future = Array.from({ length: n - 1 }, (_, i) => iso(addDays(today, i + 1)));
+  // Every day left before payday, even past what's shown (monthly pay).
+  const curFuture: string[] = [];
+  for (let d = addDays(today, 1); iso(d) < cur.end; d = addDays(d, 1)) curFuture.push(iso(d));
+  const daysInCur = 1 + curFuture.length;
+
+  // This paycheck's rate: keep the locked one, unless there isn't one yet or
+  // you've checked in a balance since (then start fresh from real money).
+  const row = opts.rates.find((r) => r.period_start === cur.start);
+  const checkedSince = !!(row && opts.balanceAsOf && opts.balanceAsOf >= parseISO(cur.start) && opts.balanceAsOf > new Date(row.locked_at));
+  const fresh = !row || checkedSince;
+  const curRate = fresh ? Math.max(0, Math.floor((fp0.left / daysInCur) * 100) / 100) : Number(row!.rate);
+  const ledgerFrom = fresh ? t : row!.ledger_from ?? cur.start;
+  const rateOn = (day: string) => {
+    if (day >= cur.start) return curRate;
+    const r = opts.rates.filter((x) => x.period_start <= day).sort((a, b) => b.period_start.localeCompare(a.period_start))[0];
+    return r ? Number(r.rate) : 0;
+  };
+  const inLedger = (day: string) => day >= ledgerFrom;
+
+  // Everything from the ledger's start through today: allowances in, spending out.
+  let todayRaw = 0;
+  for (let d = parseISO(ledgerFrom); iso(d) <= t; d = addDays(d, 1)) {
+    const k = iso(d);
+    todayRaw += rateOn(k) + net(k) - funSpent(k);
+  }
+  // Money moved (from any day in the ledger) past this paycheck is spoken for.
+  const outflow = moves.filter((m) => inLedger(m.from_day) && m.from_day < cur.end && m.to_day >= cur.end).reduce((a, m) => a + Number(m.amount), 0);
+  const curFutureSum = curFuture.reduce((a, d) => a + Math.max(0, curRate + net(d)), 0);
+  const curFun = Math.max(0, todayRaw) + curFutureSum + outflow;
+  const fp = opts.replan(curFun) ?? fp0;
+  // Never plan to go under the floor: today gives back whatever's too much.
+  const cap = fp.room - curFutureSum - outflow;
+  const todayAmount = Math.min(todayRaw, Math.max(0, cap));
+  const held = todayRaw > 0 && todayAmount < todayRaw ? todayRaw - todayAmount : 0;
+
+  const todaySpent = funSpent(t);
+  const out: DayAllowance[] = [
+    {
+      day: t,
+      amount: Math.max(0, todayAmount),
+      base: curRate,
+      moved: net(t),
+      carried: Math.round(todayAmount + todaySpent - curRate - net(t)),
+      spent: todaySpent,
+      periodStart: cur.start,
+    },
+  ];
+  // Overspending carries into the next days until it's made up.
+  let debt = Math.min(0, todayAmount);
+  const periodOf = (day: string) => fp.periods.find((p) => day >= p.start && day < p.end) ?? fp.periods[fp.periods.length - 1];
+  for (const d of future) {
+    const p = periodOf(d);
+    const base = p.start === cur.start ? curRate : p.perDay;
+    let amount = Math.max(0, base + net(d));
+    let carried = 0;
+    if (debt < 0) {
+      const take = Math.min(amount, -debt);
+      amount -= take;
+      debt += take;
+      carried = -take;
+    }
+    out.push({ day: d, amount, base, moved: net(d), carried, spent: funSpent(d), periodStart: p.start });
+  }
+
+  const next = fp.periods[1];
+  return {
+    days: out,
+    fp,
+    held,
+    ledgerFrom,
+    lock: {
+      cur: fresh ? { period_start: cur.start, rate: curRate, ledger_from: ledgerFrom } : null,
+      next: next ? { period_start: next.start, rate: Math.round(next.perDay * 100) / 100, ledger_from: ledgerFrom } : null,
+    },
+  };
 }

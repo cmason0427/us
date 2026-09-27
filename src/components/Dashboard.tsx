@@ -29,7 +29,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
+type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "later-meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -41,6 +41,11 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   // One meal at a time, by the clock (see currentMeal).
   const food = useMealThread(mealDay, meal);
   const mealName = MEAL_LABEL[meal];
+  // Later meals the same day show up early once someone's asked or sent
+  // options ("dinner?" at lunchtime), so nobody has to wait for the clock.
+  const lunchLater = useMealThread(mealDay, "lunch");
+  const dinnerLater = useMealThread(mealDay, "dinner");
+  const later = (meal === "breakfast" ? [lunchLater, dinnerLater] : meal === "lunch" ? [dinnerLater] : []).filter((t) => t.latest);
   const plans = usePlans(day);
   const dogTodos = useDogTodoCount();
   const status = usePartnerStatus();
@@ -72,6 +77,12 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       <Row icon={MEAL_ICON[meal]} label={day === mealDay ? mealName : `${mealName} tomorrow`} onClick={() => setOpen({ kind: "meal" })}>
         {food.summary ?? <span className="muted">No {mealName.toLowerCase()} plans yet. Any ideas?</span>}
       </Row>
+
+      {later.map((t) => (
+        <Row key={t.meal} icon={MEAL_ICON[t.meal]} label={day === mealDay ? MEAL_LABEL[t.meal] : `${MEAL_LABEL[t.meal]} tomorrow`} onClick={() => setOpen({ kind: "later-meal", meal: t.meal })}>
+          {t.summary}
+        </Row>
+      ))}
 
       {plans.map((p) => (
         <Row key={p.id} icon="🗓️" label={planWhen(p)} onClick={() => setOpen({ kind: "plan", id: p.id })}>
@@ -112,6 +123,11 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       {open?.kind === "meal" && (
         <Sheet title={day === mealDay ? `${mealName} today` : `${mealName} tomorrow`} onClose={() => setOpen(null)}>
           <MealPanel t={food} />
+        </Sheet>
+      )}
+      {open?.kind === "later-meal" && (
+        <Sheet title={`${MEAL_LABEL[open.meal]} ${day === mealDay ? "today" : "tomorrow"}`} onClose={() => setOpen(null)}>
+          <MealPanel t={open.meal === "lunch" ? lunchLater : dinnerLater} />
         </Sheet>
       )}
       {open?.kind === "vibe" && vibe.incoming && <AnswerSheet check={vibe.incoming} onClose={() => setOpen(null)} />}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
 import { usePhotoUrls } from "@/lib/photos";
 import { shrinkImage } from "@/lib/image";
+import { PART_BYTES, partPaths, prepareVideo, stitchVideo } from "@/lib/video";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
 import { Sheet } from "@/components/Sheet";
@@ -92,6 +93,10 @@ interface SpicyMedia {
   storage_path: string;
   people: string[];
   caption: string | null;
+  /** Long videos are stored in pieces (see lib/video). */
+  parts: number;
+  poster_path: string | null;
+  duration: number | null;
   added_by: string;
   created_at: string;
 }
@@ -123,6 +128,7 @@ function Pics() {
   const [pending, setPending] = useState<{ file: File; url: string; people: string[] }[]>([]);
   const [open, setOpen] = useState<SpicyMedia | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const { data: media = [] } = useLive<SpicyMedia[]>(
     "spicy_media",
     async () => {
@@ -132,7 +138,7 @@ function Pics() {
     },
     ["spicy_media"],
   );
-  const urls = usePhotoUrls(media.map((m) => m.storage_path));
+  const urls = usePhotoUrls(media.flatMap((m) => (m.poster_path ? [m.poster_path] : m.parts > 1 ? [] : [m.storage_path])));
   const them = partner?.id ?? "";
   const only = (m: SpicyMedia, id: string) => m.people.length === 1 && m.people[0] === id;
   const shown = media.filter((m) =>
@@ -148,15 +154,44 @@ function Pics() {
   async function upload() {
     setBusy(true);
     const done: string[] = [];
+    // Shrinking a long video takes a while; keep the screen on meanwhile.
+    const lock = await navigator.wakeLock?.request("screen").catch(() => null);
     try {
-      for (const p of pending) {
+      for (const [n, p] of pending.entries()) {
         const video = p.file.type.startsWith("video/");
-        const { blob, ext } = video ? { blob: p.file as Blob, ext: p.file.name.split(".").pop()?.toLowerCase() || "mp4" } : await shrinkImage(p.file);
+        const of = pending.length > 1 ? ` (${n + 1} of ${pending.length})` : "";
+        if (!video) {
+          const { blob, ext } = await shrinkImage(p.file);
+          const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
+          const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+          if (error) throw error;
+          done.push(path);
+          const { error: rowErr } = await supabase.from("spicy_media").insert({ storage_path: path, people: p.people, added_by: meId });
+          if (rowErr) throw rowErr;
+          continue;
+        }
+        setProgress(`Getting the video ready${of}…`);
+        const v = await prepareVideo(p.file, (label) => setProgress(label + of));
+        const ext = v.shrunk ? "mp4" : p.file.name.split(".").pop()?.toLowerCase() || "mp4";
         const path = `${meId}/spicy/${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || (video ? "video/mp4" : "image/jpeg"), cacheControl: "31536000" });
-        if (error) throw error;
+        const parts = Math.max(1, Math.ceil(v.blob.size / PART_BYTES));
+        const paths = partPaths(path, parts);
+        for (const [k, pp] of paths.entries()) {
+          setProgress(`Uploading${parts > 1 ? ` part ${k + 1} of ${parts}` : ""}${of}…`);
+          const { error } = await supabase.storage.from("photos").upload(pp, v.blob.slice(k * PART_BYTES, (k + 1) * PART_BYTES, v.blob.type || "video/mp4"), { contentType: v.blob.type || "video/mp4", cacheControl: "31536000" });
+          if (error) {
+            await supabase.storage.from("photos").remove(paths.slice(0, k));
+            throw error;
+          }
+        }
+        let poster: string | null = null;
+        if (v.poster) {
+          poster = `${path}.jpg`;
+          const { error } = await supabase.storage.from("photos").upload(poster, v.poster, { contentType: "image/jpeg", cacheControl: "31536000" });
+          if (error) poster = null;
+        }
         done.push(path);
-        const { error: rowErr } = await supabase.from("spicy_media").insert({ storage_path: path, people: p.people, added_by: meId });
+        const { error: rowErr } = await supabase.from("spicy_media").insert({ storage_path: path, parts, poster_path: poster, duration: Math.round(v.duration), people: p.people, added_by: meId });
         if (rowErr) throw rowErr;
       }
       // The feed only hears that something's new; never what.
@@ -169,6 +204,8 @@ function Pics() {
     } catch (err) {
       toast((err as Error).message);
     }
+    lock?.release().catch(() => {});
+    setProgress("");
     setBusy(false);
   }
 
@@ -182,7 +219,7 @@ function Pics() {
   async function remove(m: SpicyMedia) {
     if (!confirm("Remove this for both of you?")) return;
     await supabase.from("spicy_media").delete().eq("id", m.id);
-    if (m.storage_path.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([m.storage_path]);
+    if (m.storage_path.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([...partPaths(m.storage_path, m.parts ?? 1), ...(m.poster_path ? [m.poster_path] : [])]);
     setOpen(null);
     refreshAll();
   }
@@ -221,13 +258,17 @@ function Pics() {
         <div className="saved-grid">
           {shown.map((m) => (
             <button key={m.id} className="saved-item spicy-thumb" onClick={() => setOpen(m)}>
-              {isVideo(m.storage_path) ? (
+              {m.poster_path ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                urls[m.poster_path] && <img src={urls[m.poster_path]} alt="" loading="lazy" />
+              ) : isVideo(m.storage_path) ? (
                 urls[m.storage_path] && <video src={urls[m.storage_path]} muted playsInline preload="metadata" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 urls[m.storage_path] && <img src={urls[m.storage_path]} alt="" loading="lazy" />
               )}
               {isVideo(m.storage_path) && <span className="spicy-play">▶</span>}
+              {m.duration ? <span className="spicy-dur">{Math.floor(m.duration / 60)}:{String(Math.round(m.duration % 60)).padStart(2, "0")}</span> : null}
             </button>
           ))}
         </div>
@@ -249,9 +290,9 @@ function Pics() {
                 <PeopleTags value={p.people} onChange={(people) => setPending((ps) => ps.map((x, j) => (j === i ? { ...x, people } : x)))} />
               </div>
             ))}
-            <p className="small muted">Videos up to about 50 MB each.</p>
+            <p className="small muted">Videos up to 10 minutes. Big ones get shrunk a little on your phone first so they fit; keep the app open until it&apos;s done.</p>
             <button className="btn btn-primary btn-block" disabled={busy} onClick={upload}>
-              {busy ? "Adding…" : `Add ${pending.length}`}
+              {busy ? progress || "Adding…" : `Add ${pending.length}`}
             </button>
           </div>
         </Sheet>
@@ -261,7 +302,7 @@ function Pics() {
         <Sheet title="🌶️" onClose={() => setOpen(null)}>
           <div className="stack">
             {isVideo(open.storage_path) ? (
-              <video src={urls[open.storage_path]} controls playsInline style={{ width: "100%", borderRadius: 14 }} />
+              <SpicyVideo m={open} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={urls[open.storage_path]} alt="" style={{ width: "100%", borderRadius: 14 }} />
@@ -279,6 +320,33 @@ function Pics() {
       )}
     </div>
   );
+}
+
+/** Plays a video; one stored in pieces is downloaded and joined first. */
+function SpicyVideo({ m }: { m: SpicyMedia }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [pct, setPct] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    const paths = partPaths(m.storage_path, m.parts ?? 1);
+    supabaseBrowser()
+      .storage.from("photos")
+      .createSignedUrls(paths, 3600)
+      .then(async ({ data, error }) => {
+        if (error || !data) throw error ?? new Error("Couldn't load the video.");
+        const signed = paths.map((p) => data.find((d) => d.path === p)?.signedUrl ?? "");
+        const url = signed.length === 1 ? signed[0] : await stitchVideo(signed, m.storage_path, (p) => live && setPct(p));
+        if (live) setSrc(url);
+      })
+      .catch((e: Error) => live && setErr(e.message));
+    return () => {
+      live = false;
+    };
+  }, [m.storage_path, m.parts]);
+  if (err) return <p className="small muted">{err}</p>;
+  if (!src) return <div className="spicy-loading small muted">{m.parts > 1 ? `Loading… ${pct}%` : "Loading…"}</div>;
+  return <video src={src} controls playsInline autoPlay style={{ width: "100%", borderRadius: 14 }} />;
 }
 
 /* ─── Ideas: private fantasies, and the want-to-try list ──────────────────── */

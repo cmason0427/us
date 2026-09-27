@@ -26,7 +26,7 @@ export interface DayPlan {
   title: string | null;
   sent_at: string | null;
   created_by: string;
-  day_plan_items: { id: string; text: string; activity_id: string | null; position: number; address?: string | null }[];
+  day_plan_items: { id: string; text: string; activity_id: string | null; position: number; address?: string | null; at_time?: string | null }[];
 }
 
 const hm = (t: string) => t.slice(0, 5);
@@ -40,7 +40,7 @@ export function usePlans(day: string) {
     async () => {
       const { data, error } = await supabaseBrowser()
         .from("day_plans")
-        .select("*, day_plan_items(id, text, activity_id, position, address)")
+        .select("*, day_plan_items(id, text, activity_id, position, address, at_time)")
         .eq("day", day)
         .order("start_at");
       if (error) throw error;
@@ -58,7 +58,7 @@ export function usePlansRange(from: string, to: string) {
     async () => {
       const { data, error } = await supabaseBrowser()
         .from("day_plans")
-        .select("*, day_plan_items(id, text, activity_id, position, address)")
+        .select("*, day_plan_items(id, text, activity_id, position, address, at_time)")
         .gte("day", from)
         .lte("day", to)
         .order("day")
@@ -73,7 +73,10 @@ export function usePlansRange(from: string, to: string) {
 
 export const planStart = (p: Pick<DayPlan, "day" | "start_at">) => asDate(p.day, p.start_at);
 export const planEnd = (p: Pick<DayPlan, "day" | "end_at">) => asDate(p.day, p.end_at);
-export const planSteps = (p: DayPlan) => [...p.day_plan_items].sort((a, b) => a.position - b.position).map((i) => i.text);
+/** "6:30 pm" for a step with a set time. */
+const stepTime = (day: string, t: string) => timeLabel(asDate(day, t));
+export const planSteps = (p: DayPlan) =>
+  [...p.day_plan_items].sort((a, b) => a.position - b.position).map((i) => (i.at_time ? `${stepTime(p.day, i.at_time)} ${i.text}` : i.text));
 
 /** A plan in a list: faded and dashed so real events read as the solid things. */
 export function PlanCard({ p, onOpen }: { p: DayPlan; onOpen: (id: string) => void }) {
@@ -112,7 +115,7 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
   const { data: plan } = useLive<DayPlan | null>(
     `plan:${id}`,
     async () => {
-      const { data } = await supabase.from("day_plans").select("*, day_plan_items(id, text, activity_id, position, address)").eq("id", id).maybeSingle();
+      const { data } = await supabase.from("day_plans").select("*, day_plan_items(id, text, activity_id, position, address, at_time)").eq("id", id).maybeSingle();
       return data as DayPlan | null;
     },
     ["day_plans", "day_plan_items"],
@@ -221,8 +224,14 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
                   <div className="task plan-step">
                     <span className="batch-num">{items.indexOf(i) + 1}</span>
                     <span className="grow">
-                      <span className="task-title">{i.text}</span>
-                      <StepAddress id={i.id} address={i.address ?? null} options={activities.find((a) => a.id === i.activity_id)?.addresses ?? []} />
+                      <span className="task-title">
+                        {i.at_time && <span className="plan-step-time">{stepTime(plan.day, i.at_time)} </span>}
+                        {i.text}
+                      </span>
+                      <span className="plan-step-extras">
+                        <StepTime id={i.id} at={i.at_time ?? null} block={{ start: hm(plan.start_at), end: hm(plan.end_at) }} />
+                        <StepAddress id={i.id} address={i.address ?? null} options={activities.find((a) => a.id === i.activity_id)?.addresses ?? []} />
+                      </span>
                     </span>
                     <button className="icon-btn" onClick={() => removeItem(i.id)} aria-label={`Remove ${i.text}`}>
                       ×
@@ -348,6 +357,43 @@ function StepAddress({ id, address, options }: { id: string; address: string | n
   ) : (
     <button className="btn-link small plan-addr-add" onClick={() => setEditing(true)}>
       📍 {options.length ? `where? (${options.length} spot${options.length === 1 ? "" : "s"})` : "add address"}
+    </button>
+  );
+}
+
+/** An optional set time for one step ("dinner at 6:30"); most steps don't need one. */
+function StepTime({ id, at, block }: { id: string; at: string | null; block: { start: string; end: string } }) {
+  const [editing, setEditing] = useState(false);
+  const save = async (v: string) => {
+    setEditing(false);
+    if ((v || null) === (at ? hm(at) : null)) return;
+    await supabaseBrowser().from("day_plan_items").update({ at_time: v || null }).eq("id", id);
+    refreshAll();
+  };
+  if (editing)
+    return (
+      <span className="row" style={{ gap: 6 }}>
+        <input
+          className="input input-sm"
+          type="time"
+          autoFocus
+          defaultValue={at ? hm(at) : block.start}
+          onBlur={(e) => save(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), save(e.currentTarget.value))}
+          aria-label="Set time"
+          style={{ width: 130 }}
+        />
+        {at && (
+          <button className="btn-link small" onMouseDown={(e) => e.preventDefault()} onClick={() => save("")}>
+            no set time
+          </button>
+        )}
+      </span>
+    );
+  const outside = at && (hm(at) < block.start || hm(at) > block.end);
+  return (
+    <button className="btn-link small plan-addr-add" onClick={() => setEditing(true)}>
+      🕐 {at ? `change time${outside ? " (it’s outside the block)" : ""}` : "set a time"}
     </button>
   );
 }
