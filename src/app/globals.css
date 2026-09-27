@@ -1154,3 +1154,24 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .about-prompts dt { font-family: var(--font-display); text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; }
 .dash-label { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "WONK" 0; font-size: 0.8rem; }
 .deck-ghost { will-change: transform; }
+
+/* Money calendar */
+.money-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.money-cal-dow { text-align: center; font-size: 0.66rem; font-weight: 700; color: var(--ink-faint); }
+.money-cal-day { min-height: 50px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 2px 3px; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: flex-start; gap: 0; cursor: pointer; font-size: 0.62rem; line-height: 1.15; overflow: hidden; }
+.money-cal-day:disabled { opacity: 0.35; cursor: default; }
+.money-cal-day.today { border-color: var(--terracotta); }
+.money-cal-day.sel { box-shadow: 0 0 0 2px var(--terracotta); }
+.money-cal-day.low { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+.money-cal-n { font-weight: 700; font-size: 0.7rem; }
+.money-in { color: #2f8a4f; font-weight: 650; }
+.money-out { color: #c2513a; font-weight: 650; }
+.money-bal { color: var(--ink-faint); }
+
+/* Checklists under a to-do */
+.checklist { margin: 4px 0 6px; padding-left: 2px; }
+.checklist-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.9rem; }
+.checklist-item.done .grow { text-decoration: line-through; color: var(--faint, #999); }
+.chip-pair { display: inline-flex; gap: 0; }
+.chip-pair .chip:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.chip-pair .chip-edit { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 0 8px; }

@@ -163,7 +163,9 @@ export function buildPlan(opts: {
       const actual = opts.paychecks.find((p) => p.income_id === i.id && p.paid_on === iso(d));
       const list = byDay.get(iso(d)) ?? [];
       // Variable pay is planned at its low end, so a slow week never overspends; log what actually landed.
-      list.push({ name: i.name, amount: actual ? Number(actual.amount) : Number(i.amount), actual: !!actual, max: !actual && i.amount_max ? Number(i.amount_max) : null });
+      // Pay that varies is planned at its typical amount (the middle of the range); log what actually lands.
+      const typical = i.amount_max ? (Number(i.amount) + Number(i.amount_max)) / 2 : Number(i.amount);
+      list.push({ name: i.name, amount: actual ? Number(actual.amount) : typical, actual: !!actual, max: !actual && i.amount_max ? Number(i.amount_max) : null });
       byDay.set(iso(d), list);
     }
   }
@@ -328,6 +330,8 @@ export interface FloorPlan {
   low: { at: Date; amount: number; after: string } | null; // the tightest spot ahead
   funByPeriod: Map<string, number>; // payday → fun money for that paycheck
   comingThisMonth: { paychecks: number; extra: number; items: { name: string; amount: number; on: Date; extra: boolean }[] };
+  byDay: Map<string, { in: number; out: number; items: string[] }>; // yyyy-MM-dd → what moves that day
+  endBal: Map<string, number>; // yyyy-MM-dd → balance at the end of that day (before fun money)
 }
 
 /**
@@ -412,37 +416,48 @@ export function floorPlan(opts: {
     points.push({ on: e.on, bal, after: e.label });
   }
   const paydays = [t, ...plan.periods.slice(1).map((p) => iso(p.start))];
-  const minFrom = (pd: string) => {
-    const ahead = points.filter((p) => p.on >= pd);
-    return ahead.length ? ahead.reduce((m, p) => (p.bal < m.bal ? p : m)) : null;
-  };
-  // Even it out: each paycheck gets the most it can while leaving every later
-  // paycheck the same share before each tight spot (a rent week doesn't get 0
-  // just because the weeks before spent it all). Unspent money rolls forward.
+  // Look about six weeks ahead: far enough to see the next round of bills,
+  // not so far that a guess about next season freezes today.
+  const horizon = iso(addDays(today, 42));
+  const near = points.filter((p) => p.on <= horizon);
+  // Fair shares: for every point ahead, the fun money of all the paychecks
+  // that land before it has to fit above the floor there. Each paycheck takes
+  // the smallest equal share those limits allow, so a bill week doesn't get 0
+  // because the weeks before spent it all, and spending now that the next
+  // paycheck makes up for is allowed.
   const funByPeriod = new Map<string, number>();
   let taken = 0;
   let low: FloorPlan["low"] = null;
-  const mins = paydays.map((pd) => minFrom(pd));
+  // Shares go by days, so a stretch of 1 day before payday gets a day's worth, not a week's.
+  const spanDays = paydays.map((pd, j) => Math.max(1, differenceInCalendarDays(parseISO(paydays[j + 1] ?? iso(addDays(parseISO(pd), 7))), parseISO(pd))));
   paydays.forEach((pd, k) => {
-    const here = mins[k];
-    if (!here) return;
-    let fun = Infinity;
-    let binding = here;
-    for (let j = k; j < paydays.length; j++) {
-      const m = mins[j];
-      if (!m) continue;
-      const share = Math.max(0, m.bal - taken - floor) / (j - k + 1);
-      if (share < fun) {
-        fun = share;
-        binding = m;
+    let perDay = Infinity;
+    let binding: (typeof points)[number] | null = null;
+    const nearAhead = near.filter((p) => p.on >= pd);
+    for (const p of nearAhead.length ? nearAhead : points.filter((x) => x.on >= pd)) {
+      const days = paydays.reduce((sum, x, j) => (j >= k && x <= p.on ? sum + spanDays[j] : sum), 0) || spanDays[k];
+      const rate = Math.max(0, p.bal - taken - floor) / days;
+      if (rate < perDay) {
+        perDay = rate;
+        binding = p;
       }
     }
-    fun = Math.floor(Number.isFinite(fun) ? fun : 0);
-    // The tight spot that decided today's number, for the "why".
-    if (k === 0) low = { at: parseISO(binding.on), amount: binding.bal, after: binding.after };
+    const fun = Math.floor(Number.isFinite(perDay) ? perDay * spanDays[k] : 0);
+    if (k === 0 && binding) low = { at: parseISO(binding.on), amount: binding.bal, after: binding.after };
     funByPeriod.set(k === 0 ? iso(cur.start) : pd, fun);
     taken += fun;
   });
+  // The day-by-day picture for the money calendar (before any fun money).
+  const byDay = new Map<string, { in: number; out: number; items: string[] }>();
+  for (const e of evs) {
+    const d = byDay.get(e.on) ?? { in: 0, out: 0, items: [] };
+    if (e.amount >= 0) d.in += e.amount;
+    else d.out += -e.amount;
+    d.items.push(`${e.amount >= 0 ? "+" : "−"}${money(Math.abs(e.amount))} ${e.label}`);
+    byDay.set(e.on, d);
+  }
+  const endBal = new Map<string, number>();
+  for (const p of points) endBal.set(p.on, p.bal);
   const left = funByPeriod.get(iso(cur.start)) ?? 0;
   const daysLeft = Math.max(1, differenceInCalendarDays(cur.end, today));
 
@@ -459,5 +474,5 @@ export function floorPlan(opts: {
   items.sort((a, b) => a.on.getTime() - b.on.getTime());
   const comingThisMonth = { paychecks: items.filter((x) => !x.extra).reduce((a, x) => a + x.amount, 0), extra: items.filter((x) => x.extra).reduce((a, x) => a + x.amount, 0), items };
 
-  return { start, fromBalance, left, perDay: left / daysLeft, daysLeft, nextPay: cur.end, low, funByPeriod, comingThisMonth };
+  return { start, fromBalance, left, perDay: left / daysLeft, daysLeft, nextPay: cur.end, low, funByPeriod, comingThisMonth, byDay, endBal };
 }

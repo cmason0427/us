@@ -15,6 +15,7 @@ import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
 import { Sticker } from "./Sticker";
 import { IconTrash } from "./Art";
+import { ChecklistChips, ChecklistItems, ChecklistPrompt, useChecklistPrompts, useTaskItems, type TaskItem } from "./Checklists";
 
 // Ours also collects household (older items) and dog to-dos, so nothing hides.
 export const OURS: ListType[] = ["shared", "household", "dogs"];
@@ -42,6 +43,9 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
   const [adding, setAdding] = useState(false);
   const { items: shopItems } = useShopping();
   const linkedTo = (t: Task) => shopItems.filter((i) => i.task_id === t.id);
+  const taskItems = useTaskItems();
+  const itemsOf = (t: Task) => taskItems.filter((i) => i.task_id === t.id);
+  const prompts = useChecklistPrompts();
   const [editing, setEditing] = useState<Task | null>(null);
   // 0 before hydration: nothing reads as overdue until the phone's clock is known.
   const now = useNow()?.getTime() ?? 0;
@@ -126,6 +130,16 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           <TaskPresets only={listType} />
         </div>
       )}
+      <ChecklistChips listType={listType} show={show} />
+      {prompts.day && prompts.due.filter((p) => show.includes(p.list_type)).length > 0 && (
+        <div className="card dash" style={{ marginTop: 8 }}>
+          {prompts.due
+            .filter((p) => show.includes(p.list_type))
+            .map((p) => (
+              <ChecklistPrompt key={p.id} p={p} day={prompts.day!} />
+            ))}
+        </div>
+      )}
       {adding && (
         <Sheet title={listType === "dogs" ? "Dog to-do" : listType === "personal" ? "Just mine" : "To-do"} onClose={() => setAdding(false)}>
           <TaskForm listType={listType} onDone={() => setAdding(false)} />
@@ -145,7 +159,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} linked={linkedTo(t)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
       {later.length > 0 && (
@@ -169,7 +183,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} linked={linkedTo(t)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -189,6 +203,8 @@ function TaskRow({
   onClaim,
   onRemove,
   linked,
+  checklist,
+  otherLists,
   nameOf,
   meId,
   now,
@@ -204,6 +220,9 @@ function TaskRow({
   onRemove: (t: Task) => void;
   /** Shopping items on this to-do: it can't be checked until they're all bought or moved back. */
   linked: ShopItem[];
+  /** Checklist items: same deal, it finishes once they're all dealt with. */
+  checklist: TaskItem[];
+  otherLists: Task[];
   nameOf: (id: string | null) => string;
   meId: string;
   now: number;
@@ -217,7 +236,7 @@ function TaskRow({
         type="checkbox"
         className="check"
         checked={t.done}
-        disabled={!t.done && linked.some((i) => !i.bought)}
+        disabled={!t.done && (linked.some((i) => !i.bought) || checklist.some((i) => !i.done))}
         onChange={(e) => onToggle(t, e.currentTarget)}
         aria-label={`Done: ${t.title}`}
       />
@@ -232,6 +251,7 @@ function TaskRow({
             🛒 {linked.filter((i) => i.bought).length} of {linked.length} bought: {linked.map((i) => `${i.name}${i.bought ? " ✓" : ""}`).join(" · ")}
           </button>
         )}
+        {checklist.length > 0 && <ChecklistItems task={t} items={checklist} otherLists={otherLists} />}
         {showItems && <ShoppingTaskSheet title={t.title} items={linked} onClose={() => setShowItems(false)} />}
         {d && !t.done && (
           <div className={`small due${overdue ? " overdue" : ""}`}>

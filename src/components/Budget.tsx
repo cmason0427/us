@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import {
@@ -25,6 +25,7 @@ import {
   type OneOff,
   type IncomeFreq,
   type Paycheck,
+  type FloorPlan,
   type Period,
   type Settings,
   type Spend,
@@ -242,6 +243,12 @@ export function MoneyView() {
           <span className="small">
             until payday {d(cur.end)} · about {money(b.safe.perDay)}/day for {b.safe.daysLeft} day{b.safe.daysLeft === 1 ? "" : "s"}
           </span>
+          {b.plan.periods[1] && b.fp && (
+            <span className="small">
+              then {money(b.fp.funByPeriod.get(iso(b.plan.periods[1].start)) ?? 0)} from the {d(b.plan.periods[1].start)} paycheck
+              {b.plan.periods[2] ? `, ${money(b.fp.funByPeriod.get(iso(b.plan.periods[2].start)) ?? 0)} from ${d(b.plan.periods[2].start)}` : ""}
+            </span>
+          )}
           <span className="small money-basis">
             {b.fp?.fromBalance && b.bal ? `from your balance (${format(b.bal.asOf, "EEE h:mm a")})` : "from what you've logged"} ·{" "}
             <button className="btn-link small" onClick={() => setSheet("balance")}>
@@ -308,7 +315,7 @@ export function MoneyView() {
             </li>
           </ul>
           {cur.incomeMax > cur.income && (
-            <p className="small muted">Planned on the low end ({money(cur.income)}). If it lands higher, log it below and the extra spreads across your fun money and savings.</p>
+            <p className="small muted">Planned on your typical check ({money(cur.income)}, the middle of your range). Log what actually lands and everything re-figures.</p>
           )}
           {!cur.paychecks.some((p) => p.actual) && <PaycheckActual period={cur} incomes={b.incomes} varies={cur.incomeMax > cur.income} />}
           {b.plan.shortfall > 0 && <p className="small muted">This one&apos;s {money(b.plan.shortfall)} short of what&apos;s due before the next. Skipping fun money this round covers most of it.</p>}
@@ -370,11 +377,18 @@ export function MoneyView() {
         </details>
       )}
 
+      {b.fp && (
+        <details className="fold">
+          <summary>🗓️ Money calendar</summary>
+          <MoneyCalendar fp={b.fp} floor={Number(b.settings.cushion)} />
+        </details>
+      )}
+
       <details className="fold">
         <summary>📆 Paychecks ahead</summary>
       <section className="stack-sm">
         <ul className="pantry-list">
-          {b.plan.periods.slice(1, 7).map((p) => (
+          {b.plan.periods.slice(1, 6).map((p) => (
             <li key={iso(p.start)} className="pantry-row">
               <button className="pantry-name" onClick={() => (setPeriod(p), setSheet("period"))}>
                 {d(p.start)} · {money(p.income)}
@@ -994,5 +1008,56 @@ export function OneOffForm({ onDone }: { onDone: () => void }) {
         Add
       </button>
     </form>
+  );
+}
+
+/**
+ * Six weeks of money on a calendar: what lands (+), what's due (−), and where
+ * the account ends each day before any fun money. Tap a day for the details.
+ */
+function MoneyCalendar({ fp, floor }: { fp: FloorPlan; floor: number }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const today = startOfDay(new Date());
+  const start = startOfWeek(today);
+  const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+  let bal = fp.start;
+  const running = new Map<string, number>();
+  for (const day of days) {
+    const k = iso(day);
+    if (k >= iso(today)) {
+      if (fp.endBal.has(k)) bal = fp.endBal.get(k)!;
+      running.set(k, bal);
+    }
+  }
+  const sel = picked ? fp.byDay.get(picked) : null;
+  return (
+    <div className="stack-sm">
+      <div className="money-cal">
+        {["S", "M", "T", "W", "T", "F", "S"].map((w, i) => (
+          <span key={i} className="money-cal-dow">
+            {w}
+          </span>
+        ))}
+        {days.map((day) => {
+          const k = iso(day);
+          const m = fp.byDay.get(k);
+          const b = running.get(k);
+          return (
+            <button key={k} className={`money-cal-day${k === iso(today) ? " today" : ""}${b != null && b < floor ? " low" : ""}${picked === k ? " sel" : ""}`} onClick={() => setPicked(picked === k ? null : k)} disabled={b == null}>
+              <span className="money-cal-n">{day.getDate()}</span>
+              {m?.in ? <span className="money-in">+{Math.round(m.in)}</span> : null}
+              {m?.out ? <span className="money-out">−{Math.round(m.out)}</span> : null}
+              {b != null && (m || k === iso(today)) ? <span className="money-bal">{Math.round(b)}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      {picked && (
+        <p className="small">
+          <strong>{format(parseISO(picked), "EEE M/d")}:</strong> {sel ? sel.items.join(", ") : "nothing moves"} · ends around {money(running.get(picked) ?? 0)} before fun money.
+        </p>
+      )}
+      <p className="small faint">+ money in · − bills and savings out · the gray number is where your account lands that day if you spent nothing extra. Red days would be under your floor.</p>
+    </div>
   );
 }

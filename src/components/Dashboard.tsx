@@ -14,6 +14,7 @@ import { AnswerSheet, useVibe, vibeText } from "./Vibe";
 import { MEAL_LABEL, MealPanel, currentMeal, useMealThread, type Meal } from "./MealThread";
 import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { TaskList } from "./TaskList";
+import { ChecklistPrompt, useChecklistPrompts } from "./Checklists";
 import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
 
 /**
@@ -45,6 +46,7 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const status = usePartnerStatus();
   const myStatus = useMyStatus();
   const them = partner?.display_name ?? "Them";
+  const chores = useChecklistPrompts();
 
   return (
     <section className="card dash">
@@ -92,6 +94,8 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
           <span className="muted">Asked {them} {ago(vibe.recentOutgoing.created_at)}</span>
         </Row>
       ) : null}
+
+      {chores.day && chores.due.map((p) => <ChecklistPrompt key={p.id} p={p} day={chores.day!} />)}
 
       {dogTodos > 0 && (
         <Row icon="🐾" label="Dogs" onClick={() => setOpen({ kind: "dogs" })}>

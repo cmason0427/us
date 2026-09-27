@@ -105,6 +105,8 @@ export interface Activity {
   duration: Duration | null;
   /** true = stays on the list; false = one-time, can be marked done. */
   recurring: boolean;
+  /** Where it can happen (optional); picked from when it goes on a plan. */
+  addresses?: string[];
   done_at: string | null;
   done_by: string | null;
   created_by: string;

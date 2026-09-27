@@ -1,5 +1,6 @@
 "use client";
 
+import { useAddressBook } from "@/lib/addressBook";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { refreshAll } from "@/lib/useLive";
@@ -79,6 +80,9 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
   const [cost, setCost] = useState<Cost | null>(initial?.cost ?? null);
   const [duration, setDuration] = useState<Duration | null>(initial?.duration ?? null);
   const [recurring, setRecurring] = useState(initial?.recurring ?? true);
+  const [addresses, setAddresses] = useState<string[]>(initial?.addresses ?? []);
+  const [addrDraft, setAddrDraft] = useState("");
+  const book = useAddressBook();
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -96,6 +100,7 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
       cost,
       duration,
       recurring,
+      addresses,
     };
     const { error } = initial
       ? await supabase.from("activities").update(row).eq("id", initial.id)
@@ -163,6 +168,46 @@ export function ActivityForm({ initial, onDone }: { initial?: Activity; onDone: 
       <div className="field">
         <span>How long</span>
         <OptionalPicker label="How long" options={DURATION_OPTIONS} value={duration} onChange={setDuration} />
+      </div>
+      <div className="field">
+        <span>Where it happens (optional, any number)</span>
+        {addresses.length > 0 && (
+          <div className="stack-sm">
+            {addresses.map((a) => (
+              <span key={a} className="row small">
+                <span className="grow">📍 {book.find((p) => p.address === a)?.name ?? a}</span>
+                <button type="button" className="lt-x" onClick={() => setAddresses(addresses.filter((x) => x !== a))} aria-label="Remove address">
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {book.filter((p) => !addresses.includes(p.address!)).length > 0 && (
+          <div className="chips">
+            {book
+              .filter((p) => !addresses.includes(p.address!))
+              .map((p) => (
+                <button key={p.id} type="button" className="chip chip-sm" onClick={() => setAddresses([...addresses, p.address!])}>
+                  + {p.name}
+                </button>
+              ))}
+          </div>
+        )}
+        <div className="quick-add">
+          <input className="input input-sm grow" value={addrDraft} onChange={(e) => setAddrDraft(e.target.value)} placeholder="or type an address" aria-label="New address" />
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={!addrDraft.trim()}
+            onClick={() => {
+              setAddresses([...new Set([...addresses, addrDraft.trim()])]);
+              setAddrDraft("");
+            }}
+          >
+            Add
+          </button>
+        </div>
       </div>
       <div className="row-between">
         {initial ? (

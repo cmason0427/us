@@ -13,6 +13,7 @@ import { Sheet } from "./Sheet";
 import { Sortable } from "./Sortable";
 import { WhenPicker } from "./WhenPicker";
 import { AddressLinks } from "./AddressLinks";
+import { useAddressBook } from "@/lib/addressBook";
 
 // Time-block plans: "Saturday 1–5pm: do savers, then scrapbook". Both of you
 // can change anything; it only reaches the feed when one of you sends it.
@@ -98,7 +99,8 @@ export async function createPlan(meId: string, day: Date, firstActivity?: Activi
     .select("id")
     .single();
   if (error) throw error;
-  if (firstActivity) await supabase.from("day_plan_items").insert({ plan_id: data.id, text: firstActivity.name, activity_id: firstActivity.id, position: 0, created_by: meId });
+  if (firstActivity)
+    await supabase.from("day_plan_items").insert({ plan_id: data.id, text: firstActivity.name, activity_id: firstActivity.id, position: 0, created_by: meId, address: firstActivity.addresses?.length === 1 ? firstActivity.addresses[0] : null });
   refreshAll();
   return data.id as string;
 }
@@ -153,7 +155,9 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
   }
   async function addItem(text: string, activityId: string | null = null) {
     if (!text.trim()) return;
-    await supabase.from("day_plan_items").insert({ plan_id: id, text: text.trim(), activity_id: activityId, position: items.length, created_by: meId });
+    // An activity with just one spot brings its address along.
+    const spots = activities.find((a) => a.id === activityId)?.addresses ?? [];
+    await supabase.from("day_plan_items").insert({ plan_id: id, text: text.trim(), activity_id: activityId, position: items.length, created_by: meId, address: spots.length === 1 ? spots[0] : null });
     setItemDraft("");
     refreshAll();
   }
@@ -218,7 +222,7 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
                     <span className="batch-num">{items.indexOf(i) + 1}</span>
                     <span className="grow">
                       <span className="task-title">{i.text}</span>
-                      <StepAddress id={i.id} address={i.address ?? null} />
+                      <StepAddress id={i.id} address={i.address ?? null} options={activities.find((a) => a.id === i.activity_id)?.addresses ?? []} />
                     </span>
                     <button className="icon-btn" onClick={() => removeItem(i.id)} aria-label={`Remove ${i.text}`}>
                       ×
@@ -291,8 +295,13 @@ export function PlanSheet({ id, onClose }: { id: string; onClose: () => void }) 
 }
 
 /** An optional address for one step of a plan: tap to add, then copy / open in maps. */
-function StepAddress({ id, address }: { id: string; address: string | null }) {
+/**
+ * An optional address for one step: pick one of the activity's spots, one from
+ * the address book, type one, or leave it off.
+ */
+function StepAddress({ id, address, options }: { id: string; address: string | null; options: string[] }) {
   const [editing, setEditing] = useState(false);
+  const book = useAddressBook();
   const save = async (v: string) => {
     setEditing(false);
     if ((v.trim() || null) === address) return;
@@ -301,15 +310,33 @@ function StepAddress({ id, address }: { id: string; address: string | null }) {
   };
   if (editing)
     return (
-      <input
-        className="input input-sm"
-        defaultValue={address ?? ""}
-        autoFocus
-        placeholder="address (optional)"
-        onBlur={(e) => save(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), save(e.currentTarget.value))}
-        aria-label="Address"
-      />
+      <div className="stack-sm">
+        <div className="chips">
+          {options.map((a) => (
+            <button key={a} className="chip chip-sm" aria-pressed={address === a} onClick={() => save(a)}>
+              📍 {book.find((p) => p.address === a)?.name ?? a}
+            </button>
+          ))}
+          {book
+            .filter((p) => !options.includes(p.address!))
+            .map((p) => (
+              <button key={p.id} className="chip chip-sm" aria-pressed={address === p.address} onClick={() => save(p.address!)}>
+                📇 {p.name}
+              </button>
+            ))}
+          <button className="chip chip-sm" onClick={() => save("")}>
+            no address
+          </button>
+        </div>
+        <input
+          className="input input-sm"
+          defaultValue={options.includes(address ?? "") || book.some((p) => p.address === address) ? "" : (address ?? "")}
+          placeholder="or type one"
+          onBlur={(e) => e.target.value.trim() && save(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), save(e.currentTarget.value))}
+          aria-label="Address"
+        />
+      </div>
     );
   return address ? (
     <span className="plan-addr">
@@ -320,7 +347,7 @@ function StepAddress({ id, address }: { id: string; address: string | null }) {
     </span>
   ) : (
     <button className="btn-link small plan-addr-add" onClick={() => setEditing(true)}>
-      📍 add address
+      📍 {options.length ? `where? (${options.length} spot${options.length === 1 ? "" : "s"})` : "add address"}
     </button>
   );
 }
