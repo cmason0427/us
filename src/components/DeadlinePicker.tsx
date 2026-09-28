@@ -47,7 +47,7 @@ export function DeadlinePicker({ value, onChange }: { value: Deadline | null; on
             ["none", "No deadline"],
             ["today", "End of today"],
             ["tomorrow", "Tomorrow"],
-            ["pick", "📅 Pick…"],
+            ["pick", "📅 Pick a day / time"],
           ] as const
         ).map(([m, label]) => (
           <button key={m} type="button" className="chip" aria-pressed={mode === m} onClick={() => pickMode(m)}>

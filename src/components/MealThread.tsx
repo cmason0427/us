@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { timeLabel, useNow } from "@/lib/dates";
-import { mealForTime, setMealTime, useMealTime } from "@/lib/mealTimes";
+import { mealForTime, retimeMeal, setMealTime, useMealTime } from "@/lib/mealTimes";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
 import { describeFilters, type FoodFilters } from "@/lib/food";
@@ -345,8 +345,16 @@ export function MealTimeLine({ day, meal }: { day: string; meal: Meal }) {
   const save = async (v: string) => {
     setEditing(false);
     if ((v || null) === (mt ? mt.at.slice(0, 5) : null)) return;
-    const err = await setMealTime(day, meal, v || null, meId);
-    if (err) toast(err);
+    if (!v) {
+      const err = await setMealTime(day, meal, null, meId);
+      if (err) toast(err);
+      return;
+    }
+    // Noon on "breakfast" is lunch: the meal renames itself when it can.
+    const r = await retimeMeal(day, meal, v, meId);
+    if (r.error) return toast(r.error);
+    if (r.meal !== meal) toast(`That's ${MEAL_LABEL[r.meal].toLowerCase()} time, so it's ${MEAL_LABEL[r.meal].toLowerCase()} now 🕐`);
+    else if (mealForTime(v) !== meal) toast(`Kept it as ${MEAL_LABEL[meal].toLowerCase()} (${MEAL_LABEL[mealForTime(v)].toLowerCase()} already has plans)`);
   };
   if (editing)
     return (

@@ -131,6 +131,10 @@ export interface Task {
   due_all_day: boolean;
   /** Who said "I'll do it" (shared lists). */
   claimed_by: string | null;
+  /** Asked the other person to do it ("can you do this?"). */
+  asked_for?: string | null;
+  /** Show it on the calendar at its time (needs a time, not just a day). */
+  on_calendar?: boolean;
   /** Dog to-dos: which dog(s) it's for. */
   dogs: string[];
   /** A time window's opening (HH:mm:ss); due_at is when it closes. */

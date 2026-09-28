@@ -13,6 +13,7 @@ import { ShoppingTaskSheet, finishShoppingTask, useShopping, type ShopItem } fro
 import { TaskForm, TaskPresets, windowText } from "./TaskForm";
 import { format, isSameDay, addDays } from "date-fns";
 import { dogVoice } from "@/lib/dogs";
+import { notify } from "@/lib/notify";
 import { Sticker } from "./Sticker";
 import { IconTrash } from "./Art";
 import { ChecklistChips, ChecklistItems, ChecklistPrompt, useChecklistPrompts, useTaskItems, type TaskItem } from "./Checklists";
@@ -38,7 +39,7 @@ const deadlineOf = (t: Task): Deadline | null => (t.due_at ? { due_at: t.due_at,
 
 /** `listType` is where new items go; `show` is which lists this view collects (defaults to just that one). */
 export function TaskList({ listType, show = [listType], title, hint }: { listType: ListType; show?: ListType[]; title: string; hint: string }) {
-  const { meId, nameOf, toast } = useApp();
+  const { meId, nameOf, toast, partner } = useApp();
   const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
   const { items: shopItems } = useShopping();
@@ -94,10 +95,24 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
     refreshAll();
   }
 
-  // "I'll do it" / "never mind". Taking over the other person's claim is fine too.
+  // "I'll do it" / "never mind". Taking over the other person's claim is fine
+  // too, and taking one you were asked to do answers the ask.
   async function claim(t: Task) {
-    const { error } = await supabase.from("tasks").update({ claimed_by: t.claimed_by === meId ? null : meId }).eq("id", t.id);
+    const mine = t.claimed_by === meId;
+    const { error } = await supabase.from("tasks").update({ claimed_by: mine ? null : meId, ...(mine ? {} : { asked_for: null }) }).eq("id", t.id);
     if (error) toast(error.message);
+    refreshAll();
+  }
+
+  // "Can you do this?" Soft: they can take it or just let it go.
+  async function ask(t: Task, on: boolean) {
+    if (!partner) return;
+    const { error } = await supabase.from("tasks").update({ asked_for: on ? partner.id : null }).eq("id", t.id);
+    if (error) return toast(error.message);
+    if (on) {
+      notify({ kind: "task_ask", id: t.id });
+      toast(`Asked ${partner.display_name}. No pressure either way.`);
+    }
     refreshAll();
   }
 
@@ -159,7 +174,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           </div>
         )}
         {open.map((t) => (
-          <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+          <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} onAsk={listType !== "personal" && partner ? ask : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
         ))}
       </div>
       {later.length > 0 && (
@@ -183,7 +198,7 @@ export function TaskList({ listType, show = [listType], title, hint }: { listTyp
           {showDone && (
             <div className="card" style={{ padding: "4px 14px" }}>
               {done.map((t) => (
-                <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
+                <TaskRow key={t.id} t={t} linked={linkedTo(t)} checklist={itemsOf(t)} otherLists={open.filter((o) => o.id !== t.id && itemsOf(o).length > 0)} tag={show.length > 1 ? LIST_TAG[t.list_type] : undefined} showWho={listType !== "personal"} onToggle={toggle} onBump={bump} onEdit={setEditing} onClaim={listType !== "personal" ? claim : undefined} onAsk={listType !== "personal" && partner ? ask : undefined} meId={meId} now={now} onRemove={remove} nameOf={nameOf} />
               ))}
             </div>
           )}
@@ -201,6 +216,7 @@ function TaskRow({
   onBump,
   onEdit,
   onClaim,
+  onAsk,
   onRemove,
   linked,
   checklist,
@@ -217,6 +233,8 @@ function TaskRow({
   onEdit: (t: Task) => void;
   /** Shared lists only: claim or unclaim. */
   onClaim?: (t: Task) => void;
+  /** Shared lists only: ask the other person to do it (or take the ask back). */
+  onAsk?: (t: Task, on: boolean) => void;
   onRemove: (t: Task) => void;
   /** Shopping items on this to-do: it can't be checked until they're all bought or moved back. */
   linked: ShopItem[];
@@ -228,6 +246,8 @@ function TaskRow({
   now: number;
 }) {
   const [showItems, setShowItems] = useState(false);
+  // Only the other person can ask you.
+  const partnerName = useApp().partner?.display_name ?? "They";
   const overdue = isOverdue(t, now);
   const d = deadlineOf(t);
   return (
@@ -260,9 +280,22 @@ function TaskRow({
           </div>
         )}
         {onClaim && !t.done && (
-          <button className={`claim${t.claimed_by ? " claimed" : ""}`} onClick={() => onClaim(t)} aria-pressed={t.claimed_by === meId}>
-            {t.claimed_by === meId ? "🙋 You're on it" : t.claimed_by ? `🙋 ${nameOf(t.claimed_by)}'s on it` : "🙋 I'll do it"}
-          </button>
+          <span className="claim-row">
+            {t.asked_for === meId && !t.claimed_by && <span className="small ask-note">🙏 {partnerName} asked you</span>}
+            <button className={`claim${t.claimed_by ? " claimed" : ""}`} onClick={() => onClaim(t)} aria-pressed={t.claimed_by === meId}>
+              {t.claimed_by === meId ? "🙋 You're on it" : t.claimed_by ? `🙋 ${nameOf(t.claimed_by)}'s on it` : "🙋 I'll do it"}
+            </button>
+            {onAsk && !t.claimed_by && t.asked_for === meId && (
+              <button className="claim" onClick={() => onAsk(t, false)}>
+                not this time
+              </button>
+            )}
+            {onAsk && !t.claimed_by && t.asked_for !== meId && (
+              <button className={`claim${t.asked_for ? " claimed" : ""}`} onClick={() => onAsk(t, !t.asked_for)} aria-pressed={!!t.asked_for}>
+                {t.asked_for ? `🙏 Asked ${nameOf(t.asked_for)} · undo` : "🙏 Can you?"}
+              </button>
+            )}
+          </span>
         )}
         {showWho && (
           <div className="small faint">

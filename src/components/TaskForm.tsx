@@ -171,6 +171,8 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
   const [urgency, setUrgency] = useState<Urgency>(initial?.urgency ?? "low");
   const [deadline, setDeadline] = useState<Deadline | null>(initial?.due_at ? { due_at: initial.due_at, due_all_day: initial.due_all_day } : null);
   const [showDeadline, setShowDeadline] = useState(!!initial?.due_at);
+  const [onCal, setOnCal] = useState(initial?.on_calendar ?? false);
+  const timed = !!deadline && !deadline.due_all_day;
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [showNotes, setShowNotes] = useState(!!initial?.notes);
   const [busy, setBusy] = useState(false);
@@ -184,6 +186,7 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
     urgency,
     due_at: deadline?.due_at ?? null,
     due_all_day: deadline?.due_all_day ?? false,
+    on_calendar: onCal && timed,
     notes: notes.trim() || null,
   });
 
@@ -251,8 +254,15 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
       </div>
       {showDeadline ? (
         <div className="field">
-          <span>Deadline</span>
+          <span>Due</span>
           <DeadlinePicker value={deadline} onChange={setDeadline} />
+          {timed ? (
+            <label className="row small">
+              <input type="checkbox" checked={onCal} onChange={(e) => setOnCal(e.target.checked)} /> 📅 Show it on the calendar at that time
+            </label>
+          ) : (
+            <p className="small faint">Pick a day with a time to put it on the calendar too.</p>
+          )}
           <p className="small muted">If it passes, it jumps to the top as high priority.</p>
         </div>
       ) : null}
@@ -261,7 +271,7 @@ export function TaskForm({ initial, listType: initialList = "shared", onDone }: 
         <div className="row wrap">
           {!showDeadline && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowDeadline(true)}>
-              + Deadline
+              + Due day / time
             </button>
           )}
           {!showNotes && (

@@ -22,7 +22,7 @@ import {
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
 import { CAL_COLORS, Swatch, colorVar, useColorLabels } from "@/components/CalendarColors";
-import { PlanCard, PlanSheet, createPlan, planEnd, planStart, planSteps, usePlansRange, type DayPlan } from "@/components/Plans";
+import { PlanCard, PlanSheet, createPlan, planEnd, planStart, usePlansRange, type DayPlan } from "@/components/Plans";
 import { EVENT_TYPE_LABEL, effectiveType, type CalEvent, type EventType } from "@/lib/types";
 import { useApp } from "@/components/AppProvider";
 import { PageHead } from "@/components/PageHead";
@@ -34,6 +34,9 @@ import { IconChevron, IconPlus, Wavy } from "@/components/Art";
 import { MEAL_EMOJI, useMealTimesRange, type MealTime } from "@/lib/mealTimes";
 import { timeLabel } from "@/lib/dates";
 import { MEAL_LABEL, MealPanel, useMealThread } from "@/components/MealThread";
+import { PinForm, PinSheet, pinWhen, useCalTasksRange, usePinsRange, type CalPin } from "@/components/Pins";
+import { TaskForm } from "@/components/TaskForm";
+import type { Task } from "@/lib/types";
 
 type View = "day" | "week" | "month" | "agenda";
 type AgendaRange = "today" | "week" | "month" | "upcoming";
@@ -120,6 +123,21 @@ export default function CalendarPage() {
   const mealTimes = useMealTimesRange(format(from, "yyyy-MM-dd"), format(to, "yyyy-MM-dd"));
   const mealsOn = (d: Date) => (plansVisible ? mealTimes.filter((m) => m.day === format(d, "yyyy-MM-dd")) : []);
   const [openMeal, setOpenMeal] = useState<MealTime | null>(null);
+  // Pins ("🎳 bowling · 7 pm") and to-dos with a time marked for the calendar.
+  const pins = usePinsRange(format(from, "yyyy-MM-dd"), format(to, "yyyy-MM-dd"));
+  const calTasks = useCalTasksRange(startOfDay(from).toISOString(), endOfDay(to).toISOString());
+  const [openPin, setOpenPin] = useState<CalPin | null>(null);
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const [pinning, setPinning] = useState(false);
+  const extrasOn = (d: Date): Extra[] => {
+    const k = format(d, "yyyy-MM-dd");
+    return [
+      ...(plansVisible ? pins.filter((p) => p.day === k) : []).map((p) => ({ key: p.id, at: p.at.slice(0, 5), emoji: p.emoji || "📍", text: p.title, when: pinWhen(p), open: () => setOpenPin(p) })),
+      ...calTasks
+        .filter((t) => format(new Date(t.due_at), "yyyy-MM-dd") === k)
+        .map((t) => ({ key: t.id, at: format(new Date(t.due_at), "HH:mm"), emoji: t.done ? "✅" : "☑️", text: t.title, when: `due ${timeLabel(new Date(t.due_at))}`, done: t.done, open: () => setOpenTask(t.id) })),
+    ];
+  };
 
   // Pending asks waiting on me, regardless of the visible range.
   const { data: waiting = [] } = useLive<CalEvent[]>(
@@ -245,8 +263,8 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {view === "agenda" && <Agenda events={events} from={from} to={to} onOpen={open} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} />}
-      {view === "month" && <Month cursor={cursor} events={events} onOpen={open} onPickDay={setCursor} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} />}
+      {view === "agenda" && <Agenda events={events} from={from} to={to} onOpen={open} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} extrasOn={extrasOn} />}
+      {view === "month" && <Month cursor={cursor} events={events} onOpen={open} onPickDay={setCursor} plansOn={plansOn} onOpenPlan={setPlanId} mealsOn={mealsOn} onOpenMeal={setOpenMeal} extrasOn={extrasOn} />}
       {view === "week" && (
         <Week
           cursor={cursor}
@@ -260,9 +278,10 @@ export default function CalendarPage() {
           onOpenPlan={setPlanId}
           mealsOn={mealsOn}
           onOpenMeal={setOpenMeal}
+          extrasOn={extrasOn}
         />
       )}
-      {view === "day" && <Day day={cursor} events={events} onOpen={open} plans={plansOn(cursor)} onOpenPlan={setPlanId} meals={mealsOn(cursor)} onOpenMeal={setOpenMeal} />}
+      {view === "day" && <Day day={cursor} events={events} onOpen={open} plans={plansOn(cursor)} onOpenPlan={setPlanId} meals={mealsOn(cursor)} onOpenMeal={setOpenMeal} extras={extrasOn(cursor)} />}
       {(view === "day" || view === "month") && (
         <button
           className="btn btn-sm"
@@ -278,7 +297,19 @@ export default function CalendarPage() {
           + Plan a time block
         </button>
       )}
+      {(view === "day" || view === "month") && (
+        <button className="btn btn-sm" style={{ marginTop: 12, marginLeft: 8 }} onClick={() => setPinning(true)}>
+          📍 Pin something at a time
+        </button>
+      )}
       {openMeal && <CalMealSheet m={openMeal} onClose={() => setOpenMeal(null)} />}
+      {openPin && <PinSheet pin={openPin} onClose={() => setOpenPin(null)} />}
+      {openTask && <CalTaskSheet id={openTask} onClose={() => setOpenTask(null)} />}
+      {pinning && (
+        <Sheet title="📍 Pin something" onClose={() => setPinning(false)}>
+          <PinForm defaultDay={view === "agenda" ? undefined : format(cursor, "yyyy-MM-dd")} onDone={() => setPinning(false)} />
+        </Sheet>
+      )}
       {planId && (
         <PlanSheet
           id={planId}
@@ -436,7 +467,38 @@ function dayEmoji(list: CalEvent[]) {
   return null;
 }
 
-type PlanProps = { plansOn: (d: Date) => DayPlan[]; onOpenPlan: (id: string) => void; mealsOn: (d: Date) => MealTime[]; onOpenMeal: (m: MealTime) => void };
+type PlanProps = { plansOn: (d: Date) => DayPlan[]; onOpenPlan: (id: string) => void; mealsOn: (d: Date) => MealTime[]; onOpenMeal: (m: MealTime) => void; extrasOn: (d: Date) => Extra[] };
+/** A pin or a calendar to-do: a small thing at a time. */
+type Extra = { key: string; at: string; emoji: string; text: string; when: string; done?: boolean; open: () => void };
+
+function ExtraCard({ x }: { x: Extra }) {
+  return (
+    <button className={`plan-card-bg pin-card${x.done ? " done" : ""}`} onClick={x.open}>
+      <span className="small muted">
+        {x.emoji} {x.when}
+      </span>
+      <strong>{x.text}</strong>
+    </button>
+  );
+}
+
+/** A to-do opened from the calendar: the usual to-do editor. */
+function CalTaskSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  const { data: task } = useLive<Task | null>(
+    `task:${id}`,
+    async () => {
+      const { data } = await supabaseBrowser().from("tasks").select("*").eq("id", id).maybeSingle();
+      return data as Task | null;
+    },
+    ["tasks"],
+  );
+  if (!task) return null;
+  return (
+    <Sheet title="Edit to-do" onClose={onClose}>
+      <TaskForm initial={task} onDone={onClose} />
+    </Sheet>
+  );
+}
 
 const mealWhen = (m: MealTime) => timeLabel(new Date(`${m.day}T${m.at.slice(0, 5)}`));
 
@@ -464,27 +526,32 @@ function CalMealSheet({ m, onClose }: { m: MealTime; onClose: () => void }) {
 }
 
 /** Plans and timed meals for a day, in time order. */
-function Together({ plans, meals, onOpenPlan, onOpenMeal }: { plans: DayPlan[]; meals: MealTime[]; onOpenPlan: (id: string) => void; onOpenMeal: (m: MealTime) => void }) {
-  const items = [...plans.map((p) => ({ at: p.start_at, el: <PlanCard key={p.id} p={p} onOpen={onOpenPlan} /> })), ...meals.map((m) => ({ at: m.at, el: <MealCard key={m.meal} m={m} onOpen={onOpenMeal} /> }))];
+function Together({ plans, meals, extras = [], onOpenPlan, onOpenMeal }: { plans: DayPlan[]; meals: MealTime[]; extras?: Extra[]; onOpenPlan: (id: string) => void; onOpenMeal: (m: MealTime) => void }) {
+  const items = [
+    ...plans.map((p) => ({ at: p.start_at, el: <PlanCard key={p.id} p={p} onOpen={onOpenPlan} /> })),
+    ...meals.map((m) => ({ at: m.at, el: <MealCard key={m.meal} m={m} onOpen={onOpenMeal} /> })),
+    ...extras.map((x) => ({ at: x.at, el: <ExtraCard key={x.key} x={x} /> })),
+  ];
   return <>{items.sort((a, b) => a.at.localeCompare(b.at)).map((x) => x.el)}</>;
 }
 
-function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { events: CalEvent[]; from: Date; to: Date; onOpen: (e: CalEvent) => void } & PlanProps) {
+function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan, mealsOn, onOpenMeal, extrasOn }: { events: CalEvent[]; from: Date; to: Date; onOpen: (e: CalEvent) => void } & PlanProps) {
   const days = useMemo(() => {
-    const out: { day: Date; list: CalEvent[]; plans: DayPlan[]; meals: MealTime[] }[] = [];
+    const out: { day: Date; list: CalEvent[]; plans: DayPlan[]; meals: MealTime[]; extras: Extra[] }[] = [];
     for (const day of eachDayOfInterval({ start: from, end: to })) {
       const list = sortEvents(events.filter((e) => onDay(e, day)));
       const plans = plansOn(day);
       const meals = mealsOn(day);
-      if (list.length || plans.length || meals.length) out.push({ day, list, plans, meals });
+      const extras = extrasOn(day);
+      if (list.length || plans.length || meals.length || extras.length) out.push({ day, list, plans, meals, extras });
     }
     return out;
-  }, [events, from, to, plansOn, mealsOn]);
+  }, [events, from, to, plansOn, mealsOn, extrasOn]);
 
   if (!days.length) return <Empty text="Wide open. Nothing planned." />;
   return (
     <div className="agenda">
-      {days.map(({ day, list, plans, meals }) => (
+      {days.map(({ day, list, plans, meals, extras }) => (
         <section key={day.toISOString()} className="agenda-day">
           <h3>
             {format(day, "EEEE, MMM d")}
@@ -494,7 +561,7 @@ function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan, mealsOn, onOpen
             {list.map((e) => (
               <EventCard key={e.id} e={e} onOpen={onOpen} />
             ))}
-            <Together plans={plans} meals={meals} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
+            <Together plans={plans} meals={meals} extras={extras} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
           </div>
         </section>
       ))}
@@ -502,7 +569,7 @@ function Agenda({ events, from, to, onOpen, plansOn, onOpenPlan, mealsOn, onOpen
   );
 }
 
-function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
+function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal, extrasOn }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(cursor)), end: endOfWeek(endOfMonth(cursor)) });
   const selected = sortEvents(events.filter((e) => onDay(e, cursor)));
   const personColor = usePersonColor();
@@ -529,18 +596,18 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn
                 ))}
               </span>
               {list.length > 3 && <span className="mmore">+{list.length - 3}</span>}
-              {(plansOn(d).length > 0 || mealsOn(d).length > 0) && <span className="mplan" aria-hidden />}
+              {(plansOn(d).length > 0 || mealsOn(d).length > 0 || extrasOn(d).length > 0) && <span className="mplan" aria-hidden />}
             </button>
           );
         })}
       </div>
       <h3 style={{ margin: "18px 0 8px" }}>{format(cursor, "EEEE, MMM d")}</h3>
-      {selected.length || plansOn(cursor).length || mealsOn(cursor).length ? (
+      {selected.length || plansOn(cursor).length || mealsOn(cursor).length || extrasOn(cursor).length ? (
         <div className="stack-sm">
           {selected.map((e) => (
             <EventCard key={e.id} e={e} onOpen={onOpen} />
           ))}
-          <Together plans={plansOn(cursor)} meals={mealsOn(cursor)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
+          <Together plans={plansOn(cursor)} meals={mealsOn(cursor)} extras={extrasOn(cursor)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
         </div>
       ) : (
         <p className="muted">Nothing that day.</p>
@@ -549,7 +616,7 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn
   );
 }
 
-function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
+function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal, extrasOn }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(cursor) });
   return (
     <div className="card" style={{ padding: "4px 12px" }}>
@@ -565,8 +632,8 @@ function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn,
               {list.map((e) => (
                 <EventCard key={e.id} e={e} onOpen={onOpen} />
               ))}
-              <Together plans={plansOn(d)} meals={mealsOn(d)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
-              {!list.length && !plansOn(d).length && !mealsOn(d).length && <span className="faint small" style={{ paddingTop: 8 }}>—</span>}
+              <Together plans={plansOn(d)} meals={mealsOn(d)} extras={extrasOn(d)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
+              {!list.length && !plansOn(d).length && !mealsOn(d).length && !extrasOn(d).length && <span className="faint small" style={{ paddingTop: 8 }}>—</span>}
             </div>
           </div>
         );
@@ -575,14 +642,14 @@ function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn,
   );
 }
 
-function Day({ day, events, onOpen, plans, onOpenPlan, meals, onOpenMeal }: { day: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; plans: DayPlan[]; onOpenPlan: (id: string) => void; meals: MealTime[]; onOpenMeal: (m: MealTime) => void }) {
+function Day({ day, events, onOpen, plans, onOpenPlan, meals, onOpenMeal, extras }: { day: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; plans: DayPlan[]; onOpenPlan: (id: string) => void; meals: MealTime[]; onOpenMeal: (m: MealTime) => void; extras: Extra[] }) {
   const list = events.filter((e) => onDay(e, day));
   const personColor = usePersonColor();
   const allDay = list.filter((e) => e.all_day);
   const timed = list.filter((e) => !e.all_day).sort((a, b) => startOf(a).getTime() - startOf(b).getTime());
   const dayStart = startOfDay(day);
 
-  const firstHour = Math.min(7, ...timed.map((e) => (startOf(e) < dayStart ? 0 : startOf(e).getHours())), ...plans.map((p) => planStart(p).getHours()), ...meals.map((m) => Number(m.at.slice(0, 2))));
+  const firstHour = Math.min(7, ...timed.map((e) => (startOf(e) < dayStart ? 0 : startOf(e).getHours())), ...plans.map((p) => planStart(p).getHours()), ...meals.map((m) => Number(m.at.slice(0, 2))), ...extras.map((x) => Number(x.at.slice(0, 2))));
   const hours = Array.from({ length: 24 - firstHour }, (_, i) => firstHour + i);
 
   // Greedy lanes so overlapping plans sit side by side.
@@ -621,20 +688,41 @@ function Day({ day, events, onOpen, plans, onOpenPlan, meals, onOpenMeal }: { da
           const s = planStart(p);
           const top = (differenceInMinutes(s, dayStart) / 60 - firstHour) * HOUR_PX;
           const height = Math.max(26, (differenceInMinutes(planEnd(p), s) / 60) * HOUR_PX - 2);
-          const steps = planSteps(p);
+          // Steps with a set time sit at their time; the rest are listed in the block.
+          const loose = [...p.day_plan_items].sort((a, b) => a.position - b.position).filter((i) => !i.at_time).map((i) => i.text);
           return (
             <button key={p.id} className="plan-bg" style={{ top, height }} onClick={() => onOpenPlan(p.id)}>
               <strong>{p.title || "Time together"}</strong>
-              {steps.length > 0 && <span>{steps.join(" → ")}</span>}
+              {loose.length > 0 && <span>{loose.join(" → ")}</span>}
             </button>
           );
         })}
+        {plans.flatMap((p) =>
+          p.day_plan_items
+            .filter((i) => i.at_time)
+            .map((i) => {
+              const [h, m] = i.at_time!.split(":").map(Number);
+              return (
+                <button key={i.id} className="step-tag" style={{ top: (h + m / 60 - firstHour) * HOUR_PX }} onClick={() => onOpenPlan(p.id)}>
+                  {timeLabel(new Date(2000, 0, 1, h, m))} · {i.text}
+                </button>
+              );
+            }),
+        )}
         {/* Timed meals: a small tag at their time, on the right, above plans. */}
         {meals.map((m) => {
           const top = (Number(m.at.slice(0, 2)) + Number(m.at.slice(3, 5)) / 60 - firstHour) * HOUR_PX;
           return (
             <button key={m.meal} className="meal-tag" style={{ top }} onClick={() => onOpenMeal(m)}>
               {MEAL_EMOJI[m.meal]} {MEAL_LABEL[m.meal]} · {mealWhen(m)}
+            </button>
+          );
+        })}
+        {extras.map((x) => {
+          const top = (Number(x.at.slice(0, 2)) + Number(x.at.slice(3, 5)) / 60 - firstHour) * HOUR_PX;
+          return (
+            <button key={x.key} className={`meal-tag pin-tag${x.done ? " done" : ""}`} style={{ top }} onClick={x.open}>
+              {x.emoji} {x.text} · {x.when}
             </button>
           );
         })}
@@ -658,7 +746,7 @@ function Day({ day, events, onOpen, plans, onOpenPlan, meals, onOpenMeal }: { da
           );
         })}
       </div>
-      {list.length === 0 && plans.length === 0 && meals.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Nothing planned — a free day.</p>}
+      {list.length === 0 && plans.length === 0 && meals.length === 0 && extras.length === 0 && <p className="muted" style={{ marginTop: 12 }}>Nothing planned — a free day.</p>}
     </div>
   );
 }

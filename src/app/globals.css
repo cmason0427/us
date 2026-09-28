@@ -894,7 +894,17 @@ div.dash-row { cursor: default; }
 
 /* ─── Theater ───────────────────────────────────────────────────────────── */
 .theater-list { display: flex; flex-direction: column; gap: 8px; }
-.theater-item { display: flex; align-items: flex-start; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 12px 14px; }
+/* A plan step with a set time, at its time inside the time block (day view). */
+.step-tag { position: absolute; left: 56px; z-index: 2; transform: translateY(-50%); max-width: calc(100% - 64px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 9px; border-radius: 999px; font: inherit; font-size: 0.72rem; font-weight: 650; color: var(--ink); cursor: pointer; background: var(--surface); border: 1.5px solid color-mix(in srgb, var(--ev-plan) 90%, #000 10%); }
+.theater-item { display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; color: inherit; padding: 8px 10px 8px 12px; }
+.theater-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.theater-check { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink-faint); font: inherit; font-weight: 700; cursor: pointer; }
+.theater-check.on { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+.theater-filters { padding: 10px 12px; }
+.theater-whose { display: flex; flex-direction: column; gap: 2px; }
+.theater-whose input[type="range"] { width: 100%; accent-color: var(--terracotta); }
+.theater-whose-labels { display: flex; justify-content: space-between; color: var(--ink-faint); }
+.theater-whose-labels [data-on="true"] { color: var(--ink); font-weight: 700; }
 .theater-kind { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 1.15rem; background: color-mix(in srgb, #8f6ccf 16%, var(--surface)); flex-shrink: 0; }
 .lt-tile-label { border: 0; background: none; padding: 0; font-family: inherit; text-align: left; cursor: pointer; }
 .lt-val { border: 0; background: none; padding: 2px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
@@ -1195,3 +1205,12 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .meal-card { background: color-mix(in srgb, var(--butter) 45%, transparent); border-color: color-mix(in srgb, var(--terracotta) 55%, transparent); }
 .meal-tag { position: absolute; right: 4px; z-index: 3; transform: translateY(-50%); padding: 3px 9px; border-radius: 999px; font: inherit; font-size: 0.72rem; font-weight: 650; color: var(--ink); cursor: pointer; background: color-mix(in srgb, var(--butter) 80%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--terracotta) 60%, transparent); box-shadow: 0 2px 6px rgb(0 0 0 / 0.08); }
 .money-dayt-set { font-size: 0.6rem; margin-left: 2px; color: var(--terracotta); vertical-align: super; }
+.pin-card { background: color-mix(in srgb, var(--surface) 70%, transparent); border-style: solid; border-color: var(--line); }
+.pin-card.done strong, .pin-tag.done { text-decoration: line-through; opacity: 0.6; }
+.pin-tag { background: var(--surface); border-color: var(--line); max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.claim-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.claim-row .claim { margin: 0; }
+.ask-note { color: var(--terracotta); font-weight: 650; flex-basis: 100%; }
+.ask-inline { color: var(--terracotta); font-weight: 650; }
+/* A time block's title and loose steps sit at its top, clear of timed steps. */
+.plan-bg { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; }

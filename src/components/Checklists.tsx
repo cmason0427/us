@@ -10,6 +10,7 @@ import type { ListType, Task } from "@/lib/types";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { addToShopping } from "./Shopping";
+import { notify } from "@/lib/notify";
 
 /**
  * Checklists: a to-do made of items, like a shopping trip ("chore day":
@@ -25,6 +26,10 @@ export interface TaskItem {
   text: string;
   done: boolean;
   position: number;
+  /** "I'll get this one." */
+  claimed_by?: string | null;
+  /** "Can you get this one?" */
+  asked_for?: string | null;
 }
 
 export interface ChecklistPreset {
@@ -106,7 +111,9 @@ async function finishIfEmpty(taskId: string, meId: string, el?: HTMLElement | nu
 
 /** Under a to-do: "2 of 5" and the items, each checkable, removable or movable. */
 export function ChecklistItems({ task, items, otherLists }: { task: Task; items: TaskItem[]; otherLists: Task[] }) {
-  const { meId, toast } = useApp();
+  const { meId, toast, partner, nameOf } = useApp();
+  // Taking and asking only make sense on shared lists.
+  const shared = task.list_type !== "personal" && !!partner;
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState("");
   const [moving, setMoving] = useState<TaskItem | null>(null);
@@ -121,6 +128,21 @@ export function ChecklistItems({ task, items, otherLists }: { task: Task; items:
       if (task.done) await supabase.from("tasks").update({ done: false, done_at: null, done_by: null }).eq("id", task.id);
       refreshAll();
     }
+  }
+  async function claim(i: TaskItem) {
+    const mine = i.claimed_by === meId;
+    await supabase.from("task_items").update({ claimed_by: mine ? null : meId, ...(mine ? {} : { asked_for: null }) }).eq("id", i.id);
+    refreshAll();
+  }
+  async function ask(i: TaskItem, on: boolean) {
+    if (!partner) return;
+    const { error } = await supabase.from("task_items").update({ asked_for: on ? partner.id : null }).eq("id", i.id);
+    if (error) return toast(error.message);
+    if (on) {
+      notify({ kind: "item_ask", id: i.id });
+      toast(`Asked ${partner.display_name}. No pressure either way.`);
+    }
+    refreshAll();
   }
   async function remove(i: TaskItem) {
     await supabase.from("task_items").delete().eq("id", i.id);
@@ -169,7 +191,24 @@ export function ChecklistItems({ task, items, otherLists }: { task: Task; items:
           {items.map((i) => (
             <div key={i.id} className={`checklist-item${i.done ? " done" : ""}`}>
               <input type="checkbox" className="check check-sm" checked={i.done} onChange={(e) => toggle(i, e.currentTarget)} aria-label={`Done: ${i.text}`} />
-              <span className="grow">{i.text}</span>
+              <span className="grow">
+                {i.text}
+                {!i.done && i.claimed_by && <span className="small faint"> · 🙋 {i.claimed_by === meId ? "you" : nameOf(i.claimed_by)}</span>}
+                {!i.done && !i.claimed_by && i.asked_for === meId && <span className="small ask-inline"> · 🙏 {partner?.display_name} asked you</span>}
+                {!i.done && !i.claimed_by && i.asked_for && i.asked_for !== meId && <span className="small faint"> · 🙏 asked {nameOf(i.asked_for)}</span>}
+              </span>
+              {shared && !i.done && (
+                <>
+                  <button className="claim claim-sm" onClick={() => claim(i)} aria-pressed={i.claimed_by === meId} aria-label={i.claimed_by === meId ? `Let go of ${i.text}` : `I'll get ${i.text}`}>
+                    🙋
+                  </button>
+                  {!i.claimed_by && (
+                    <button className="claim claim-sm" onClick={() => ask(i, !i.asked_for)} aria-pressed={!!i.asked_for} aria-label={i.asked_for === meId ? `Not this time: ${i.text}` : i.asked_for ? `Take back the ask for ${i.text}` : `Ask ${partner?.display_name} to get ${i.text}`}>
+                      {i.asked_for === meId ? "not now" : "🙏"}
+                    </button>
+                  )}
+                </>
+              )}
               {!i.done && (
                 <button className="btn-link small" onClick={() => setMoving(i)} aria-label={`Move ${i.text}`}>
                   move

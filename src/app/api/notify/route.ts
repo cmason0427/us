@@ -22,6 +22,8 @@ type Body =
   | { kind: "energy_request" }
   | { kind: "status" }
   | { kind: "deck"; id: string }
+  | { kind: "task_ask"; id: string }
+  | { kind: "item_ask"; id: string }
   | { kind: "test" };
 
 /**
@@ -189,6 +191,25 @@ export async function POST(req: Request) {
       ? `${myName} is bringing ${name(c.their_deck) ?? "a deck"} 🎲`
       : [c.my_deck ? `${myName} is bringing ${name(c.my_deck) ?? "a deck"}.` : null, c.asking ? "Which are you bringing?" : null].filter(Boolean).join(" ");
     const sent = await sendPushToUser(partner.id, { title: "🎲 Game night", body: text || `${myName} called their deck`, url: "/nerd", tag: `deck-${c.id}` });
+    return NextResponse.json({ sent });
+  }
+
+  // "Can you do this?" on a to-do or a checklist item: soft, no pressure, and
+  // it follows the asks setting like other direct asks.
+  if (body.kind === "task_ask" || body.kind === "item_ask") {
+    let title: string | null = null;
+    if (body.kind === "task_ask") {
+      const { data: t } = await supabase.from("tasks").select("title, asked_for, list_type").eq("id", body.id).single();
+      if (!t || t.asked_for !== partner.id || t.list_type === "personal") return NextResponse.json({ error: "nothing to send" }, { status: 400 });
+      title = t.title;
+    } else {
+      const { data: i } = await supabase.from("task_items").select("text, asked_for, tasks(title)").eq("id", body.id).single();
+      if (!i || i.asked_for !== partner.id) return NextResponse.json({ error: "nothing to send" }, { status: 400 });
+      const parent = (i.tasks as unknown as { title: string } | null)?.title;
+      title = parent ? `${i.text} (${parent})` : i.text;
+    }
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const sent = await sendPushToUser(partner.id, { title: `🙏 ${myName} asked`, body: `Could you get to "${title}"? Whenever works, and no is fine.`, url: "/lists", tag: `ask-${body.id}` });
     return NextResponse.json({ sent });
   }
 

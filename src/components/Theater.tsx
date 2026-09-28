@@ -14,9 +14,14 @@ interface Watch {
   tags: string[];
   notes: string | null;
   watched_at: string | null;
+  /** Whose pick it is; null = either of us. */
+  whose: string | null;
   added_by: string;
   created_at: string;
 }
+
+/** The "whose" slider: just mine, anything, just theirs. */
+type Whose = 0 | 1 | 2;
 
 /** Tags to start from; anything you type becomes a tag too. */
 const SUGGESTED = ["Sad", "Not sad", "Nostalgic", "New to us", "Funny", "Cozy", "Scary", "Romantic", "Action", "Animated", "Documentary", "Rewatch"];
@@ -27,7 +32,7 @@ const KIND_ICON = { movie: "🎬", show: "📺" } as const;
  * optional), then search and filter by movie vs show and any tag.
  */
 export function Theater() {
-  const { nameOf, meId, toast } = useApp();
+  const { nameOf, meId, partner, toast } = useApp();
   const supabase = supabaseBrowser();
   const { data: items = [] } = useLive<Watch[]>(
     "watchlist",
@@ -41,24 +46,33 @@ export function Theater() {
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<Watch["kind"]>("movie");
   const [search, setSearch] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [kindFilter, setKindFilter] = useState<Watch["kind"] | null>(null);
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [whose, setWhose] = useState<Whose>(1);
   const [watched, setWatched] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [several, setSeveral] = useState(false);
 
+  const them = partner?.id ?? "";
+  const theirName = partner?.display_name ?? "Them";
   const allTags = [...new Set([...SUGGESTED, ...items.flatMap((i) => i.tags)])];
+  // Search covers titles, tags and notes, so there's no wall of tag buttons.
   const q = search.trim().toLowerCase();
   const shown = items.filter(
     (i) =>
       !!i.watched_at === watched &&
       (!kindFilter || i.kind === kindFilter) &&
-      tagFilter.every((t) => i.tags.includes(t)) &&
+      (whose === 1 || (whose === 0 ? i.whose !== them : i.whose !== meId)) &&
       (!q || i.title.toLowerCase().includes(q) || i.tags.some((t) => t.toLowerCase().includes(q)) || (i.notes ?? "").toLowerCase().includes(q)),
   );
-  const filterCount = (kindFilter ? 1 : 0) + tagFilter.length + (watched ? 1 : 0);
   const openItem = items.find((i) => i.id === open);
+  const pickLabel = (i: Watch) => (i.whose === meId ? "mine" : i.whose ? `${nameOf(i.whose)}'s` : null);
+
+  async function toggleWatched(i: Watch) {
+    const { error } = await supabase.from("watchlist").update({ watched_at: i.watched_at ? null : new Date().toISOString() }).eq("id", i.id);
+    if (error) return toast(error.message);
+    refreshAll();
+    toast(i.watched_at ? "Back on the list" : `Watched ✓ ${i.title}`);
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -92,67 +106,63 @@ export function Theater() {
         </button>
       </form>
 
-      <div className="row">
-        <input className="input grow" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" aria-label="Search the list" />
-        <button className="btn btn-sm btn-ghost" aria-pressed={showFilters || filterCount > 0} onClick={() => setShowFilters((f) => !f)}>
-          Filter{filterCount ? ` (${filterCount})` : ""}
-        </button>
-      </div>
-      {showFilters && (
-        <div className="card stack-sm" style={{ padding: "10px 12px" }}>
-          <div className="chips">
-            <button className="chip chip-sm" aria-pressed={!watched} onClick={() => setWatched(false)}>
+      {/* Filters: a search, a whose-pick slider, and two small switches. */}
+      <div className="card stack-sm theater-filters">
+        <input className="input input-sm" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search titles, tags, notes…" aria-label="Search the list" />
+        <label className="theater-whose">
+          <input type="range" min={0} max={2} step={1} value={whose} onChange={(e) => setWhose(Number(e.target.value) as Whose)} aria-label="Whose pick" />
+          <span className="theater-whose-labels small">
+            <span data-on={whose === 0}>mine</span>
+            <span data-on={whose === 1}>anything</span>
+            <span data-on={whose === 2}>{theirName.toLowerCase()}&apos;s</span>
+          </span>
+        </label>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <div className="seg seg-sm" role="group" aria-label="Movies or shows">
+            <button aria-pressed={kindFilter === null} onClick={() => setKindFilter(null)}>
+              All
+            </button>
+            <button aria-pressed={kindFilter === "movie"} onClick={() => setKindFilter("movie")}>
+              🎬
+            </button>
+            <button aria-pressed={kindFilter === "show"} onClick={() => setKindFilter("show")}>
+              📺
+            </button>
+          </div>
+          <div className="seg seg-sm" role="group" aria-label="To watch or watched">
+            <button aria-pressed={!watched} onClick={() => setWatched(false)}>
               To watch
             </button>
-            <button className="chip chip-sm" aria-pressed={watched} onClick={() => setWatched(true)}>
+            <button aria-pressed={watched} onClick={() => setWatched(true)}>
               Watched
             </button>
-            <span className="small faint">·</span>
-            <button className="chip chip-sm" aria-pressed={kindFilter === "movie"} onClick={() => setKindFilter(kindFilter === "movie" ? null : "movie")}>
-              🎬 Movies
-            </button>
-            <button className="chip chip-sm" aria-pressed={kindFilter === "show"} onClick={() => setKindFilter(kindFilter === "show" ? null : "show")}>
-              📺 Shows
-            </button>
           </div>
-          <div className="chips">
-            {allTags.map((t) => (
-              <button key={t} className="chip chip-sm" aria-pressed={tagFilter.includes(t)} onClick={() => setTagFilter(tagFilter.includes(t) ? tagFilter.filter((x) => x !== t) : [...tagFilter, t])}>
-                {t}
-              </button>
-            ))}
-          </div>
-          {filterCount > 0 && (
-            <button className="btn-link small" style={{ alignSelf: "flex-start" }} onClick={() => (setKindFilter(null), setTagFilter([]), setWatched(false))}>
-              Clear
-            </button>
-          )}
         </div>
-      )}
+      </div>
 
       {shown.length === 0 ? (
         <p className="muted">{items.length ? "Nothing matches." : "Nothing on the list yet. Add the next thing you want to watch."}</p>
       ) : (
         <div className="theater-list">
           {shown.map((i) => (
-            <button key={i.id} className="card theater-item" onClick={() => setOpen(i.id)}>
-              <span className="theater-kind" aria-label={i.kind}>
-                {KIND_ICON[i.kind]}
-              </span>
-              <span className="grow">
-                <strong>{i.title}</strong>
-                {i.tags.length > 0 && (
-                  <span className="chips" style={{ marginTop: 4 }}>
-                    {i.tags.map((t) => (
-                      <span key={t} className="sticker">
-                        {t}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </span>
-              <span className="small faint">{i.added_by === meId ? "you" : nameOf(i.added_by)}</span>
-            </button>
+            <div key={i.id} className="card theater-item">
+              <button className="theater-open" onClick={() => setOpen(i.id)}>
+                <span className="theater-kind" aria-label={i.kind}>
+                  {KIND_ICON[i.kind]}
+                </span>
+                <span className="grow">
+                  <strong>{i.title}</strong>
+                  {(pickLabel(i) || i.tags.length > 0) && (
+                    <span className="small faint" style={{ display: "block" }}>
+                      {[pickLabel(i), ...i.tags].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </span>
+              </button>
+              <button className={`theater-check${i.watched_at ? " on" : ""}`} onClick={() => toggleWatched(i)} aria-pressed={!!i.watched_at} aria-label={i.watched_at ? `Put ${i.title} back on the list` : `Mark ${i.title} watched`}>
+                ✓
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -164,12 +174,14 @@ export function Theater() {
             noun="titles"
             columns={[
               { key: "kind", label: "Movie or show", options: [{ v: "movie", label: "🎬 Movie" }, { v: "show", label: "📺 Show" }], required: true, initial: kind },
+              { key: "whose", label: "Whose pick", options: [{ v: "either", label: "Either" }, { v: "mine", label: "Mine" }, ...(partner ? [{ v: "theirs", label: `${partner.display_name}'s` }] : [])], initial: "either" },
               { key: "tags", label: "Tags (optional)", options: allTags.map((t) => ({ v: t, label: t })), multi: true },
             ]}
             onSave={async (rows: BatchRow[]) => {
+              const whoseOf = (v: unknown) => (v === "mine" ? meId : v === "theirs" ? them || null : null);
               const { error } = await supabase
                 .from("watchlist")
-                .insert(rows.map((r) => ({ title: r.name, kind: r.values.kind as Watch["kind"], tags: (r.values.tags as string[]) ?? [], added_by: meId })));
+                .insert(rows.map((r) => ({ title: r.name, kind: r.values.kind as Watch["kind"], whose: whoseOf(r.values.whose), tags: (r.values.tags as string[]) ?? [], added_by: meId })));
               if (error) return error.message;
               refreshAll();
               toast(`Added ${rows.length} 🍿`);
@@ -185,7 +197,7 @@ export function Theater() {
 }
 
 function WatchSheet({ item, allTags, onClose }: { item: Watch; allTags: string[]; onClose: () => void }) {
-  const { toast } = useApp();
+  const { toast, meId, partner } = useApp();
   const supabase = supabaseBrowser();
   const [newTag, setNewTag] = useState("");
   const [notes, setNotes] = useState(item.notes ?? "");
@@ -205,6 +217,22 @@ function WatchSheet({ item, allTags, onClose }: { item: Watch; allTags: string[]
           <button aria-pressed={item.kind === "show"} onClick={() => patch({ kind: "show" })}>
             📺 Show
           </button>
+        </div>
+        <div className="field">
+          <span>Whose pick</span>
+          <div className="seg seg-sm" role="group" aria-label="Whose pick">
+            <button aria-pressed={item.whose === meId} onClick={() => patch({ whose: meId })}>
+              Mine
+            </button>
+            <button aria-pressed={!item.whose} onClick={() => patch({ whose: null })}>
+              Either
+            </button>
+            {partner && (
+              <button aria-pressed={item.whose === partner.id} onClick={() => patch({ whose: partner.id })}>
+                {partner.display_name}&apos;s
+              </button>
+            )}
+          </div>
         </div>
         <div className="field">
           <span>Tags</span>

@@ -14,8 +14,8 @@ import { StarForm } from "./StarForm";
 import { MealForm, PlaceForm } from "./FoodForms";
 import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
 import { ShopAdd } from "./Shopping";
-import { RequestsList } from "./Requests";
-import { FoodRequests } from "./FoodRequests";
+import { AllRequests } from "./FoodRequests";
+import { PinForm } from "./Pins";
 import { GoalForm } from "./Goals";
 import { StatusPicker } from "./Status";
 import { TaskPresetForm } from "./TaskForm";
@@ -29,6 +29,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
   {
     title: "Us",
     items: [
+      { kind: "requests", emoji: "💌", label: "Requests" },
       { kind: "post", emoji: "🌼", label: "Update" },
       { kind: "star", emoji: "⭐", label: "Star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
@@ -41,7 +42,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "Calendar",
     items: [
       { kind: "event", emoji: "📅", label: "Event" },
-      { kind: "requests", emoji: "💌", label: "Requests" },
+      { kind: "pin", emoji: "📍", label: "Pin a time" },
       { kind: "event-preset", emoji: "📌", label: "Presets" },
     ],
   },
@@ -49,7 +50,6 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "Food",
     items: [
       { kind: "meal-suggest", emoji: "🍽️", label: "Suggest a meal" },
-      { kind: "food-requests", emoji: "💌", label: "Food requests" },
       { kind: "meal", emoji: "🍳", label: "Home meal" },
       { kind: "place", emoji: "📍", label: "Place" },
     ],
@@ -94,7 +94,8 @@ const TITLES: Record<AddKind, string> = {
   shop: "Shopping list",
   "meal-suggest": "Suggest a meal",
   requests: "Requests",
-  "food-requests": "Food requests",
+  "food-requests": "Requests",
+  pin: "📍 Pin something at a time",
   "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
@@ -169,8 +170,8 @@ export function AddSheet() {
       {addOpen === "shop" && <ShopAdd onDone={closeAdd} />}
       {addOpen === "status" && <StatusPicker onDone={closeAdd} />}
       {addOpen === "goal" && <GoalForm onDone={closeAdd} />}
-      {addOpen === "requests" && <RequestsList onDone={closeAdd} />}
-      {addOpen === "food-requests" && <FoodRequests />}
+      {(addOpen === "requests" || addOpen === "food-requests") && <AllRequests />}
+      {addOpen === "pin" && <PinForm onDone={closeAdd} />}
       {addOpen === "event-preset" && (
         <div className="stack">
           <Link href="/presets" className="btn btn-block" onClick={closeAdd}>

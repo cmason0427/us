@@ -13,9 +13,9 @@ export interface MealTime {
   set_by: string;
 }
 
-/** What a meal at this time is called: before 10:30 breakfast, before 3 lunch, then dinner. */
+/** What a meal at this time is called: before 10 breakfast, before 3 lunch, then dinner. */
 export function mealForTime(hhmm: string): MealName {
-  if (hhmm < "10:30") return "breakfast";
+  if (hhmm < "10:00") return "breakfast";
   if (hhmm < "15:00") return "lunch";
   return "dinner";
 }
@@ -37,6 +37,26 @@ export function useMealTimesRange(from: string, to: string) {
 
 export function useMealTime(day: string, meal: MealName) {
   return useMealTimesRange(day, day).find((m) => m.meal === meal) ?? null;
+}
+
+/**
+ * Give an existing meal a time. If the time says it's a different meal (noon
+ * on "breakfast"), the meal and its messages move there, unless that meal is
+ * already going, in which case it keeps its name. Returns what it ended up as.
+ */
+export async function retimeMeal(day: string, meal: MealName, at: string, meId: string): Promise<{ meal: MealName; error: string | null }> {
+  const target = mealForTime(at);
+  if (target === meal) return { meal, error: await setMealTime(day, meal, at, meId) };
+  const db = supabaseBrowser();
+  const [{ count: busy }, { data: taken }] = await Promise.all([
+    db.from("lunch_msgs").select("id", { count: "exact", head: true }).eq("day", day).eq("meal", target),
+    db.from("meal_times").select("meal").eq("day", day).eq("meal", target).maybeSingle(),
+  ]);
+  if (busy || taken) return { meal, error: await setMealTime(day, meal, at, meId) };
+  const { error } = await db.from("lunch_msgs").update({ meal: target }).eq("day", day).eq("meal", meal);
+  if (error) return { meal, error: error.message };
+  await db.from("meal_times").delete().eq("day", day).eq("meal", meal);
+  return { meal: target, error: await setMealTime(day, target, at, meId) };
 }
 
 /** Set (or clear, with null) a meal's time. */
