@@ -616,28 +616,117 @@ function Month({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn
   );
 }
 
+/** Seven days side by side on one time grid: events and time blocks as blocks, meals and pins as little marks. */
 function Week({ cursor, events, onOpen, onPickDay, plansOn, onOpenPlan, mealsOn, onOpenMeal, extrasOn }: { cursor: Date; events: CalEvent[]; onOpen: (e: CalEvent) => void; onPickDay: (d: Date) => void } & PlanProps) {
   const days = eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(cursor) });
+  const personColor = usePersonColor();
+  const PX = 34;
+  const cols = days.map((d) => {
+    const dayStart = startOfDay(d);
+    const list = events.filter((e) => onDay(e, d));
+    const timed = list.filter((e) => !e.all_day).sort((a, b) => startOf(a).getTime() - startOf(b).getTime());
+    return { d, dayStart, allDay: list.filter((e) => e.all_day), timed, plans: plansOn(d), meals: mealsOn(d), extras: extrasOn(d) };
+  });
+  // Show the hours that matter this week (at least 8 am–10 pm).
+  const hrs: number[] = [8, 22];
+  for (const c of cols) {
+    for (const e of c.timed) {
+      hrs.push(startOf(e) < c.dayStart ? 0 : startOf(e).getHours());
+      hrs.push(Math.min(24, endOf(e).getHours() + 1));
+    }
+    for (const p of c.plans) hrs.push(planStart(p).getHours(), Math.min(24, planEnd(p).getHours() + 1));
+    for (const m of [...c.meals.map((x) => x.at), ...c.extras.map((x) => x.at)]) hrs.push(Number(m.slice(0, 2)), Number(m.slice(0, 2)) + 1);
+  }
+  const first = Math.min(...hrs);
+  const last = Math.max(...hrs);
+  const hours = Array.from({ length: last - first }, (_, k) => first + k);
+  const y = (h: number, m = 0) => (h + m / 60 - first) * PX;
+  const hasAllDay = cols.some((c) => c.allDay.length > 0);
+
   return (
-    <div className="card" style={{ padding: "4px 12px" }}>
-      {days.map((d) => {
-        const list = sortEvents(events.filter((e) => onDay(e, d)));
-        return (
-          <div key={d.toISOString()} className={`week-day${isToday(d) ? " today" : ""}`}>
-            <button className="week-date btn-ghost" style={{ border: "none", background: "none", cursor: "pointer" }} onClick={() => onPickDay(d)}>
-              <div className="w">{format(d, "EEE")}</div>
-              <div className="d">{format(d, "d")}</div>
-            </button>
-            <div className="stack-sm">
-              {list.map((e) => (
-                <EventCard key={e.id} e={e} onOpen={onOpen} />
+    <div className="wk">
+      <div className="wk-head">
+        <span />
+        {cols.map(({ d }) => (
+          <button key={d.toISOString()} className={`wk-date${isToday(d) ? " today" : ""}`} onClick={() => onPickDay(d)} aria-label={`Open ${format(d, "EEEE MMM d")}`}>
+            <span className="w">{format(d, "EEEEE")}</span>
+            <span className="d">{format(d, "d")}</span>
+          </button>
+        ))}
+      </div>
+      {hasAllDay && (
+        <div className="wk-allday">
+          <span />
+          {cols.map((c) => (
+            <div key={c.d.toISOString()} className="wk-col-allday">
+              {c.allDay.map((e) => (
+                <button key={e.id} className="ev wk-chip" data-type={effectiveType(e)} data-person={personColor(e)} data-color={e.color ?? undefined} style={markStyle(e)} onClick={() => onOpen(e)}>
+                  {e.title}
+                </button>
               ))}
-              <Together plans={plansOn(d)} meals={mealsOn(d)} extras={extrasOn(d)} onOpenPlan={onOpenPlan} onOpenMeal={onOpenMeal} />
-              {!list.length && !plansOn(d).length && !mealsOn(d).length && !extrasOn(d).length && <span className="faint small" style={{ paddingTop: 8 }}>—</span>}
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      )}
+      <div className="wk-body" style={{ height: hours.length * PX }}>
+        <div className="wk-gutter">
+          {hours.map((h) => (
+            <span key={h} style={{ top: y(h) }}>
+              {format(new Date(2000, 0, 1, h), "ha").toLowerCase().replace("m", "")}
+            </span>
+          ))}
+        </div>
+        {cols.map((c) => {
+          // Greedy lanes so overlapping events sit side by side in the column.
+          const lanes: Date[] = [];
+          const placed = c.timed.map((e) => {
+            const st = startOf(e) < c.dayStart ? c.dayStart : startOf(e);
+            const en = new Date(Math.min(endOf(e).getTime(), endOfDay(c.d).getTime()));
+            let lane = lanes.findIndex((end) => end <= st);
+            if (lane === -1) lane = lanes.push(en) - 1;
+            else lanes[lane] = en;
+            return { e, st, en, lane };
+          });
+          const n = Math.max(1, lanes.length);
+          return (
+            <div key={c.d.toISOString()} className={`wk-col${isToday(c.d) ? " today" : ""}`}>
+              {hours.map((h) => (
+                <i key={h} className="wk-line" style={{ top: y(h) }} />
+              ))}
+              {c.plans.map((p) => {
+                const ps = planStart(p);
+                return (
+                  <button key={p.id} className="plan-bg wk-plan" style={{ top: y(ps.getHours(), ps.getMinutes()), height: Math.max(14, (differenceInMinutes(planEnd(p), ps) / 60) * PX - 2) }} onClick={() => onOpenPlan(p.id)} aria-label={p.title || "Time together"} />
+                );
+              })}
+              {placed.map(({ e, st, en, lane }) => (
+                <button
+                  key={e.id}
+                  className="ev wk-ev"
+                  data-type={effectiveType(e)}
+                  data-person={personColor(e)}
+                  data-color={e.color ?? undefined}
+                  style={{ ...markStyle(e), top: y(st.getHours(), st.getMinutes()), height: Math.max(14, (differenceInMinutes(en, st) / 60) * PX - 2), left: `${(lane / n) * 100}%`, width: `calc(${100 / n}% - 1px)` }}
+                  onClick={() => onOpen(e)}
+                >
+                  {e.title}
+                </button>
+              ))}
+              {c.meals.map((m) => (
+                <button key={m.meal} className="wk-mark" style={{ top: y(Number(m.at.slice(0, 2)), Number(m.at.slice(3, 5))) }} onClick={() => onOpenMeal(m)} aria-label={`${MEAL_LABEL[m.meal]} ${mealWhen(m)}`}>
+                  {MEAL_EMOJI[m.meal]}
+                </button>
+              ))}
+              {c.extras.map((x) => (
+                <button key={x.key} className={`wk-mark${x.done ? " done" : ""}`} style={{ top: y(Number(x.at.slice(0, 2)), Number(x.at.slice(3, 5))) }} onClick={x.open} aria-label={`${x.text} ${x.when}`}>
+                  {x.emoji}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <p className="small faint" style={{ marginTop: 6 }}>Tap a day to see it up close.</p>
     </div>
   );
 }

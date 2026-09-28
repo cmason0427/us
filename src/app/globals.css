@@ -1214,3 +1214,23 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .ask-inline { color: var(--terracotta); font-weight: 650; }
 /* A time block's title and loose steps sit at its top, clear of timed steps. */
 .plan-bg { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; }
+
+/* Week: seven narrow columns on one time grid */
+.wk { --wk-gutter: 26px; }
+.wk-head, .wk-allday { display: grid; grid-template-columns: var(--wk-gutter) repeat(7, 1fr); gap: 2px; }
+.wk-date { display: flex; flex-direction: column; align-items: center; padding: 4px 0; border: 0; background: none; font: inherit; color: var(--ink-soft); cursor: pointer; border-radius: 10px; }
+.wk-date .w { font-size: 0.62rem; font-weight: 700; color: var(--ink-faint); }
+.wk-date .d { font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+.wk-date.today { background: color-mix(in srgb, var(--terracotta) 16%, transparent); color: var(--ink); }
+.wk-col-allday { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wk-chip { font: inherit; font-size: 0.55rem; font-weight: 650; padding: 1px 3px; border-radius: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
+.wk-body { position: relative; display: grid; grid-template-columns: var(--wk-gutter) repeat(7, 1fr); gap: 2px; margin-top: 4px; border-top: 1.5px solid var(--line); }
+.wk-gutter { position: relative; }
+.wk-gutter span { position: absolute; left: 0; font-size: 0.55rem; font-weight: 650; color: var(--ink-faint); transform: translateY(1px); }
+.wk-col { position: relative; min-width: 0; border-radius: 4px; }
+.wk-col.today { background: color-mix(in srgb, var(--terracotta) 6%, transparent); }
+.wk-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.wk-plan { left: 0; right: 0; padding: 0; border-radius: 5px; }
+.wk-ev { position: absolute; padding: 1px 2px; font: inherit; font-size: 0.52rem; font-weight: 650; line-height: 1.15; overflow: hidden; text-align: left; cursor: pointer; border-radius: 5px; z-index: 2; word-break: break-word; }
+.wk-mark { position: absolute; right: 0; z-index: 3; transform: translateY(-50%); width: 18px; height: 18px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 0.62rem; line-height: 1; background: var(--surface); border: 1px solid var(--line); cursor: pointer; }
+.wk-mark.done { opacity: 0.5; }

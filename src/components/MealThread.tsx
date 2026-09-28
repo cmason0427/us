@@ -507,6 +507,7 @@ function PickerSheet({
 }) {
   const takeout = needsTakeout(place);
   const [filters, setFilters] = useState<FoodFilters>((picker.kind === "prefs" || picker.kind === "pick") && picker.start ? picker.start : { mode: place === "out" ? "out" : "cook" });
+  const [intent, setIntent] = useState<"suggest" | "inform">("suggest");
   const label = MEAL_LABEL[meal].toLowerCase();
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
@@ -554,7 +555,8 @@ function PickerSheet({
 
   const multi = picker.kind === "options";
   const onPick = (p: FoodPick) => {
-    if (!multi) return onSend(picker.kind === "surprise" ? "surprise" : "propose", { refs: [toRef(p)], note });
+    // "Just letting you know" is already decided: no request, nothing to answer.
+    if (!multi) return onSend(picker.kind === "surprise" ? "surprise" : intent === "inform" ? "decided" : "propose", { refs: [toRef(p)], note });
     setSelected((s) => {
       const n = new Map(s);
       if (n.has(p.item.id)) n.delete(p.item.id);
@@ -574,6 +576,17 @@ function PickerSheet({
             </button>
           </>
         )}
+        {picker.kind === "pick" && (
+          <div className="seg seg-sm" role="group" aria-label="Asking or telling">
+            <button aria-pressed={intent === "suggest"} onClick={() => setIntent("suggest")}>
+              💭 What do you think?
+            </button>
+            <button aria-pressed={intent === "inform"} onClick={() => setIntent("inform")}>
+              📣 Just letting you know
+            </button>
+          </div>
+        )}
+        {picker.kind === "pick" && intent === "inform" && <p className="small muted">It&apos;s decided as soon as you pick. Nothing for them to answer.</p>}
         {noteField}
         <FoodFilterPanel value={filters} onChange={setFilters} lockMode={place === "out"} takeoutOnly={takeout} />
         {takeout && filters.mode === "out" && <p className="small muted">Only places with takeout, drive-thru or delivery.</p>}
