@@ -33,6 +33,11 @@ when a decision is genuinely theirs to make.
 
 # Deploying (Netlify credits cost real money)
 
+**Current rule (from Charlie): do NOT push anything until she says "sendzzz".**
+Build, test locally and commit on the branch, but hold the push. When she
+says "sendzzz", push everything that's waiting in one go.
+
+
 Every push to `claude/festive-pasteur-p3rnc7` is a paid Netlify production
 build. Charlie already had to move to a paid plan, so:
 
@@ -42,3 +47,8 @@ build. Charlie already had to move to a paid plan, so:
   next batch?" first. No speculative "let's see if this fixes it" pushes.
 - Database migrations are applied directly (Supabase Management API) and don't
   need a deploy on their own.
+
+# Side project lives elsewhere
+
+Charlie's side project lives in its own private repo, `cmason0427/game`, not here and not on
+Netlify. Never add its code, assets, links or mentions to this repo or the app's UI.

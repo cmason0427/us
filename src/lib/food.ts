@@ -25,6 +25,9 @@ export interface HomeMeal {
   notes: string | null;
   created_by: string;
   meal_ingredients: { id: string; name: string; position: number }[];
+  /** Per serving, if known (Fuel & move fills these in when you log it). */
+  kcal?: number | null;
+  protein?: number | null;
 }
 
 type Opt = { v: string; label: string };

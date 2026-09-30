@@ -16,6 +16,8 @@ export interface Thread {
   last_by: string | null;
   last_at: string;
   created_by: string;
+  /** Background color for the whole board (null = default paper). */
+  bg?: string | null;
 }
 
 /** Every thread, plus when I last looked at each. */

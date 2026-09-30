@@ -17,6 +17,7 @@ import { ShopAdd } from "./Shopping";
 import { AllRequests } from "./FoodRequests";
 import { PinForm } from "./Pins";
 import { EatAsk } from "./EatCheck";
+import { QuickFoodLog } from "./Fit";
 import { GoalForm } from "./Goals";
 import { StatusPicker } from "./Status";
 import { TaskPresetForm } from "./TaskForm";
@@ -54,6 +55,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "meal-suggest", emoji: "🍽️", label: "Suggest a meal" },
       { kind: "meal", emoji: "🍳", label: "Home meal" },
       { kind: "place", emoji: "📍", label: "Place" },
+      { kind: "food-log", emoji: "🍗", label: "Log food eaten" },
     ],
   },
   {
@@ -99,6 +101,7 @@ const TITLES: Record<AddKind, string> = {
   "food-requests": "Requests",
   pin: "📍 Pin something at a time",
   "eat-check": "🚨 Did you eat?",
+  "food-log": "🍗 Log food eaten",
   "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
@@ -176,6 +179,7 @@ export function AddSheet() {
       {(addOpen === "requests" || addOpen === "food-requests") && <AllRequests />}
       {addOpen === "pin" && <PinForm onDone={closeAdd} />}
       {addOpen === "eat-check" && <EatAsk onDone={closeAdd} />}
+      {addOpen === "food-log" && <QuickFoodLog onDone={closeAdd} />}
       {addOpen === "event-preset" && (
         <div className="stack">
           <Link href="/presets" className="btn btn-block" onClick={closeAdd}>

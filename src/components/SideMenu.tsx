@@ -6,7 +6,7 @@ import { useEffect, type ComponentType, type SVGProps } from "react";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
 import { useSectionBadges } from "@/lib/badges";
-import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle } from "./Art";
+import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle, IconDumbbell } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
 type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -21,6 +21,7 @@ export const GROUPS: { title?: string; items: Section[] }[] = [
       { href: "/lists", label: "To-dos", Icon: IconList },
       { href: "/shopping", label: "Shopping", Icon: IconBag },
       { href: "/eat", label: "Food", Icon: IconFork },
+      { href: "/fit", label: "Fuel & move", Icon: IconDumbbell },
       { href: "/money", label: "My money", Icon: IconWallet },
     ],
   },

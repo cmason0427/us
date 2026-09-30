@@ -68,6 +68,11 @@ export const IconLeaf = (p: P) => (
     <path d="M12 12.5c-2.6-2.2-4.2-5.4-4.3-8.6 2.4 1.6 3.9 4.9 4.3 8.6zM12 12.5c2.6-2.2 4.2-5.4 4.3-8.6-2.4 1.6-3.9 4.9-4.3 8.6z" />
   </svg>
 );
+export const IconDumbbell = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M7 8v8M4 9.5v5M17 8v8M20 9.5v5M7 12h10" />
+  </svg>
+);
 export const IconBag = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
 );

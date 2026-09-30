@@ -40,6 +40,8 @@ type Look = { fs?: number; b?: boolean; font?: "sans" | "serif"; c?: string; al?
 type Box = { x: number; y: number; w: number; h: number; rot: number };
 type View = { x: number; y: number; z: number };
 
+// Board backgrounds: the default paper first, then a few colors and darks.
+const BGS = ["#fbf7f1", "#ffffff", "#fdeef2", "#eaf6ec", "#e8f0fb", "#f3ecfb", "#fff6d8", "#2b2525", "#1d2433"];
 const STICKY = ["#fff3a8", "#ffd1dc", "#c8f0c8", "#cfe3ff", "#ffd9b3", "#e6d4ff"];
 const PENS = ["#3b2a2a", "#e0457b", "#2f9a55", "#3f86d4", "#e69b1a", "#8a4fd6"];
 const SIZES: { label: string; fs: number }[] = [
@@ -94,7 +96,10 @@ export function Board({ thread }: { thread: Thread }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates">(null);
-  const [exporting, setExporting] = useState(false);
+  // Screenshot mode: the board fills the screen with no buttons or text on it.
+  const [shot, setShot] = useState(false);
+  const [shotBar, setShotBar] = useState(false);
+  const [shotBg, setShotBg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Live boxes held after a drag until the save comes back, so nothing snaps.
   const [local, setLocal] = useState<Record<string, Box>>({});
@@ -405,12 +410,12 @@ export function Board({ thread }: { thread: Thread }) {
       return;
     }
     if (pointers.current.size > 2) return;
-    if (tool === "pen") {
+    if (tool === "pen" && !shot) {
       const p = toWorld(e.clientX, e.clientY);
       g.current = { kind: "pen", pts: [p] };
       return;
     }
-    const itemEl = target.closest("[data-item]") as HTMLElement | null;
+    const itemEl = shot ? null : (target.closest("[data-item]") as HTMLElement | null);
     const id = itemEl?.dataset.item;
     if (itemEl && id && editing !== id) {
       const handle = (target.closest("[data-handle]") as HTMLElement | null)?.dataset.handle as "resize" | "rotate" | undefined;
@@ -483,6 +488,8 @@ export function Board({ thread }: { thread: Thread }) {
     const isDouble = (id: string | null) => now - tap.t < 320 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 24 && tap.id === id;
     if (cur.kind === "pan") {
       if (cur.moved) return commitView(vRef.current);
+      // Screenshot mode: a tap just shows or hides the little bar.
+      if (shot) return setShotBar((b) => !b);
       // A tap on empty space: let go of things; a double tap writes there.
       setSelected(null);
       if (editing) editor.current?.blur();
@@ -553,16 +560,45 @@ export function Board({ thread }: { thread: Thread }) {
   }
 
   /* ── download what's in view ─────────────────────────────────────────── */
+  /** Save everything on the board (just the content, however big it is) as a picture. */
   async function download() {
-    const el = viewport.current;
-    if (!el) return;
+    const w = world.current;
+    const vp = viewport.current;
+    if (!w || !vp || !items.length) return toast("Nothing on the board yet.");
     setSaving(true);
     setSelected(null);
-    await new Promise((r) => setTimeout(r, 60));
+    setEditing(null);
+    await new Promise((r) => setTimeout(r, 80));
     try {
+      // Where things really are (tilted, auto-height text and all), in board units.
+      const vr = vp.getBoundingClientRect();
+      const v = vRef.current;
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      w.querySelectorAll<HTMLElement>("[data-item]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        x0 = Math.min(x0, (r.left - vr.left - v.x) / v.z);
+        y0 = Math.min(y0, (r.top - vr.top - v.y) / v.z);
+        x1 = Math.max(x1, (r.right - vr.left - v.x) / v.z);
+        y1 = Math.max(y1, (r.bottom - vr.top - v.y) / v.z);
+      });
+      const pad = 24;
+      const W = Math.ceil(x1 - x0 + pad * 2);
+      const H = Math.ceil(y1 - y0 + pad * 2);
+      // Sharp, but within what phones can draw (~16M pixels).
+      const ratio = Math.max(0.5, Math.min(3, Math.sqrt(16e6 / (W * H))));
       const { toBlob } = await import("html-to-image");
-      const opts = { pixelRatio: Math.max(2, window.devicePixelRatio || 2), cacheBust: false, backgroundColor: "#fbf7f1", filter: (n: HTMLElement) => !n.classList?.contains("board-ui") };
-      const blob = (await toBlob(el, opts).catch(() => toBlob(el, { ...opts, skipFonts: true })))!;
+      const opts = {
+        width: W,
+        height: H,
+        pixelRatio: ratio,
+        backgroundColor: thread.bg ?? "#fbf7f1",
+        style: { transform: `translate(${pad - x0}px, ${pad - y0}px)`, transformOrigin: "0 0", left: "0", top: "0" },
+        filter: (n: HTMLElement) => !n.classList?.contains("board-ui"),
+      };
+      const blob = (await toBlob(w, opts).catch(() => toBlob(w, { ...opts, skipFonts: true })))!;
       const name = `${thread.title.replace(/[^\w\- ]+/g, "").trim() || "board"}.png`;
       const file = new File([blob], name, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] }).catch(() => {});
@@ -573,7 +609,6 @@ export function Board({ thread }: { thread: Thread }) {
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       }
-      setExporting(false);
     } catch (err) {
       toast(`Couldn't make the picture: ${(err as Error).message}`);
     }
@@ -593,7 +628,7 @@ export function Board({ thread }: { thread: Thread }) {
 
   return (
     <div
-      className="board-page"
+      className={`board-page${shot ? " shotmode" : ""}`}
       onPaste={(e) => {
         const fs = filesFromPaste(e);
         if (!fs.length || editing || panel === "stickers") return;
@@ -608,8 +643,11 @@ export function Board({ thread }: { thread: Thread }) {
         <strong className="grow board-title">
           {thread.emoji ?? "🗒️"} {thread.title}
         </strong>
-        <button className="icon-btn" onClick={() => (setExporting(true), setSelected(null), setPanel(null))} aria-label="Download a picture of the board">
-          ⬇︎
+        <button className="icon-btn" onClick={() => (setShot(true), setShotBar(true), setSelected(null), setEditing(null), setPanel(null))} aria-label="Screenshot mode">
+          📸
+        </button>
+        <button className="icon-btn" disabled={saving} onClick={download} aria-label="Download a picture of the board">
+          {saving ? "…" : "⬇︎"}
         </button>
         <button className="icon-btn" onClick={() => setPanel(panel === "menu" ? null : "menu")} aria-label="More">
           ⋯
@@ -620,6 +658,23 @@ export function Board({ thread }: { thread: Thread }) {
           <button className="btn btn-sm" onClick={() => setPanel("templates")}>
             ✨ Add a template
           </button>
+          <span className="row" style={{ gap: 4 }} role="group" aria-label="Board background">
+            <span className="small faint">background</span>
+            {BGS.map((c) => (
+              <button
+                key={c}
+                className="board-swatch"
+                style={{ background: c }}
+                aria-pressed={(thread.bg ?? BGS[0]) === c}
+                aria-label={`Background ${c}`}
+                onClick={async () => {
+                  const { error } = await supabase.from("threads").update({ bg: c === BGS[0] ? null : c }).eq("id", thread.id);
+                  if (error) return toast(error.message);
+                  refreshAll();
+                }}
+              />
+            ))}
+          </span>
           <button
             className="btn btn-sm"
             onClick={async () => {
@@ -647,13 +702,13 @@ export function Board({ thread }: { thread: Thread }) {
 
       <div
         ref={viewport}
-        className={`board-view${tool === "pen" ? " drawing" : ""}${exporting ? " exporting" : ""}`}
+        className={`board-view${tool === "pen" ? " drawing" : ""}${shot ? " shotting" : ""}${(shot && shotBg ? shotBg : thread.bg ?? "").match(/^#(2|1)/) ? " dark" : ""}`}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onCancel}
         onContextMenu={(e) => e.preventDefault()}
-        style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${22 * view.z}px ${22 * view.z}px` }}
+        style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${22 * view.z}px ${22 * view.z}px`, backgroundColor: (shot && shotBg) || thread.bg || undefined }}
       >
         <div ref={world} className="board-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`, ["--inv" as string]: 1 / view.z }}>
           {items.map((i) => {
@@ -760,8 +815,7 @@ export function Board({ thread }: { thread: Thread }) {
             <path ref={livePath} fill="none" stroke={pen} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        {exporting && <div className="board-frame board-ui" aria-hidden />}
-        {!items.length && !exporting && (
+        {!items.length && !shot && (
           <div className="board-empty board-ui">
             <p>Double-tap anywhere to write, or add something below. Pinch to zoom.</p>
             <button className="btn btn-sm" style={{ pointerEvents: "auto" }} onClick={() => setPanel("templates")}>
@@ -772,16 +826,30 @@ export function Board({ thread }: { thread: Thread }) {
       </div>
 
       {/* Bottom: whatever's selected or being written, else the tools. */}
-      {exporting ? (
-        <div className="board-selbar board-ui">
-          <span className="small">Zoom to frame it</span>
-          <button className="btn btn-sm btn-primary" disabled={saving} onClick={download}>
-            {saving ? "Making it…" : "Save picture"}
-          </button>
-          <button className="btn btn-sm btn-ghost" onClick={() => setExporting(false)}>
-            Cancel
-          </button>
-        </div>
+      {shot ? (
+        shotBar && (
+          <div className="board-shotbar">
+            <span className="small">background:</span>
+            {[null, ...BGS].map((c) => (
+              <button
+                key={c ?? "board"}
+                className="board-swatch"
+                style={{ background: c ?? thread.bg ?? BGS[0] }}
+                aria-pressed={shotBg === c}
+                aria-label={c ? `Screenshot background ${c}` : "The board's own background"}
+                onClick={() => setShotBg(c)}
+              >
+                {c ? "" : "·"}
+              </button>
+            ))}
+            <button className="btn btn-sm btn-primary" onClick={() => setShotBar(false)}>
+              Hide
+            </button>
+            <button className="btn btn-sm btn-ghost" onClick={() => (setShot(false), setShotBar(false), setShotBg(null))}>
+              Exit
+            </button>
+          </div>
+        )
       ) : editItem ? (
         <div className="board-selbar board-ui board-fmt" onPointerDown={(e) => e.preventDefault()}>
           {(
