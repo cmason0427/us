@@ -7,7 +7,7 @@ const MAX_EDGE = 1800;
  * is 4–8MB; this lands around 300–600KB). Falls back to the original file if
  * the browser can't decode it.
  */
-export async function shrinkImage(file: File, maxEdge = MAX_EDGE): Promise<{ blob: Blob; width: number | null; height: number | null; ext: string }> {
+export async function shrinkImage(file: File, maxEdge = MAX_EDGE, keepAlpha = false): Promise<{ blob: Blob; width: number | null; height: number | null; ext: string }> {
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
@@ -18,9 +18,11 @@ export async function shrinkImage(file: File, maxEdge = MAX_EDGE): Promise<{ blo
     canvas.height = h;
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, w, h);
     bitmap.close();
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.84));
+    // Stickers keep their see-through background (PNG); photos go to JPEG.
+    const png = keepAlpha && file.type !== "image/jpeg";
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, png ? "image/png" : "image/jpeg", 0.84));
     if (!blob) throw new Error("encode failed");
-    return { blob, width: w, height: h, ext: "jpg" };
+    return { blob, width: w, height: h, ext: png ? "png" : "jpg" };
   } catch {
     const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     return { blob: file, width: null, height: null, ext };
