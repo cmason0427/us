@@ -1,5 +1,8 @@
 "use client";
 
+import { findSpotify, lookupSpotify } from "@/lib/spotify";
+import { SpotifyEmbed } from "./Spotify";
+
 import { ManaPips, useDeckNames } from "./Decks";
 import { ImageSources, filesFromPaste } from "./ImageSources";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,9 +77,16 @@ export function PostComposer({
     const supabase = supabaseBrowser();
     let postId: string | null = null;
     try {
+      // A short Spotify share link can't be embedded: swap in the full one.
+      let body = text.trim();
+      const found = findSpotify(body);
+      if (found?.short) {
+        const r = await lookupSpotify(found.url);
+        if ("url" in r) body = body.replace(found.url, r.url);
+      }
       const { data: post, error: postErr } = await supabase
         .from("posts")
-        .insert({ author: meId, text: text.trim() || null, dogs, as_dog: dogNote, deck_id: deck })
+        .insert({ author: meId, text: body || null, dogs, as_dog: dogNote, deck_id: deck })
         .select("id")
         .single();
       if (postErr) throw postErr;
@@ -144,6 +154,11 @@ export function PostComposer({
         autoFocus
         rows={4}
       />
+      {(() => {
+        const song = findSpotify(text);
+        if (!song) return <p className="small faint" style={{ margin: 0 }}>🎵 Paste a Spotify link and it becomes a player.</p>;
+        return song.short ? <p className="small muted" style={{ margin: 0 }}>🎵 Spotify link: it becomes a player when you post.</p> : <SpotifyEmbed r={song} compact />;
+      })()}
       {previews.length > 0 && (
         <div className="photo-picks">
           {previews.map((src, i) => (

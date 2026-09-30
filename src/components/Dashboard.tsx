@@ -16,6 +16,7 @@ import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { TaskList } from "./TaskList";
 import { useMealTimesRange } from "@/lib/mealTimes";
 import { timeLabel } from "@/lib/dates";
+import { OnLoopSheetBody, loopLine, useOnLoop } from "./OnLoop";
 import { ChecklistPrompt, useChecklistPrompts } from "./Checklists";
 import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
 
@@ -31,7 +32,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "sleep" } | { kind: "meal" } | { kind: "later-meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
+type Open = { kind: "loop" } | { kind: "sleep" } | { kind: "meal" } | { kind: "later-meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -60,9 +61,15 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const myStatus = useMyStatus();
   const them = partner?.display_name ?? "Them";
   const chores = useChecklistPrompts();
+  const loops = useOnLoop();
+  const { meId, nameOf } = useApp();
 
   return (
     <section className="card dash">
+      {/* Stays until changed or taken off; nothing clears it. */}
+      <Row icon="🎧" label="On loop" onClick={() => setOpen({ kind: "loop" })}>
+        {loops.length ? loopLine(loops, meId, nameOf) : <span className="muted">What song do you have on repeat?</span>}
+      </Row>
       {status && (
         <Row icon="🚗" label={them} onClick={() => setOpen({ kind: "status", mine: false })}>
           {status.text}
@@ -123,6 +130,11 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
       )}
 
 
+      {open?.kind === "loop" && (
+        <Sheet title="🎧 On loop" onClose={() => setOpen(null)}>
+          <OnLoopSheetBody />
+        </Sheet>
+      )}
       {open?.kind === "sleep" && (
         <Sheet title="Sleeping tonight" onClose={() => setOpen(null)}>
           <SleepControls />

@@ -1,5 +1,8 @@
 "use client";
 
+import { findSpotify, withoutSpotify } from "@/lib/spotify";
+import { SpotifyEmbed } from "./Spotify";
+
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -20,6 +23,9 @@ import { ManaPips, useDeckNames } from "./Decks";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
+  // A Spotify link in the text becomes a player (and leaves the text).
+  const song = findSpotify(post.text);
+  const text = song && post.text ? withoutSpotify(post.text, song.url) : post.text;
   const { meId, nameOf, toast, dogPhotos } = useApp();
   // Dog notes speak as the dog(s); only the person who wrote one can delete it.
   const asDog = post.as_dog && post.dogs.length > 0;
@@ -99,7 +105,13 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         </div>
       )}
       {post.deck_id && <DeckTag id={post.deck_id} />}
-      {post.text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${post.text}”` : post.text}</p>}
+      {text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : text}</p>}
+      {song && !song.short && <SpotifyEmbed r={song} />}
+      {song?.short && (
+        <a className="btn btn-sm keep-case" href={song.url} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start" }}>
+          🎵 Open in Spotify
+        </a>
+      )}
       {post.spicy && post.author !== meId && (
         <Link className="btn btn-sm" href="/spicy" style={{ marginTop: 10, alignSelf: "flex-start" }}>
           🌶️ Open Spicy
