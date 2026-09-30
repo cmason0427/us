@@ -10,13 +10,14 @@ import { applyFormat, renderMini, toggleCheck } from "@/lib/miniMarkdown";
 import { useApp } from "./AppProvider";
 import { ImageSources, filesFromPaste } from "./ImageSources";
 import { StickerTray, saveSticker } from "./BoardStickers";
+import { GRID_LAYOUTS, TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/boardTemplates";
 import type { Thread } from "./Threads";
 
 interface Item {
   id: string;
   thread_id: string;
   author: string;
-  kind: "note" | "sticky" | "photo" | "link" | "ink" | "sticker";
+  kind: "note" | "sticky" | "photo" | "link" | "ink" | "sticker" | "grid";
   text: string | null;
   photo_path: string | null;
   link: string | null;
@@ -30,10 +31,12 @@ interface Item {
   rot: number;
   style: Look | null;
   hearts: string[];
+  /** Photo grid: a picture per slot (empty string = empty slot). */
+  photos: string[];
   created_at: string;
 }
 /** How text looks: size, bold, font, color, alignment. */
-type Look = { fs?: number; b?: boolean; font?: "sans" | "serif"; c?: string; al?: "left" | "center" };
+type Look = { fs?: number; b?: boolean; font?: "sans" | "serif"; c?: string; al?: "left" | "center"; layout?: string };
 type Box = { x: number; y: number; w: number; h: number; rot: number };
 type View = { x: number; y: number; z: number };
 
@@ -45,7 +48,8 @@ const SIZES: { label: string; fs: number }[] = [
   { label: "L", fs: 30 },
   { label: "XL", fs: 46 },
 ];
-const SIZE: Record<Item["kind"], [number, number]> = { note: [200, 40], sticky: [150, 150], photo: [170, 170], link: [180, 48], ink: [100, 100], sticker: [110, 110] };
+const SIZE: Record<Item["kind"], [number, number]> = { note: [200, 40], sticky: [150, 150], photo: [170, 170], link: [180, 48], ink: [100, 100], sticker: [110, 110], grid: [260, 260] };
+const SNAP = 7; // screen pixels
 const MIN_Z = 0.2;
 const MAX_Z = 4;
 
@@ -83,13 +87,13 @@ export function Board({ thread }: { thread: Thread }) {
     },
     ["thread_items"],
   );
-  const urls = usePhotoUrls(items.flatMap((i) => (i.photo_path ? [i.photo_path] : [])));
+  const urls = usePhotoUrls(items.flatMap((i) => [...(i.photo_path ? [i.photo_path] : []), ...(i.photos ?? []).filter(Boolean)]));
   const [tool, setTool] = useState<"move" | "pen">("move");
   const [pen, setPen] = useState(PENS[0]);
   const [view, setView] = useState<View>({ x: 0, y: 0, z: 1 });
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu">(null);
+  const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates">(null);
   const [exporting, setExporting] = useState(false);
   const [saving, setSaving] = useState(false);
   // Live boxes held after a drag until the save comes back, so nothing snaps.
@@ -103,6 +107,20 @@ export function Board({ thread }: { thread: Thread }) {
   const vRef = useRef(view);
   const lastTap = useRef<{ t: number; x: number; y: number; id: string | null }>({ t: 0, x: 0, y: 0, id: null });
   const fitted = useRef(false);
+  // Undo: the way back from each change you made here (newest last).
+  const history = useRef<(() => PromiseLike<unknown>)[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  // Snap-to-align guides: off unless you turn them on (remembered per phone).
+  const [snap, setSnap] = useState(false);
+  const guideV = useRef<HTMLDivElement>(null);
+  const guideH = useRef<HTMLDivElement>(null);
+  const slotInput = useRef<HTMLInputElement>(null);
+  const [slotFor, setSlotFor] = useState<{ id: string; slot: number } | null>(null);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("board-snap") === "1") Promise.resolve().then(() => setSnap(true));
+    } catch {}
+  }, []);
 
   // Opening the board (and anything that lands while it's open) counts as seen.
   const last = items[items.length - 1]?.created_at ?? thread.last_at;
@@ -203,6 +221,21 @@ export function Board({ thread }: { thread: Thread }) {
   }
 
   /* ── data ───────────────────────────────────────────────────────────── */
+  function pushUndo(fn: () => PromiseLike<unknown>) {
+    history.current.push(fn);
+    if (history.current.length > 60) history.current.shift();
+    setUndoCount(history.current.length);
+  }
+  async function undo() {
+    const fn = history.current.pop();
+    setUndoCount(history.current.length);
+    if (!fn) return;
+    setSelected(null);
+    setEditing(null);
+    await fn();
+    refreshAll();
+  }
+  const dropIds = (ids: string[]) => () => supabase.from("thread_items").delete().in("id", ids);
   async function add(kind: Item["kind"], fields: Partial<Item>, at?: { x: number; y: number }) {
     const [w0, h0] = SIZE[kind];
     const w = fields.w ?? w0;
@@ -214,16 +247,24 @@ export function Board({ thread }: { thread: Thread }) {
       .select("id")
       .single();
     if (error) return toast(error.message);
+    pushUndo(dropIds([data.id]));
     await refresh();
     setSelected(data.id);
     if (kind === "sticky" || kind === "note") setEditing(data.id);
   }
   async function patch(id: string, fields: Partial<Item>) {
+    const it = items.find((i) => i.id === id);
+    if (it) {
+      const before = Object.fromEntries(Object.keys(fields).map((k) => [k, it[k as keyof Item] ?? null]));
+      pushUndo(() => supabase.from("thread_items").update(before).eq("id", id));
+    }
     const { error } = await supabase.from("thread_items").update(fields).eq("id", id);
     if (error) toast(error.message);
     refreshAll();
   }
   async function remove(id: string) {
+    const it = items.find((i) => i.id === id);
+    if (it) pushUndo(() => supabase.from("thread_items").insert(it));
     await supabase.from("thread_items").delete().eq("id", id);
     setSelected(null);
     refreshAll();
@@ -251,6 +292,51 @@ export function Board({ thread }: { thread: Thread }) {
       await add("photo", { photo_path: path, w, h });
     }
   }
+  async function addTemplate(key: string) {
+    const t = TEMPLATES.find((x) => x.key === key);
+    if (!t) return;
+    setPanel(null);
+    const { w, h } = templateSize(t);
+    const c = spot(w, h);
+    try {
+      const ids = await insertTemplate(thread.id, meId, t, { x: c.x, y: c.y }, maxZ + 1);
+      pushUndo(dropIds(ids));
+      await refresh();
+      const el = viewport.current;
+      if (el) {
+        // Frame the new layout.
+        const z = clampZ(Math.min(el.clientWidth / (w + 40), el.clientHeight / (h + 40), 1.2));
+        commitView({ z, x: (el.clientWidth - w * z) / 2 - c.x * z, y: (el.clientHeight - h * z) / 2 - c.y * z });
+      }
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  }
+  /** Fill (or replace) one slot of a photo grid. */
+  async function fillSlot(files: File[]) {
+    const target = slotFor;
+    setSlotFor(null);
+    const it = items.find((i) => i.id === target?.id);
+    if (!target || !it || !files[0]) return;
+    const { slots } = gridLayout(it.style?.layout);
+    const next = Array.from({ length: Math.max(slots.length, it.photos?.length ?? 0) }, (_, k) => it.photos?.[k] ?? "");
+    // Several picked at once fill this slot and the empty ones after it.
+    let k = target.slot;
+    for (const f of files) {
+      while (k < slots.length && k !== target.slot && next[k]) k++;
+      if (k >= slots.length) break;
+      const { blob, ext } = await shrinkImage(f, 1400);
+      const path = `${meId}/threads/${thread.id}/${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+      if (error) {
+        toast(error.message);
+        break;
+      }
+      next[k] = path;
+      k++;
+    }
+    await patch(it.id, { photos: next });
+  }
   const heart = (i: Item) => patch(i.id, { hearts: i.hearts.includes(meId) ? i.hearts.filter((x) => x !== meId) : [...i.hearts, meId] });
 
   /* ── gestures ───────────────────────────────────────────────────────── */
@@ -261,6 +347,46 @@ export function Board({ thread }: { thread: Thread }) {
     if (kind !== "note") el.style.height = `${b.h}px`;
     el.style.transform = `rotate(${b.rot}deg)`;
   }
+  /** Line a box up with the edges and centers of the other things, showing a guide. */
+  function snapBox(id: string, b: Box, mode: "move" | "resize"): Box {
+    const t = SNAP / vRef.current.z;
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const [oid, o] of boxes) {
+      if (oid === id) continue;
+      xs.push(o.x, o.x + o.w / 2, o.x + o.w);
+      ys.push(o.y, o.y + o.h / 2, o.y + o.h);
+    }
+    const best = (cands: number[], mine: number[]) => {
+      let hit: { d: number; line: number } | null = null;
+      for (const m of mine) for (const c of cands) if (Math.abs(c - m) <= t && (!hit || Math.abs(c - m) < Math.abs(hit.d))) hit = { d: c - m, line: c };
+      return hit;
+    };
+    const next = { ...b };
+    const hx = mode === "move" ? best(xs, [b.x, b.x + b.w / 2, b.x + b.w]) : best(xs, [b.x + b.w]);
+    const hy = mode === "move" ? best(ys, [b.y, b.y + b.h / 2, b.y + b.h]) : best(ys, [b.y + b.h]);
+    if (hx) {
+      if (mode === "move") next.x += hx.d;
+      else next.w += hx.d;
+    }
+    if (hy) {
+      if (mode === "move") next.y += hy.d;
+      else next.h += hy.d;
+    }
+    showGuides(hx?.line ?? null, hy?.line ?? null);
+    return next;
+  }
+  function showGuides(x: number | null, y: number | null) {
+    if (guideV.current) {
+      guideV.current.style.display = x == null ? "none" : "block";
+      if (x != null) guideV.current.style.left = `${x}px`;
+    }
+    if (guideH.current) {
+      guideH.current.style.display = y == null ? "none" : "block";
+      if (y != null) guideH.current.style.top = `${y}px`;
+    }
+  }
+
   function onDown(e: React.PointerEvent) {
     const target = e.target as HTMLElement;
     if (target.closest("textarea, input, .board-ui")) return;
@@ -330,6 +456,7 @@ export function Board({ thread }: { thread: Thread }) {
         const deg = (Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180) / Math.PI + 90;
         next = { ...b, rot: Math.abs(deg) < 4 ? 0 : Math.round(deg) }; // easy to get back to straight
       }
+      if (snap && cur.mode !== "rotate") next = snapBox(cur.id, next, cur.mode);
       cur.next = next;
       paintBox(cur.el, next, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
     } else if (cur.kind === "pen") {
@@ -350,6 +477,7 @@ export function Board({ thread }: { thread: Thread }) {
     }
     if (pointers.current.size > 0) return;
     g.current = { kind: "idle" };
+    showGuides(null, null);
     const now = Date.now();
     const tap = lastTap.current;
     const isDouble = (id: string | null) => now - tap.t < 320 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 24 && tap.id === id;
@@ -367,6 +495,15 @@ export function Board({ thread }: { thread: Thread }) {
     } else if (cur.kind === "item") {
       const it = items.find((i) => i.id === cur.id);
       if (!cur.moved) {
+        // A tap on a selected photo grid's slot: pick a picture for it (or clear it).
+        const slotEl = cur.target.closest("[data-slot]") as HTMLElement | null;
+        if (it?.kind === "grid" && slotEl && cur.wasSel) {
+          const k = Number(slotEl.dataset.slot);
+          if (cur.target.closest("[data-clear]")) return patch(it.id, { photos: (it.photos ?? []).map((p, n) => (n === k ? "" : p)) });
+          setSlotFor({ id: it.id, slot: k });
+          slotInput.current?.click();
+          return;
+        }
         // A tap: tick a checkbox, or double tap to write.
         const check = (cur.target.closest("[data-check]") as HTMLElement | null)?.dataset.check;
         if (check != null && it?.text) return patch(it.id, { text: toggleCheck(it.text, Number(check)) });
@@ -396,15 +533,19 @@ export function Board({ thread }: { thread: Thread }) {
       const w = Math.max(...xs) - x0 + 4;
       const h = Math.max(...ys) - y0 + 4;
       const d = pts.map((p, n) => `${n ? "L" : "M"}${Math.round(p.x - x0)} ${Math.round(p.y - y0)}`).join(" ");
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("thread_items")
-        .insert({ thread_id: thread.id, author: meId, kind: "ink", ink: JSON.stringify({ d, w, h }), color: pen, x: x0, y: y0, w, h, z: maxZ + 1 });
+        .insert({ thread_id: thread.id, author: meId, kind: "ink", ink: JSON.stringify({ d, w, h }), color: pen, x: x0, y: y0, w, h, z: maxZ + 1 })
+        .select("id")
+        .single();
       if (error) toast(error.message);
+      else pushUndo(dropIds([data.id]));
       refreshAll();
     }
   }
   function onCancel(e: React.PointerEvent) {
     pointers.current.delete(e.pointerId);
+    showGuides(null, null);
     const cur = g.current;
     if (cur.kind === "item") paintBox(cur.el, cur.box, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
     if (cur.kind === "pan" || cur.kind === "pinch") commitView(vRef.current);
@@ -476,6 +617,9 @@ export function Board({ thread }: { thread: Thread }) {
       </header>
       {panel === "menu" && (
         <div className="board-menu">
+          <button className="btn btn-sm" onClick={() => setPanel("templates")}>
+            ✨ Add a template
+          </button>
           <button
             className="btn btn-sm"
             onClick={async () => {
@@ -527,6 +671,30 @@ export function Board({ thread }: { thread: Thread }) {
             } else if ((i.kind === "photo" || i.kind === "sticker") && i.photo_path) {
               // eslint-disable-next-line @next/next/no-img-element
               body = urls[i.photo_path] ? <img src={urls[i.photo_path]} alt="" draggable={false} crossOrigin="anonymous" /> : <span className="board-wait" />;
+            } else if (i.kind === "grid") {
+              const L = gridLayout(i.style?.layout);
+              body = (
+                <div className="board-grid" style={{ gridTemplateAreas: L.areas, gridTemplateColumns: L.cols, gridTemplateRows: L.rows }}>
+                  {L.slots.map((area, k) => {
+                    const path = i.photos?.[k];
+                    return (
+                      <div key={area} className="board-slot" data-slot={k} style={{ gridArea: area }}>
+                        {path && urls[path] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={urls[path]} alt="" draggable={false} crossOrigin="anonymous" />
+                        ) : (
+                          <span className="board-slot-add">{isSel ? "＋" : ""}</span>
+                        )}
+                        {path && isSel && (
+                          <span className="board-slot-x board-ui" data-clear="1" aria-label="Clear this photo">
+                            ×
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
             } else if (i.kind === "sticker") {
               body = <span className="board-emoji" style={{ fontSize: Math.min(b.w, b.h) * 0.82 }}>{i.text}</span>;
             } else if (i.kind === "link" && i.link) {
@@ -586,12 +754,21 @@ export function Board({ thread }: { thread: Thread }) {
               </div>
             );
           })}
+          <div ref={guideV} className="board-guide v board-ui" />
+          <div ref={guideH} className="board-guide h board-ui" />
           <svg className="board-live">
             <path ref={livePath} fill="none" stroke={pen} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         {exporting && <div className="board-frame board-ui" aria-hidden />}
-        {!items.length && !exporting && <p className="board-empty board-ui">Double-tap anywhere to write, or add something below. Pinch to zoom.</p>}
+        {!items.length && !exporting && (
+          <div className="board-empty board-ui">
+            <p>Double-tap anywhere to write, or add something below. Pinch to zoom.</p>
+            <button className="btn btn-sm" style={{ pointerEvents: "auto" }} onClick={() => setPanel("templates")}>
+              ✨ Start from a template
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Bottom: whatever's selected or being written, else the tools. */}
@@ -653,6 +830,18 @@ export function Board({ thread }: { thread: Thread }) {
           )}
           {sel.kind === "sticky" && STICKY.map((c) => <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={sel.color === c} aria-label="Color" onClick={() => patch(sel.id, { color: c })} />)}
           {sel.kind === "ink" && PENS.map((c) => <button key={c} className="board-swatch" style={{ background: c }} aria-label="Color" onClick={() => patch(sel.id, { color: c })} />)}
+          {sel.kind === "grid" && (
+            <>
+              <span className="small faint" style={{ flex: "none" }}>
+                tap a slot ·
+              </span>
+              {GRID_LAYOUTS.map((l) => (
+                <button key={l.key} className="fmt" aria-pressed={(sel.style?.layout ?? "2x2") === l.key} onClick={() => setLook(sel, { layout: l.key })}>
+                  {l.label}
+                </button>
+              ))}
+            </>
+          )}
           {sel.kind === "link" && sel.link && (
             <a className="btn btn-sm" href={sel.link} target="_blank" rel="noreferrer">
               Open ↗
@@ -722,6 +911,32 @@ export function Board({ thread }: { thread: Thread }) {
         />
       )}
 
+      {panel === "templates" && (
+        <div className="board-stickers board-ui">
+          <div className="row-between">
+            <strong className="small">Templates</strong>
+            <button className="icon-btn" onClick={() => setPanel(null)} aria-label="Close templates">
+              ×
+            </button>
+          </div>
+          <div className="template-list">
+            {TEMPLATES.map((t) => (
+              <button key={t.key} className="template-card" onClick={() => addTemplate(t.key)}>
+                <span className="template-emoji">{t.emoji}</span>
+                <span>
+                  <strong>{t.name}</strong>
+                  <span className="small faint" style={{ display: "block" }}>
+                    {t.blurb}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="small faint" style={{ margin: 0 }}>It lands where you&apos;re looking. Undo takes it back off.</p>
+        </div>
+      )}
+      <input ref={slotInput} type="file" accept="image/*" multiple hidden onChange={(e) => (fillSlot(Array.from(e.target.files ?? [])), (e.target.value = ""))} />
+
       <nav className="board-tools board-ui">
         <button aria-pressed={tool === "move"} onClick={() => setTool("move")} aria-label="Move things">
           ✋
@@ -742,6 +957,9 @@ export function Board({ thread }: { thread: Thread }) {
             <button aria-pressed={panel === "photo"} onClick={() => setPanel(panel === "photo" ? null : "photo")} aria-label="Picture">
               🖼️
             </button>
+            <button onClick={() => add("grid", { style: { layout: "2x2" }, photos: [] })} aria-label="Photo grid">
+              ▦
+            </button>
             <button aria-pressed={panel === "stickers"} onClick={() => setPanel(panel === "stickers" ? null : "stickers")} aria-label="Stickers">
               ✨
             </button>
@@ -751,10 +969,26 @@ export function Board({ thread }: { thread: Thread }) {
           </>
         )}
         <span className="grow" />
+        <button onClick={undo} disabled={!undoCount} aria-label="Undo">
+          ↶
+        </button>
+        <button
+          aria-pressed={snap}
+          onClick={() => {
+            const on = !snap;
+            setSnap(on);
+            toast(on ? "Snapping on: things line up as you drag 🧲" : "Snapping off");
+            try {
+              localStorage.setItem("board-snap", on ? "1" : "0");
+            } catch {}
+          }}
+          aria-label="Snap to line things up"
+        >
+          🧲
+        </button>
         <button onClick={() => fit()} aria-label="Fit everything in view">
           ⤢
         </button>
-        <span className="board-zoom small faint">{Math.round(view.z * 100)}%</span>
       </nav>
     </div>
   );

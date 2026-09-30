@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
+import { TEMPLATES, insertTemplate } from "@/lib/boardTemplates";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 
@@ -93,6 +94,7 @@ export function NewThread({ onDone, bare = false }: { onDone: (id?: string) => v
   const { meId, toast } = useApp();
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("🗒️");
+  const [template, setTemplate] = useState<string | null>(null);
   const form = (
       <form
         className="stack"
@@ -101,6 +103,8 @@ export function NewThread({ onDone, bare = false }: { onDone: (id?: string) => v
           if (!title.trim()) return;
           const { data, error } = await supabaseBrowser().from("threads").insert({ title: title.trim(), emoji, created_by: meId, last_by: meId }).select("id").single();
           if (error) return toast(error.message);
+          const t = TEMPLATES.find((x) => x.key === template);
+          if (t) await insertTemplate(data.id, meId, t, { x: 20, y: 20 }, 1).catch((err: Error) => toast(err.message));
           refreshAll();
           onDone(data.id);
         }}
@@ -113,6 +117,28 @@ export function NewThread({ onDone, bare = false }: { onDone: (id?: string) => v
           ))}
         </div>
         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="halloween costumes" autoFocus aria-label="What it's about" />
+        <div className="field">
+          <span>Start from</span>
+          <div className="chips">
+            <button type="button" className="chip chip-sm" aria-pressed={template === null} onClick={() => setTemplate(null)}>
+              blank
+            </button>
+            {TEMPLATES.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className="chip chip-sm"
+                aria-pressed={template === t.key}
+                onClick={() => {
+                  setTemplate(t.key);
+                  if (emoji === "🗒️") setEmoji(t.emoji);
+                }}
+              >
+                {t.emoji} {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
         <p className="small muted">A shared board: sticky notes, pics, links and doodles you can drag around. It never goes in the feed or sends a push.</p>
         <button className="btn btn-primary btn-block" disabled={!title.trim()}>
           Start it

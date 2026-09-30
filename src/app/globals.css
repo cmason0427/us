@@ -1284,3 +1284,18 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .fmt { text-transform: none; }
 .board-tools { gap: 3px; }
 .board-tools > button:not(.board-swatch) { min-width: 36px; height: 36px; }
+/* Boards: photo grid tile, snap guides, templates */
+.board-item.k-grid { background: #fff; padding: 6px; box-shadow: 0 4px 10px -5px rgba(0,0,0,.35); border-radius: 8px; }
+.board-grid { display: grid; gap: 4px; width: 100%; height: 100%; }
+.board-slot { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--ink) 7%, #fff); display: grid; place-items: center; }
+.board-slot img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.board-slot-add { font-size: calc(22px * var(--inv, 1)); color: var(--ink-faint); font-weight: 700; }
+.board-slot-x { position: absolute; top: 3px; right: 3px; width: calc(22px * var(--inv, 1)); height: calc(22px * var(--inv, 1)); border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: calc(13px * var(--inv, 1)); cursor: pointer; }
+.board-guide { position: absolute; display: none; pointer-events: none; z-index: 10000; background: #e0457b; }
+.board-guide.v { top: -100000px; height: 200000px; width: calc(1px * var(--inv, 1)); }
+.board-guide.h { left: -100000px; width: 200000px; height: calc(1px * var(--inv, 1)); }
+.board-tools > button:disabled { opacity: 0.35; }
+.board-empty p { margin: 0 0 10px; }
+.template-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.template-card { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fbf7f1; font: inherit; color: inherit; cursor: pointer; }
+.template-emoji { font-size: 1.5rem; line-height: 1; }
