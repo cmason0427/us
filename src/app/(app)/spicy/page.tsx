@@ -130,7 +130,10 @@ function Pics() {
   const [open, setOpen] = useState<string | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
   const [editFolder, setEditFolder] = useState<string | null>(null);
-  const [filing, setFiling] = useState<string | null>(null);
+  const [filing, setFiling] = useState<string[] | null>(null);
+  // Select several in the grid to file them at once.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
   const { folders, links } = useFolders();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -266,6 +269,43 @@ function Pics() {
         ))}
       </div>
       {untagged > 0 && filter === "all" && <p className="small muted">{untagged} not tagged yet. Tap one to tag who&apos;s in it.</p>}
+      {shown.length > 0 && (
+        <div className="row-between">
+          <span className="small faint">{selecting ? `${picked.length} picked` : `${shown.length} here`}</span>
+          <span className="row" style={{ gap: 8 }}>
+            {selecting && (
+              <button className="btn-link small" onClick={() => setPicked(picked.length === shown.length ? [] : shown.map((m) => m.id))}>
+                {picked.length === shown.length ? "none" : "all"}
+              </button>
+            )}
+            <button className="btn btn-sm btn-ghost" onClick={() => (setSelecting((x) => !x), setPicked([]))}>
+              {selecting ? "Cancel" : "Select"}
+            </button>
+          </span>
+        </div>
+      )}
+      {selecting && picked.length > 0 && (
+        <div className="select-bar">
+          <button className="btn btn-primary btn-sm" onClick={() => setFiling(picked)}>
+            📁 Add {picked.length} to a folder
+          </button>
+          {activeFolder && (
+            <button
+              className="btn btn-sm"
+              onClick={async () => {
+                const { error } = await supabase.from("spicy_folder_items").delete().eq("folder_id", activeFolder.id).in("media_id", picked);
+                if (error) return toast(error.message);
+                toast(`Took ${picked.length} out of ${activeFolder.title} (still in Spicy)`);
+                setPicked([]);
+                setSelecting(false);
+                refreshAll();
+              }}
+            >
+              Take out of this folder
+            </button>
+          )}
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <div className="empty">
@@ -275,7 +315,13 @@ function Pics() {
       ) : (
         <div className="saved-grid">
           {shown.map((m) => (
-            <button key={m.id} className="saved-item spicy-thumb" onClick={() => setOpen(m.id)}>
+            <button
+              key={m.id}
+              className={`saved-item spicy-thumb${selecting && picked.includes(m.id) ? " picked" : ""}`}
+              onClick={() => (selecting ? setPicked((p) => (p.includes(m.id) ? p.filter((x) => x !== m.id) : [...p, m.id])) : setOpen(m.id))}
+              aria-pressed={selecting ? picked.includes(m.id) : undefined}
+            >
+              {selecting && <span className="pick-dot">{picked.includes(m.id) ? "✓" : ""}</span>}
               {m.poster_path ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 urls[m.poster_path] && <img src={urls[m.poster_path]} alt="" loading="lazy" />
@@ -324,11 +370,11 @@ function Pics() {
           onClose={() => setOpen(null)}
           onRetag={retag}
           onRemove={remove}
-          onFile={(m) => setFiling(m.id)}
+          onFile={(m) => setFiling([m.id])}
           folderCount={(m) => links.filter((l) => l.media_id === m.id).length}
         />
       )}
-      {filing && <FilePicker mediaId={filing} folders={folders} links={links} onClose={() => setFiling(null)} />}
+      {filing && <FilePicker mediaIds={filing} folders={folders} links={links} onClose={() => (setFiling(null), setSelecting(false), setPicked([]))} />}
       {editFolder && folders.some((f) => f.id === editFolder) && (
         <FolderSheet
           folder={folders.find((f) => f.id === editFolder)!}
@@ -455,14 +501,18 @@ function FolderStrip({
 }
 
 /** Put one pic in (or take it out of) any of your folders. It always stays in the main collection. */
-function FilePicker({ mediaId, folders, links, onClose }: { mediaId: string; folders: SpicyFolder[]; links: FolderLink[]; onClose: () => void }) {
+function FilePicker({ mediaIds, folders, links, onClose }: { mediaIds: string[]; folders: SpicyFolder[]; links: FolderLink[]; onClose: () => void }) {
   const { meId, toast } = useApp();
   const [draft, setDraft] = useState("");
   const db = supabaseBrowser();
+  // A folder counts as "has them" when every picked one is already in it.
+  const hasAll = (f: SpicyFolder) => mediaIds.every((m) => links.some((l) => l.folder_id === f.id && l.media_id === m));
   async function toggle(f: SpicyFolder) {
-    const inIt = links.some((l) => l.folder_id === f.id && l.media_id === mediaId);
-    const { error } = inIt ? await db.from("spicy_folder_items").delete().match({ folder_id: f.id, media_id: mediaId }) : await db.from("spicy_folder_items").insert({ folder_id: f.id, media_id: mediaId });
+    const { error } = hasAll(f)
+      ? await db.from("spicy_folder_items").delete().eq("folder_id", f.id).in("media_id", mediaIds)
+      : await db.from("spicy_folder_items").upsert(mediaIds.map((m) => ({ folder_id: f.id, media_id: m })), { ignoreDuplicates: true });
     if (error) toast(error.message);
+    else if (mediaIds.length > 1) toast(hasAll(f) ? `Took ${mediaIds.length} out of ${f.title}` : `Added ${mediaIds.length} to ${f.title} 📁`);
     refreshAll();
   }
   async function createAndAdd(e: React.FormEvent) {
@@ -470,7 +520,7 @@ function FilePicker({ mediaId, folders, links, onClose }: { mediaId: string; fol
     if (!draft.trim()) return;
     try {
       const id = await newFolder(draft, meId);
-      await db.from("spicy_folder_items").insert({ folder_id: id, media_id: mediaId });
+      await db.from("spicy_folder_items").insert(mediaIds.map((m) => ({ folder_id: id, media_id: m })));
       setDraft("");
       refreshAll();
     } catch (err) {
@@ -478,14 +528,14 @@ function FilePicker({ mediaId, folders, links, onClose }: { mediaId: string; fol
     }
   }
   return (
-    <Sheet title="📁 Your folders" onClose={onClose}>
+    <Sheet title={mediaIds.length > 1 ? `📁 Add ${mediaIds.length} to…` : "📁 Your folders"} onClose={onClose}>
       <div className="stack">
         <p className="small muted" style={{ margin: 0 }}>Only you see your folders. It stays in the main collection either way.</p>
         {folders.length > 0 && (
           <div className="chips">
             {folders.map((f) => (
-              <button key={f.id} className="chip" aria-pressed={links.some((l) => l.folder_id === f.id && l.media_id === mediaId)} onClick={() => toggle(f)}>
-                {links.some((l) => l.folder_id === f.id && l.media_id === mediaId) ? "✓ " : ""}
+              <button key={f.id} className="chip" aria-pressed={hasAll(f)} onClick={() => toggle(f)}>
+                {hasAll(f) ? "✓ " : ""}
                 {f.title}
               </button>
             ))}
