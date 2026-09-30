@@ -2,6 +2,7 @@
 
 import { findSpotify, withoutSpotify } from "@/lib/spotify";
 import { SpotifyEmbed } from "./Spotify";
+import { EatReply } from "./EatCheck";
 
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
@@ -105,7 +106,8 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         </div>
       )}
       {post.deck_id && <DeckTag id={post.deck_id} />}
-      {text && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : text}</p>}
+      {post.kind === "eat" && post.eat_check_id && <EatReply checkId={post.eat_check_id} author={post.author} />}
+      {text && post.kind !== "eat" && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : text}</p>}
       {song && !song.short && <SpotifyEmbed r={song} />}
       {song?.short && (
         <a className="btn btn-sm keep-case" href={song.url} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start" }}>

@@ -16,6 +16,7 @@ import { PlanSheet, planWhen, usePlans } from "./Plans";
 import { TaskList } from "./TaskList";
 import { useMealTimesRange } from "@/lib/mealTimes";
 import { timeLabel } from "@/lib/dates";
+import { EatHomeRows } from "./EatCheck";
 import { OnLoopSheetBody, loopLine, useOnLoop } from "./OnLoop";
 import { ChecklistPrompt, useChecklistPrompts } from "./Checklists";
 import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
@@ -66,6 +67,7 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
 
   return (
     <section className="card dash">
+      <EatHomeRows />
       {/* Stays until changed or taken off; nothing clears it. */}
       <Row icon="🎧" label="On loop" onClick={() => setOpen({ kind: "loop" })}>
         {loops.length ? loopLine(loops, meId, nameOf) : <span className="muted">What song do you have on repeat?</span>}

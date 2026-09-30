@@ -16,6 +16,7 @@ import { ActivityBatch, MealBatch, PlaceBatch } from "./Batches";
 import { ShopAdd } from "./Shopping";
 import { AllRequests } from "./FoodRequests";
 import { PinForm } from "./Pins";
+import { EatAsk } from "./EatCheck";
 import { GoalForm } from "./Goals";
 import { StatusPicker } from "./Status";
 import { TaskPresetForm } from "./TaskForm";
@@ -30,6 +31,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     title: "Us",
     items: [
       { kind: "requests", emoji: "💌", label: "Requests" },
+      { kind: "eat-check", emoji: "🚨", label: "Did you eat?" },
       { kind: "post", emoji: "🌼", label: "Update" },
       { kind: "star", emoji: "⭐", label: "Star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
@@ -96,6 +98,7 @@ const TITLES: Record<AddKind, string> = {
   requests: "Requests",
   "food-requests": "Requests",
   pin: "📍 Pin something at a time",
+  "eat-check": "🚨 Did you eat?",
   "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
@@ -172,6 +175,7 @@ export function AddSheet() {
       {addOpen === "goal" && <GoalForm onDone={closeAdd} />}
       {(addOpen === "requests" || addOpen === "food-requests") && <AllRequests />}
       {addOpen === "pin" && <PinForm onDone={closeAdd} />}
+      {addOpen === "eat-check" && <EatAsk onDone={closeAdd} />}
       {addOpen === "event-preset" && (
         <div className="stack">
           <Link href="/presets" className="btn btn-block" onClick={closeAdd}>

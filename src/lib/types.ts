@@ -64,7 +64,9 @@ export interface Post {
   /** Dog ids this update is about (src/lib/dogs.ts); non-empty = a dog note. */
   dogs: string[];
   /** "post", a ⭐ "star", a spicy mood ask ("lunch_you"), or a "plan". */
-  kind: "post" | "star" | "lunch_you" | "plan" | "vibe";
+  kind: "post" | "star" | "lunch_you" | "plan" | "vibe" | "eat";
+  /** For "eat" posts: the DID YOU EAT check-in this answers. */
+  eat_check_id?: string | null;
   /** For "plan" posts: the time-block plan on the calendar. */
   plan_id: string | null;
   /** A deck update (Nerd dungeon). */

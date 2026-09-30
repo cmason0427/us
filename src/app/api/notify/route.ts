@@ -23,6 +23,7 @@ type Body =
   | { kind: "status" }
   | { kind: "deck"; id: string }
   | { kind: "task_ask"; id: string }
+  | { kind: "eat"; id: string }
   | { kind: "item_ask"; id: string }
   | { kind: "test" };
 
@@ -210,6 +211,21 @@ export async function POST(req: Request) {
     }
     if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
     const sent = await sendPushToUser(partner.id, { title: `🙏 ${myName} asked`, body: `Could you get to "${title}"? Whenever works, and no is fine.`, url: "/lists", tag: `ask-${body.id}` });
+    return NextResponse.json({ sent });
+  }
+
+  // DID YOU EAT: asking (and asking again) pings them; answering or updating pings the asker.
+  if (body.kind === "eat") {
+    const { data: c } = await supabase.from("eat_checks").select("*").eq("id", body.id).single();
+    if (!c) return NextResponse.json({ error: "no such check" }, { status: 400 });
+    const asking = c.from_user === me.id && !c.answered_at;
+    const answering = c.to_user === me.id && !!c.answered_at;
+    if (!asking && !answering) return NextResponse.json({ error: "not yours to send" }, { status: 400 });
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const label = ({ yes: "YES ✅", no: "NO ❌", working: "WORKING ON IT 🍳" } as Record<string, string>)[c.answer ?? ""] ?? "";
+    const sent = await sendPushToUser(partner.id, asking
+      ? { title: "🚨 DID YOU EAT?", body: `${myName} wants to know. Yes, no, or working on it.`, url: "/", tag: `eat-${c.id}` }
+      : { title: `🍽️ ${myName}${c.updated_at ? " updated" : ""}: ${label}`, body: c.note ?? "Answered your did-you-eat.", url: "/", tag: `eat-${c.id}` });
     return NextResponse.json({ sent });
   }
 
