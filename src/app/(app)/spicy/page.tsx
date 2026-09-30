@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { notify } from "@/lib/notify";
@@ -122,11 +122,16 @@ function PeopleTags({ value, onChange }: { value: string[]; onChange: (v: string
 }
 
 function Pics() {
-  const { meId, partner, nameOf, toast } = useApp();
+  const { meId, partner, toast } = useApp();
   const supabase = supabaseBrowser();
   const [filter, setFilter] = useState<PeopleFilter>("all");
   const [pending, setPending] = useState<{ file: File; url: string; people: string[] }[]>([]);
-  const [open, setOpen] = useState<SpicyMedia | null>(null);
+  // Which one is open in the viewer (swipes through what's showing).
+  const [open, setOpen] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(null);
+  const [editFolder, setEditFolder] = useState<string | null>(null);
+  const [filing, setFiling] = useState<string | null>(null);
+  const { folders, links } = useFolders();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const { data: media = [] } = useLive<SpicyMedia[]>(
@@ -141,9 +146,13 @@ function Pics() {
   const urls = usePhotoUrls(media.flatMap((m) => (m.poster_path ? [m.poster_path] : m.parts > 1 ? [] : [m.storage_path])));
   const them = partner?.id ?? "";
   const only = (m: SpicyMedia, id: string) => m.people.length === 1 && m.people[0] === id;
-  const shown = media.filter((m) =>
-    filter === "all" ? true : filter === "me" ? only(m, meId) : filter === "them" ? only(m, them) : m.people.includes(meId) && m.people.includes(them),
+  const inFolder = folder ? new Set(links.filter((l) => l.folder_id === folder).map((l) => l.media_id)) : null;
+  const shown = media.filter(
+    (m) =>
+      (!inFolder || inFolder.has(m.id)) &&
+      (filter === "all" ? true : filter === "me" ? only(m, meId) : filter === "them" ? only(m, them) : m.people.includes(meId) && m.people.includes(them)),
   );
+  const activeFolder = folders.find((f) => f.id === folder);
   const untagged = media.filter((m) => m.people.length === 0).length;
 
   function pick(files: FileList | File[] | null) {
@@ -212,12 +221,11 @@ function Pics() {
   async function retag(m: SpicyMedia, people: string[]) {
     const { error } = await supabase.from("spicy_media").update({ people }).eq("id", m.id);
     if (error) return toast(error.message);
-    setOpen({ ...m, people });
     refreshAll();
   }
 
   async function remove(m: SpicyMedia) {
-    if (!confirm("Remove this for both of you?")) return;
+    if (!confirm("Remove this for both of you? (It leaves your folders too.)")) return;
     await supabase.from("spicy_media").delete().eq("id", m.id);
     if (m.storage_path.startsWith(`${meId}/`)) await supabase.storage.from("photos").remove([...partPaths(m.storage_path, m.parts ?? 1), ...(m.poster_path ? [m.poster_path] : [])]);
     setOpen(null);
@@ -232,6 +240,16 @@ function Pics() {
         <input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => (pick(e.target.files), (e.target.value = ""))} />
       </label>
       <ImageSources onFiles={(fs) => pick(fs)} />
+
+      <FolderStrip folders={folders} links={links} media={media} urls={urls} active={folder} onPick={setFolder} onEdit={setEditFolder} />
+      {activeFolder && (
+        <div className="row-between">
+          <strong>📁 {activeFolder.title}</strong>
+          <button className="btn-link small" onClick={() => setEditFolder(activeFolder.id)}>
+            title + cover
+          </button>
+        </div>
+      )}
 
       <div className="chips" role="group" aria-label="Show">
         {(
@@ -257,7 +275,7 @@ function Pics() {
       ) : (
         <div className="saved-grid">
           {shown.map((m) => (
-            <button key={m.id} className="saved-item spicy-thumb" onClick={() => setOpen(m)}>
+            <button key={m.id} className="saved-item spicy-thumb" onClick={() => setOpen(m.id)}>
               {m.poster_path ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 urls[m.poster_path] && <img src={urls[m.poster_path]} alt="" loading="lazy" />
@@ -298,25 +316,366 @@ function Pics() {
         </Sheet>
       )}
 
-      {open && (
-        <Sheet title="🌶️" onClose={() => setOpen(null)}>
-          <div className="stack">
-            {isVideo(open.storage_path) ? (
-              <SpicyVideo m={open} />
+      {open && shown.some((m) => m.id === open) && (
+        <SpicyViewer
+          list={shown}
+          openId={open}
+          urls={urls}
+          onClose={() => setOpen(null)}
+          onRetag={retag}
+          onRemove={remove}
+          onFile={(m) => setFiling(m.id)}
+          folderCount={(m) => links.filter((l) => l.media_id === m.id).length}
+        />
+      )}
+      {filing && <FilePicker mediaId={filing} folders={folders} links={links} onClose={() => setFiling(null)} />}
+      {editFolder && folders.some((f) => f.id === editFolder) && (
+        <FolderSheet
+          folder={folders.find((f) => f.id === editFolder)!}
+          items={media.filter((m) => links.some((l) => l.folder_id === editFolder && l.media_id === m.id))}
+          urls={urls}
+          onClose={() => setEditFolder(null)}
+          onDeleted={() => (setEditFolder(null), setFolder(null))}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── folders: personal, one pic can be in many ────────────────────────── */
+
+interface SpicyFolder {
+  id: string;
+  title: string;
+  cover_media_id: string | null;
+  position: number;
+  created_at: string;
+}
+type FolderLink = { folder_id: string; media_id: string; added_at: string };
+
+/** Your own folders (the database only ever gives you yours). */
+function useFolders() {
+  const { data: folders = [] } = useLive<SpicyFolder[]>(
+    "spicy_folders",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("spicy_folders").select("*").order("position").order("created_at");
+      if (error) throw error;
+      return data as SpicyFolder[];
+    },
+    ["spicy_folders"],
+  );
+  const { data: links = [] } = useLive<FolderLink[]>(
+    "spicy_folder_items",
+    async () => {
+      const { data, error } = await supabaseBrowser().from("spicy_folder_items").select("*").order("added_at", { ascending: false });
+      if (error) throw error;
+      return data as FolderLink[];
+    },
+    ["spicy_folder_items"],
+  );
+  return { folders, links };
+}
+
+async function newFolder(title: string, meId: string) {
+  const { data, error } = await supabaseBrowser().from("spicy_folders").insert({ title: title.trim(), owner: meId }).select("id").single();
+  if (error) throw error;
+  refreshAll();
+  return data.id as string;
+}
+
+/** A little square of a pic or video (its still, if it has one). */
+function Thumb({ m, urls }: { m: SpicyMedia | undefined; urls: Record<string, string> }) {
+  if (!m) return <span className="spicy-thumb-empty">🌶️</span>;
+  const src = m.poster_path ? urls[m.poster_path] : m.parts > 1 ? undefined : urls[m.storage_path];
+  if (!src) return <span className="spicy-thumb-empty">▶</span>;
+  // eslint-disable-next-line @next/next/no-img-element
+  return !m.poster_path && isVideo(m.storage_path) ? <video src={src} muted playsInline preload="metadata" /> : <img src={src} alt="" loading="lazy" />;
+}
+
+function coverOf(f: SpicyFolder, links: FolderLink[], media: SpicyMedia[]) {
+  const id = f.cover_media_id ?? links.find((l) => l.folder_id === f.id)?.media_id;
+  return media.find((m) => m.id === id);
+}
+
+function FolderStrip({
+  folders,
+  links,
+  media,
+  urls,
+  active,
+  onPick,
+  onEdit,
+}: {
+  folders: SpicyFolder[];
+  links: FolderLink[];
+  media: SpicyMedia[];
+  urls: Record<string, string>;
+  active: string | null;
+  onPick: (id: string | null) => void;
+  onEdit: (id: string) => void;
+}) {
+  const { meId, toast } = useApp();
+  async function create() {
+    const title = window.prompt("Name the folder", "");
+    if (!title?.trim()) return;
+    try {
+      const id = await newFolder(title, meId);
+      onPick(id);
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  }
+  return (
+    <div className="folder-strip" role="group" aria-label="Your folders">
+      <button className="folder-tile" aria-pressed={active === null} onClick={() => onPick(null)}>
+        <span className="folder-cover all">🌶️</span>
+        <span className="folder-name">everything</span>
+      </button>
+      {folders.map((f) => (
+        <button
+          key={f.id}
+          className="folder-tile"
+          aria-pressed={active === f.id}
+          onClick={() => (active === f.id ? onEdit(f.id) : onPick(f.id))}
+          aria-label={`${f.title}${active === f.id ? " (tap again to edit)" : ""}`}
+        >
+          <span className="folder-cover">
+            <Thumb m={coverOf(f, links, media)} urls={urls} />
+          </span>
+          <span className="folder-name">{f.title}</span>
+          <span className="folder-count">{links.filter((l) => l.folder_id === f.id).length}</span>
+        </button>
+      ))}
+      <button className="folder-tile" onClick={create}>
+        <span className="folder-cover add">＋</span>
+        <span className="folder-name">new folder</span>
+      </button>
+    </div>
+  );
+}
+
+/** Put one pic in (or take it out of) any of your folders. It always stays in the main collection. */
+function FilePicker({ mediaId, folders, links, onClose }: { mediaId: string; folders: SpicyFolder[]; links: FolderLink[]; onClose: () => void }) {
+  const { meId, toast } = useApp();
+  const [draft, setDraft] = useState("");
+  const db = supabaseBrowser();
+  async function toggle(f: SpicyFolder) {
+    const inIt = links.some((l) => l.folder_id === f.id && l.media_id === mediaId);
+    const { error } = inIt ? await db.from("spicy_folder_items").delete().match({ folder_id: f.id, media_id: mediaId }) : await db.from("spicy_folder_items").insert({ folder_id: f.id, media_id: mediaId });
+    if (error) toast(error.message);
+    refreshAll();
+  }
+  async function createAndAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    try {
+      const id = await newFolder(draft, meId);
+      await db.from("spicy_folder_items").insert({ folder_id: id, media_id: mediaId });
+      setDraft("");
+      refreshAll();
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  }
+  return (
+    <Sheet title="📁 Your folders" onClose={onClose}>
+      <div className="stack">
+        <p className="small muted" style={{ margin: 0 }}>Only you see your folders. It stays in the main collection either way.</p>
+        {folders.length > 0 && (
+          <div className="chips">
+            {folders.map((f) => (
+              <button key={f.id} className="chip" aria-pressed={links.some((l) => l.folder_id === f.id && l.media_id === mediaId)} onClick={() => toggle(f)}>
+                {links.some((l) => l.folder_id === f.id && l.media_id === mediaId) ? "✓ " : ""}
+                {f.title}
+              </button>
+            ))}
+          </div>
+        )}
+        <form className="quick-add" onSubmit={createAndAdd}>
+          <input className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="new folder name" aria-label="New folder" />
+          <button className="btn" disabled={!draft.trim()}>
+            Add
+          </button>
+        </form>
+        <button className="btn btn-primary btn-block" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** A folder's title and cover (any pic in it), or delete the folder (the pics stay). */
+function FolderSheet({ folder, items, urls, onClose, onDeleted }: { folder: SpicyFolder; items: SpicyMedia[]; urls: Record<string, string>; onClose: () => void; onDeleted: () => void }) {
+  const { toast } = useApp();
+  const [title, setTitle] = useState(folder.title);
+  const db = supabaseBrowser();
+  const cover = folder.cover_media_id ?? items[0]?.id;
+  async function save(fields: Partial<SpicyFolder>) {
+    const { error } = await db.from("spicy_folders").update(fields).eq("id", folder.id);
+    if (error) toast(error.message);
+    refreshAll();
+  }
+  return (
+    <Sheet title="📁 Folder" onClose={onClose}>
+      <div className="stack">
+        <label className="field">
+          <span>Title</span>
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => title.trim() && title.trim() !== folder.title && save({ title: title.trim() })} />
+        </label>
+        <div className="field">
+          <span>Cover</span>
+          {items.length ? (
+            <div className="saved-grid">
+              {items.map((m) => (
+                <button key={m.id} className={`saved-item spicy-thumb${cover === m.id ? " cover-on" : ""}`} onClick={() => save({ cover_media_id: m.id })} aria-pressed={cover === m.id}>
+                  <Thumb m={m} urls={urls} />
+                  {cover === m.id && <span className="cover-badge">cover</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="small muted">Add pics to it first (open one and tap 📁).</p>
+          )}
+        </div>
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ alignSelf: "flex-start" }}
+          onClick={async () => {
+            if (!confirm(`Delete the "${folder.title}" folder? The pics stay in Spicy.`)) return;
+            await db.from("spicy_folders").delete().eq("id", folder.id);
+            refreshAll();
+            onDeleted();
+          }}
+        >
+          Delete folder
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Full screen: swipe (or arrow) through whatever's showing, like a photo app. */
+function SpicyViewer({
+  list,
+  openId,
+  urls,
+  onClose,
+  onRetag,
+  onRemove,
+  onFile,
+  folderCount,
+}: {
+  list: SpicyMedia[];
+  openId: string;
+  urls: Record<string, string>;
+  onClose: () => void;
+  onRetag: (m: SpicyMedia, people: string[]) => void;
+  onRemove: (m: SpicyMedia) => void;
+  onFile: (m: SpicyMedia) => void;
+  folderCount: (m: SpicyMedia) => number;
+}) {
+  const { meId, nameOf } = useApp();
+  const [idx, setIdx] = useState(() => Math.max(0, list.findIndex((m) => m.id === openId)));
+  const [info, setInfo] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
+  const cur = list[Math.min(idx, list.length - 1)];
+  const full = usePhotoUrls(cur && !isVideo(cur.storage_path) ? [cur.storage_path] : []);
+
+  useLayoutEffect(() => {
+    const el = strip.current;
+    if (el) el.scrollLeft = idx * el.clientWidth;
+    // Only on open: after that, the strip's scroll decides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") go(1);
+      if (e.key === "ArrowLeft") go(-1);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  });
+  function go(d: number) {
+    const el = strip.current;
+    const k = Math.min(list.length - 1, Math.max(0, idx + d));
+    if (el) el.scrollTo({ left: k * el.clientWidth, behavior: "smooth" });
+  }
+  if (!cur) return null;
+  const n = folderCount(cur);
+
+  return (
+    <div className="spicy-viewer" role="dialog" aria-label="Viewer">
+      <div className="sv-top">
+        <button className="sv-btn" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        <span className="sv-count">
+          {idx + 1} / {list.length}
+        </span>
+        <span className="row" style={{ gap: 6 }}>
+          <button className="sv-btn" onClick={() => onFile(cur)} aria-label="Folders">
+            📁{n ? <sup>{n}</sup> : null}
+          </button>
+          <button className="sv-btn" aria-pressed={info} onClick={() => setInfo((x) => !x)} aria-label="Details">
+            ⓘ
+          </button>
+        </span>
+      </div>
+      <div
+        ref={strip}
+        className="sv-strip"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const k = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+          if (k !== idx) setIdx(k);
+        }}
+      >
+        {list.map((m, k) => (
+          <div key={m.id} className="sv-slide">
+            {Math.abs(k - idx) > 1 ? null : isVideo(m.storage_path) ? (
+              k === idx ? (
+                <SpicyVideo m={m} />
+              ) : (
+                <Thumb m={m} urls={urls} />
+              )
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={urls[open.storage_path]} alt="" style={{ width: "100%", borderRadius: 14 }} />
+              <img src={(k === idx ? full[m.storage_path] : undefined) ?? urls[m.storage_path]} alt="" draggable={false} />
             )}
-            <div className="field">
-              <span>Who&apos;s in it</span>
-              <PeopleTags value={open.people} onChange={(people) => retag(open, people)} />
-            </div>
-            <p className="small faint">Added by {open.added_by === meId ? "you" : nameOf(open.added_by)}</p>
-            <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => remove(open)}>
-              Remove for both of us
-            </button>
           </div>
-        </Sheet>
+        ))}
+      </div>
+      {idx > 0 && (
+        <button className="sv-arrow left" onClick={() => go(-1)} aria-label="Previous">
+          ‹
+        </button>
+      )}
+      {idx < list.length - 1 && (
+        <button className="sv-arrow right" onClick={() => go(1)} aria-label="Next">
+          ›
+        </button>
+      )}
+      {info && (
+        <div className="sv-info">
+          <div className="field">
+            <span>Who&apos;s in it</span>
+            <PeopleTags value={cur.people} onChange={(people) => onRetag(cur, people)} />
+          </div>
+          <p className="small faint" style={{ margin: 0 }}>
+            Added by {cur.added_by === meId ? "you" : nameOf(cur.added_by)}
+            {n ? ` · in ${n} of your folders` : ""}
+          </p>
+          <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => onRemove(cur)}>
+            Remove for both of us
+          </button>
+        </div>
       )}
     </div>
   );
