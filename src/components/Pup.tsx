@@ -10,8 +10,10 @@ import { DOGS, dogName, type DogId } from "@/lib/dogs";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { TrainingMap } from "./TrainingMap";
+import { TrainingLog } from "./TrainingLog";
 
 // Pup parenting: being the dog parent you want to be.
+//   Sessions → training report cards and progress (TrainingLog)
 //   Rules    → why each exists, whether it's still needed, how strict, a gentler way
 //   Collar   → how often the e-collar gets used and at what levels, with nudges
 //   Training → a map of concepts/plans and how they connect (TrainingMap)
@@ -73,7 +75,7 @@ function useTable<T>(table: string, dog: string, order = "created_at") {
 
 export function PupView() {
   const [dog, setDog] = useState<DogId>("wiley");
-  const [tab, setTab] = useState<"rules" | "collar" | "map" | "notes">("rules");
+  const [tab, setTab] = useState<"sessions" | "rules" | "collar" | "map" | "notes">("sessions");
   return (
     <div className="stack">
       <div className="row-between wrap" style={{ gap: 8 }}>
@@ -85,20 +87,22 @@ export function PupView() {
           ))}
         </div>
       </div>
-      <div className="seg" role="group" aria-label="Pup parenting">
+      <div className="chips pup-tabs" role="group" aria-label="Pup parenting">
         {(
           [
+            ["sessions", "📋 Sessions"],
             ["rules", "📏 Rules"],
             ["collar", "📟 Collar"],
             ["map", "🌳 Training"],
             ["notes", "📝 Notes"],
           ] as const
         ).map(([k, label]) => (
-          <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>
+          <button key={k} className="chip" aria-pressed={tab === k} onClick={() => setTab(k)}>
             {label}
           </button>
         ))}
       </div>
+      {tab === "sessions" && <TrainingLog dog={dog} />}
       {tab === "rules" && <Rules dog={dog} />}
       {tab === "collar" && <Collar dog={dog} />}
       {tab === "map" && <TrainingMap dog={dog} />}

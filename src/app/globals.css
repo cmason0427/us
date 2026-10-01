@@ -1487,3 +1487,37 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .nav-pin { border: 0; background: none; font-size: 1rem; cursor: pointer; opacity: 0.3; filter: grayscale(1); }
 .nav-pin.on { opacity: 1; filter: none; }
 .nav-arrange-empty { padding: 12px; border: 1.5px dashed var(--line); border-radius: 12px; font-size: 0.85rem; color: var(--ink-faint); text-align: center; }
+
+/* Training sessions (report cards) */
+.pup-tabs .chip { font-weight: 700; }
+.tl-next { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #e9f1fc; border-left: 4px solid #84aee5; }
+.tl-month { margin: 6px 4px 0; }
+.tl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.tl-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); font: inherit; color: var(--ink); text-align: left; cursor: pointer; min-height: 96px; }
+.tl-tile.star { border-color: #e2b63d; background: #fffaf0; }
+.tl-date { display: flex; align-items: baseline; gap: 4px; }
+.tl-date strong { font-family: var(--font-display); font-size: 1.3rem; }
+.tl-date span { font-size: 0.75rem; color: var(--ink-faint); font-weight: 700; }
+.tl-emojis { font-size: 1.25rem; letter-spacing: 1px; }
+.tl-tag { font-size: 0.7rem; font-weight: 700; color: var(--ink-soft); background: var(--surface-sunk); padding: 1px 7px; border-radius: 999px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-star { position: absolute; top: 6px; right: 8px; }
+.tl-milestones { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tl-milestones li { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.tl-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.tl-key-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #5b8fd6; vertical-align: middle; margin-right: 3px; }
+.tl-key-line { display: inline-block; width: 16px; height: 2px; background: var(--ink-soft); vertical-align: middle; margin-right: 3px; }
+.tl-grid-line { stroke: var(--line); stroke-width: 1; }
+.tl-axis { font-size: 8px; fill: var(--ink-faint); }
+.tl-avg { fill: none; stroke: var(--ink-soft); stroke-width: 2; stroke-linejoin: round; }
+.tl-dot { fill: #5b8fd6; stroke: var(--surface); stroke-width: 2; }
+.tl-whom { font-size: 1.05rem !important; }
+.tl-card-emojis { font-size: 1.8rem; }
+.tl-milestone-banner { padding: 10px 12px; border-radius: 12px; background: #fdf3d2; border: 1.5px solid #e2b63d; font-weight: 750; }
+.tl-line { display: flex; flex-direction: column; gap: 2px; }
+.tl-pre { white-space: pre-wrap; margin: 4px 0 0; }
+.tl-tagchip { background: #eef3fb; }
+.tl-emoji-pick { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.tl-emoji-pick button { aspect-ratio: 1; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 1.25rem; cursor: pointer; padding: 0; }
+.tl-emoji-pick button[aria-pressed="true"] { border-color: var(--ink); background: var(--butter); }
+.tl-lens { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; background: var(--surface-sunk); }
+.tl-lens input[type="range"] { width: 100%; }
