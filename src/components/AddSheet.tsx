@@ -18,6 +18,7 @@ import { AllRequests } from "./FoodRequests";
 import { PinForm } from "./Pins";
 import { EatAsk } from "./EatCheck";
 import { QuickFoodLog } from "./Fit";
+import { WaterQuickAdd } from "./Water";
 import { GoalForm } from "./Goals";
 import { StatusPicker } from "./Status";
 import { TaskPresetForm } from "./TaskForm";
@@ -56,6 +57,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "meal", emoji: "🍳", label: "Home meal" },
       { kind: "place", emoji: "📍", label: "Place" },
       { kind: "food-log", emoji: "🍗", label: "Log food eaten" },
+      { kind: "water", emoji: "💧", label: "Water" },
     ],
   },
   {
@@ -102,6 +104,7 @@ const TITLES: Record<AddKind, string> = {
   pin: "📍 Pin something at a time",
   "eat-check": "🚨 Did you eat?",
   "food-log": "🍗 Log food eaten",
+  water: "💧 Water",
   "event-preset": "New calendar preset",
   "dog-preset": "New dog preset",
   goal: "New goal",
@@ -134,7 +137,7 @@ function OneOrMany({ one, many }: { one: ReactNode; many: ReactNode }) {
 
 /** The fast-entry sheet behind the + button. Anything, in two taps. */
 export function AddSheet() {
-  const { addOpen, openAdd, closeAdd } = useApp();
+  const { addOpen, openAdd, closeAdd, meId } = useApp();
   if (!addOpen) return null;
 
   if (addOpen === "menu") {
@@ -180,6 +183,7 @@ export function AddSheet() {
       {addOpen === "pin" && <PinForm onDone={closeAdd} />}
       {addOpen === "eat-check" && <EatAsk onDone={closeAdd} />}
       {addOpen === "food-log" && <QuickFoodLog onDone={closeAdd} />}
+      {addOpen === "water" && <WaterQuickAdd userId={meId} onDone={closeAdd} />}
       {addOpen === "event-preset" && (
         <div className="stack">
           <Link href="/presets" className="btn btn-block" onClick={closeAdd}>

@@ -20,6 +20,7 @@ import { EatHomeRows } from "./EatCheck";
 import { OnLoopSheetBody, loopLine, useOnLoop } from "./OnLoop";
 import { ChecklistPrompt, useChecklistPrompts } from "./Checklists";
 import { StatusSheetBody, useMyStatus, usePartnerStatus } from "./Status";
+import { WaterHomeLine, WaterHomeSheet, useWaterHome } from "./Water";
 
 /**
  * Today at a glance. Everything here is read-only until you tap it; the
@@ -33,7 +34,7 @@ export function Dashboard() {
   return <Today day={format(now, "yyyy-MM-dd")} meal={meal} mealDay={mealDay} />;
 }
 
-type Open = { kind: "loop" } | { kind: "sleep" } | { kind: "meal" } | { kind: "later-meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | null;
+type Open = { kind: "loop" } | { kind: "sleep" } | { kind: "meal" } | { kind: "later-meal"; meal: Meal } | { kind: "vibe" } | { kind: "plan"; id: string } | { kind: "dogs" } | { kind: "status"; mine: boolean } | { kind: "water" } | null;
 
 const MEAL_ICON: Record<Meal, string> = { breakfast: "🥞", lunch: "🥪", dinner: "🍝" };
 
@@ -64,6 +65,7 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
   const chores = useChecklistPrompts();
   const loops = useOnLoop();
   const { meId, nameOf } = useApp();
+  const water = useWaterHome();
 
   return (
     <section className="card dash">
@@ -123,6 +125,12 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
         </Row>
       ) : null}
 
+      {water.show && (
+        <Row icon="💧" label="Water" onClick={() => setOpen({ kind: "water" })}>
+          <WaterHomeLine total={water.total} s={water.settings} />
+        </Row>
+      )}
+
       {chores.day && chores.due.map((p) => <ChecklistPrompt key={p.id} p={p} day={chores.day!} />)}
 
       {dogTodos > 0 && (
@@ -153,6 +161,7 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
         </Sheet>
       )}
       {open?.kind === "vibe" && vibe.incoming && <AnswerSheet check={vibe.incoming} onClose={() => setOpen(null)} />}
+      {open?.kind === "water" && <WaterHomeSheet onClose={() => setOpen(null)} />}
       {open?.kind === "plan" && <PlanSheet id={open.id} onClose={() => setOpen(null)} />}
       {open?.kind === "dogs" && (
         <Sheet title="🐾 Dog to-dos" onClose={() => setOpen(null)}>

@@ -76,6 +76,17 @@ export const IconDumbbell = (p: P) => (
 export const IconBag = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M5 8h14l-1 12.5H6L5 8z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></svg>
 );
+export const IconDrop = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M12 3.5c-3.2 4.2-6 7.6-6 11a6 6 0 0 0 12 0c0-3.4-2.8-6.8-6-11z" />
+    <path d="M9.2 15.2a2.9 2.9 0 0 0 2.6 2.6" />
+  </svg>
+);
+export const IconBone = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}>
+    <path d="M8.6 10.2 13.8 15.4a2.3 2.3 0 1 0 3.3 2.6 2.3 2.3 0 1 0 1.9-3.9 2.3 2.3 0 1 0-3.3-2.6L10.5 6.3a2.3 2.3 0 1 0-3.3-2.6 2.3 2.3 0 1 0-1.9 3.9 2.3 2.3 0 1 0 3.3 2.6z" />
+  </svg>
+);
 export const IconPaw = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><ellipse cx="12" cy="16" rx="4" ry="3.3" /><circle cx="6.5" cy="11" r="1.7" /><circle cx="9.7" cy="7" r="1.7" /><circle cx="14.3" cy="7" r="1.7" /><circle cx="17.5" cy="11" r="1.7" /></svg>
 );
