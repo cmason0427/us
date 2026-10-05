@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Sheet } from "./Sheet";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { usePhotoUrls } from "@/lib/photos";
@@ -37,7 +38,7 @@ interface Item {
 }
 /** How text looks: size, bold, font, color, alignment. */
 type Crop = { x: number; y: number; s: number };
-type Shape = "polaroid" | "plain" | "rounded" | "circle" | "arch" | "star" | "hex" | "diamond";
+type Shape = "polaroid" | "plain" | "rounded" | "circle" | "oval" | "arch" | "star" | "hex" | "diamond";
 type Look = {
   fs?: number;
   b?: boolean;
@@ -64,7 +65,8 @@ const SHAPES: { key: Shape; label: string; clip?: string }[] = [
   { key: "polaroid", label: "▢ classic" },
   { key: "plain", label: "■ plain", clip: "inset(0)" },
   { key: "rounded", label: "▢ rounded", clip: "inset(0 round 16%)" },
-  { key: "circle", label: "● circle", clip: "ellipse(50% 50% at 50% 50%)" },
+  { key: "circle", label: "● circle", clip: "circle(closest-side at 50% 50%)" },
+  { key: "oval", label: "⬭ oval", clip: "ellipse(50% 50% at 50% 50%)" },
   { key: "arch", label: "◠ arch", clip: "inset(0 round 50% 50% 0 0)" },
   { key: "star", label: "★ star", clip: "polygon(50% 0%, 61.8% 35%, 98% 35.4%, 68.9% 57.3%, 79.4% 91.6%, 50% 70.8%, 20.6% 91.6%, 31.1% 57.3%, 2% 35.4%, 38.2% 35%)" },
   { key: "hex", label: "⬢ hex", clip: "polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%)" },
@@ -74,7 +76,61 @@ const BORDERS = [0, 3, 7, 12];
 const FRAME_COLORS = ["#ffffff", "#3b2a2a", "#f4c6d4", "#f2d27a", "#b9dcc0", "#bcd3f2", "#d9c3f0", "#e7a58a"];
 const HIGHLIGHTS = ["#ffe066", "#ffb3c7", "#b8ecc4", "#b9d7ff", "#e2c9ff", "#ffc9a3"];
 const NO_CROP: Crop = { x: 50, y: 50, s: 1 };
-const cropCss = (c: Crop): React.CSSProperties => ({ objectPosition: `${c.x}% ${c.y}%`, transform: c.s > 1 ? `scale(${c.s})` : undefined, transformOrigin: `${c.x}% ${c.y}%` });
+
+/**
+ * Where a picture sits in a frame of aspect F (w/h): `c.x`/`c.y` is the point of
+ * the image (in %) kept at the frame's centre, `c.s` zooms past "just covers".
+ * Clamped so the frame is always full: no blank edges, whatever its shape.
+ */
+function fitGeom(F: number, A: number, c: Crop) {
+  let w = A >= F ? (A / F) * 100 : 100;
+  let h = A >= F ? 100 : (F / A) * 100;
+  w *= c.s;
+  h *= c.s;
+  const left = Math.min(0, Math.max(100 - w, 50 - (c.x / 100) * w));
+  const top = Math.min(0, Math.max(100 - h, 50 - (c.y / 100) * h));
+  return { w, h, left, top };
+}
+
+/** A picture filling its box, positioned by `crop`, measuring itself so it stays right at any size. */
+function FramedImg({ src, crop }: { src: string; crop: Crop }) {
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const [ar, setAr] = useState<number | null>(null);
+  const ro = useRef<ResizeObserver | null>(null);
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    ro.current?.disconnect();
+    if (!el) return;
+    ro.current = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.current.observe(el);
+  }, []);
+  const g = box && ar && box.h > 0 ? fitGeom(box.w / box.h, ar, crop) : null;
+  return (
+    <div className="framed" ref={measure}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        crossOrigin="anonymous"
+        onLoad={(e) => setAr(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+        style={g ? { position: "absolute", width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, maxWidth: "none" } : { width: "100%", height: "100%", objectFit: "cover" }}
+      />
+    </div>
+  );
+}
+
+/** Shape + border around anything (a photo, or one slot of a layout). */
+function inFrame(style: Look | null, child: React.ReactNode) {
+  const shape = SHAPES.find((x) => x.key === (style?.shape ?? "polaroid"))!;
+  if (!shape.clip) return <div className="board-frame-in">{child}</div>;
+  return (
+    <div className="board-frame" style={{ clipPath: shape.clip, background: style?.bw ? (style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: style?.bw ?? 0 }}>
+      <div className="board-frame-in" style={{ clipPath: shape.clip }}>
+        {child}
+      </div>
+    </div>
+  );
+}
 
 /** Rows of photos that best fill a w×h frame: 4 in a tall frame stacks, in a square goes 2×2. */
 function autoRows(n: number, w: number, h: number): number[] {
@@ -177,8 +233,8 @@ export function Board({ thread }: { thread: Thread }) {
   const slotInput = useRef<HTMLInputElement>(null);
   const [slotFor, setSlotFor] = useState<{ id: string; slot: number } | null>(null);
   // Adjusting how picture(s) sit in a frame: which item, which slot ("one" = a single photo).
-  const [cropping, setCropping] = useState<{ id: string; slot: string } | null>(null);
-  const [cropLive, setCropLive] = useState<Record<string, Crop>>({});
+  // The photo editor (like editing a profile pic): which item, which slot, and each slot's frame shape right now.
+  const [photoEdit, setPhotoEdit] = useState<{ id: string; slot: number; aspects: number[] } | null>(null);
   const [subRaw, setSubRaw] = useState<{ id: string; k: "frame" | "hl" | "color" } | null>(null);
   useEffect(() => {
     try {
@@ -566,6 +622,7 @@ export function Board({ thread }: { thread: Thread }) {
         if (it?.kind === "grid" && slotEl && cur.wasSel) {
           const k = Number(slotEl.dataset.slot);
           if (cur.target.closest("[data-clear]")) return patch(it.id, { photos: (it.photos ?? []).map((p, n) => (n === k ? "" : p)) });
+          if (it.photos?.[k]) return openPhotoEdit(it, k);
           setSlotFor({ id: it.id, slot: k });
           slotInput.current?.click();
           return;
@@ -731,45 +788,12 @@ export function Board({ thread }: { thread: Thread }) {
     textAlign: i.style?.al,
     ["--hlc" as string]: i.style?.hlc ?? HIGHLIGHTS[0],
   });
-  const cropOf = (i: Item, slot: string): Crop => cropLive[`${i.id}:${slot}`] ?? (slot === "one" ? i.style?.crop : i.style?.crops?.[slot]) ?? NO_CROP;
-  /** Drag inside a frame to move the picture; the slider zooms it. */
-  const cropHandlers = (i: Item, slot: string) => ({
-    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-      e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setCropping({ id: i.id, slot });
-      const r = e.currentTarget.getBoundingClientRect();
-      const start = cropOf(i, slot);
-      const sx = e.clientX;
-      const sy = e.clientY;
-      const el = e.currentTarget;
-      let last = start;
-      const move = (ev: PointerEvent) => {
-        const k = 140 / Math.max(1, start.s);
-        last = { ...start, x: Math.max(0, Math.min(100, start.x - ((ev.clientX - sx) / r.width) * k)), y: Math.max(0, Math.min(100, start.y - ((ev.clientY - sy) / r.height) * k)) };
-        setCropLive((c) => ({ ...c, [`${i.id}:${slot}`]: last }));
-      };
-      const up = () => {
-        el.removeEventListener("pointermove", move);
-        el.removeEventListener("pointerup", up);
-        el.removeEventListener("pointercancel", up);
-        saveCrop(i, slot, last);
-      };
-      el.addEventListener("pointermove", move);
-      el.addEventListener("pointerup", up);
-      el.addEventListener("pointercancel", up);
-    },
-  });
-  function saveCrop(i: Item, slot: string, c: Crop) {
-    const st = i.style ?? {};
-    const style = slot === "one" ? { ...st, crop: c } : { ...st, crops: { ...(st.crops ?? {}), [slot]: c } };
-    patch(i.id, { style }).then(() =>
-      setCropLive((l) => {
-        const { [`${i.id}:${slot}`]: _d, ...rest } = l;
-        void _d;
-        return rest;
-      }),
-    );
+  /** Open the photo editor, measuring each slot's frame as it is right now. */
+  function openPhotoEdit(i: Item, slot: number) {
+    const el = document.querySelector(`[data-item="${i.id}"]`);
+    const boxesOf = i.kind === "grid" ? Array.from({ length: slotCount(i) }, (_, k) => el?.querySelector<HTMLElement>(`[data-slot="${k}"] .framed, [data-slot="${k}"]`)) : [el?.querySelector<HTMLElement>(".framed")];
+    const aspects = boxesOf.map((b) => (b && b.offsetHeight ? b.offsetWidth / b.offsetHeight : 1));
+    setPhotoEdit({ id: i.id, slot, aspects });
   }
   /** Size the frame to the photo's own proportions (keeps the width). */
   async function fitToPhoto(i: Item) {
@@ -879,49 +903,21 @@ export function Board({ thread }: { thread: Thread }) {
                 </svg>
               );
             } else if (i.kind === "photo" && i.photo_path) {
-              const shape = SHAPES.find((x) => x.key === (i.style?.shape ?? "polaroid"))!;
-              const img = urls[i.photo_path] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={urls[i.photo_path]} alt="" draggable={false} crossOrigin="anonymous" style={cropCss(cropOf(i, "one"))} />
-              ) : (
-                <span className="board-wait" />
-              );
-              body = shape.clip ? (
-                <div className="board-frame" style={{ clipPath: shape.clip, background: i.style?.bw ? (i.style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: i.style?.bw ?? 0 }}>
-                  <div className="board-frame-in" style={{ clipPath: shape.clip }}>
-                    {img}
-                  </div>
-                </div>
-              ) : (
-                <div className="board-frame-in">{img}</div>
-              );
-              if (isSel && cropping?.id === i.id) body = (
-                <>
-                  {body}
-                  <span className="board-crop board-ui" {...cropHandlers(i, "one")} aria-label="Drag to move the photo in its frame" />
-                </>
-              );
+              body = inFrame(i.style, urls[i.photo_path] ? <FramedImg src={urls[i.photo_path]} crop={i.style?.crop ?? NO_CROP} /> : <span className="board-wait" />);
             } else if (i.kind === "sticker" && i.photo_path) {
               // eslint-disable-next-line @next/next/no-img-element
               body = urls[i.photo_path] ? <img src={urls[i.photo_path]} alt="" draggable={false} crossOrigin="anonymous" /> : <span className="board-wait" />;
             } else if (i.kind === "grid") {
               const slotBody = (k: number) => {
                 const path = i.photos?.[k];
-                const adjusting = isSel && cropping?.id === i.id;
                 return (
                   <>
-                    {path && urls[path] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={urls[path]} alt="" draggable={false} crossOrigin="anonymous" style={cropCss(cropOf(i, String(k)))} />
-                    ) : (
-                      <span className="board-slot-add">{isSel ? "＋" : ""}</span>
-                    )}
-                    {path && isSel && !adjusting && (
+                    {path && urls[path] ? inFrame(i.style, <FramedImg src={urls[path]} crop={i.style?.crops?.[String(k)] ?? NO_CROP} />) : <span className="board-slot-add">{isSel ? "＋" : ""}</span>}
+                    {path && isSel && (
                       <span className="board-slot-x board-ui" data-clear="1" aria-label="Clear this photo">
                         ×
                       </span>
                     )}
-                    {adjusting && path && <span className={`board-crop board-ui${cropping?.slot === String(k) ? " on" : ""}`} {...cropHandlers(i, String(k))} />}
                   </>
                 );
               };
@@ -1125,6 +1121,9 @@ export function Board({ thread }: { thread: Thread }) {
           )}
           {sel.kind === "grid" && (
             <>
+              <button className="fmt" aria-pressed={subPanel === "frame"} onClick={() => setSubPanel(subPanel === "frame" ? null : "frame")}>
+                🖼 Frames
+              </button>
               <span className="small faint" style={{ flex: "none" }}>
                 photos
               </span>
@@ -1134,8 +1133,8 @@ export function Board({ thread }: { thread: Thread }) {
                 </button>
               ))}
               {sel.photos?.some(Boolean) && (
-                <button className="fmt" aria-pressed={cropping?.id === sel.id} onClick={() => setCropping(cropping?.id === sel.id ? null : { id: sel.id, slot: "0" })}>
-                  ✥ Adjust
+                <button className="fmt" onClick={() => openPhotoEdit(sel, Math.max(0, (sel.photos ?? []).findIndex(Boolean)))}>
+                  ✥ Edit photos
                 </button>
               )}
             </>
@@ -1147,8 +1146,8 @@ export function Board({ thread }: { thread: Thread }) {
           )}
           {sel.kind === "photo" && sel.photo_path && (
             <>
-              <button className="fmt" aria-pressed={cropping?.id === sel.id} onClick={() => setCropping(cropping?.id === sel.id ? null : { id: sel.id, slot: "one" })}>
-                ✥ Adjust
+              <button className="fmt" onClick={() => openPhotoEdit(sel, 0)}>
+                ✥ Edit
               </button>
               <button className="fmt" aria-pressed={subPanel === "frame"} onClick={() => setSubPanel(subPanel === "frame" ? null : "frame")}>
                 🖼 Frame
@@ -1195,29 +1194,7 @@ export function Board({ thread }: { thread: Thread }) {
         </div>
       ) : null}
 
-      {sel && tool === "move" && !editItem && !shot && cropping?.id === sel.id && (
-        <div className="board-subbar board-ui">
-          <span className="small">{sel.kind === "grid" ? "drag a photo to move it · zoom" : "drag to move · zoom"}</span>
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.05}
-            value={cropOf(sel, cropping.slot).s}
-            aria-label="Zoom the photo"
-            onChange={(e) => setCropLive((c) => ({ ...c, [`${sel.id}:${cropping.slot}`]: { ...cropOf(sel, cropping.slot), s: Number(e.target.value) } }))}
-            onPointerUp={() => saveCrop(sel, cropping.slot, cropOf(sel, cropping.slot))}
-            onKeyUp={() => saveCrop(sel, cropping.slot, cropOf(sel, cropping.slot))}
-          />
-          <button className="btn btn-sm btn-ghost" onClick={() => saveCrop(sel, cropping.slot, NO_CROP)}>
-            Reset
-          </button>
-          <button className="btn btn-sm btn-primary" onClick={() => setCropping(null)}>
-            Done
-          </button>
-        </div>
-      )}
-      {sel && tool === "move" && !editItem && !shot && !cropping && subPanel === "frame" && sel.kind === "photo" && (
+      {sel && tool === "move" && !editItem && !shot && subPanel === "frame" && (sel.kind === "photo" || sel.kind === "grid") && (
         <div className="board-subbar board-ui wrap">
           <div className="chips">
             {SHAPES.map((x) => (
@@ -1255,6 +1232,27 @@ export function Board({ thread }: { thread: Thread }) {
         </div>
       )}
 
+      {photoEdit && items.find((i) => i.id === photoEdit.id) && (
+        <PhotoEditor
+          item={items.find((i) => i.id === photoEdit.id)!}
+          urls={urls}
+          start={photoEdit.slot}
+          aspects={photoEdit.aspects}
+          onClose={() => setPhotoEdit(null)}
+          onSave={async (photos, crops) => {
+            const it = items.find((i) => i.id === photoEdit.id)!;
+            const st = it.style ?? {};
+            if (it.kind === "photo") await patch(it.id, { style: { ...st, crop: crops[0] } });
+            else await patch(it.id, { photos, style: { ...st, crops: Object.fromEntries(crops.map((c, k) => [String(k), c])) } });
+            setPhotoEdit(null);
+          }}
+          onReplace={(k) => {
+            setPhotoEdit(null);
+            setSlotFor({ id: photoEdit.id, slot: k });
+            slotInput.current?.click();
+          }}
+        />
+      )}
       {sel && tool === "move" && !editItem && !shot && subPanel === "color" && (
         <div className="board-subbar board-ui wrap">
           <span className="small faint">{sel.kind === "note" ? "text color" : sel.kind === "sticky" ? "sticky color" : "ink color"}</span>
@@ -1542,5 +1540,194 @@ function Layers({
         })}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Edit how photos sit in their frames, like setting a profile picture: the frame
+ * is shown at its real shape, drag to move, pinch or slide to zoom. For layouts,
+ * the strip underneath picks a slot and drags to reorder.
+ */
+function PhotoEditor({
+  item,
+  urls,
+  start,
+  aspects,
+  onSave,
+  onReplace,
+  onClose,
+}: {
+  item: Item;
+  urls: Record<string, string>;
+  start: number;
+  aspects: number[];
+  onSave: (photos: string[], crops: Crop[]) => void;
+  onReplace: (slot: number) => void;
+  onClose: () => void;
+}) {
+  const isGrid = item.kind === "grid";
+  const n = isGrid ? slotCount(item) : 1;
+  const [photos, setPhotos] = useState<string[]>(() => (isGrid ? Array.from({ length: n }, (_, k) => item.photos?.[k] ?? "") : [item.photo_path ?? ""]));
+  const [crops, setCrops] = useState<Crop[]>(() =>
+    isGrid ? Array.from({ length: n }, (_, k) => item.style?.crops?.[String(k)] ?? NO_CROP) : [item.style?.crop ?? NO_CROP],
+  );
+  const [cur, setCur] = useState(Math.min(start, n - 1));
+  const [ars, setArs] = useState<Record<string, number>>({});
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ crop: Crop; d0: number; cx: number; cy: number } | null>(null);
+  const stage = useRef<HTMLDivElement>(null);
+
+  const F = aspects[cur] ?? 1;
+  const W = Math.min(300, (typeof window !== "undefined" ? window.innerWidth : 360) - 72);
+  const fw = F >= 1 ? W : Math.round(W * Math.max(F, 0.45));
+  const fh = Math.round(fw / F);
+  const path = photos[cur];
+  const src = path ? urls[path] : undefined;
+  const A = path ? ars[path] : undefined;
+  const crop = crops[cur] ?? NO_CROP;
+  const g = A ? fitGeom(F, A, crop) : null;
+  const setCrop = (c: Crop) => setCrops((cs) => cs.map((x, k) => (k === cur ? c : x)));
+
+  function down(e: React.PointerEvent) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const ps = [...pointers.current.values()];
+    const mid = ps.reduce((a, p) => ({ x: a.x + p.x / ps.length, y: a.y + p.y / ps.length }), { x: 0, y: 0 });
+    const d0 = ps.length > 1 ? Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) : 0;
+    gesture.current = { crop, d0, cx: mid.x, cy: mid.y };
+  }
+  function move(e: React.PointerEvent) {
+    if (!pointers.current.has(e.pointerId) || !gesture.current || !A) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const ps = [...pointers.current.values()];
+    const mid = ps.reduce((a, p) => ({ x: a.x + p.x / ps.length, y: a.y + p.y / ps.length }), { x: 0, y: 0 });
+    const g0 = gesture.current;
+    let s2 = g0.crop.s;
+    if (ps.length > 1 && g0.d0 > 0) s2 = Math.max(1, Math.min(4, g0.crop.s * (Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) / g0.d0)));
+    const geo = fitGeom(F, A, { ...g0.crop, s: s2 });
+    // Dragging right shows more of the left of the picture.
+    const x = g0.crop.x - ((mid.x - g0.cx) / ((fw * geo.w) / 100)) * 100;
+    const y = g0.crop.y - ((mid.y - g0.cy) / ((fh * geo.h) / 100)) * 100;
+    // Keep the stored centre inside what the clamp allows, so it never "sticks".
+    const half = (v: number, size: number) => Math.max((50 / size) * 100, Math.min(100 - (50 / size) * 100, v));
+    setCrop({ x: half(x, geo.w), y: half(y, geo.h), s: s2 });
+  }
+  function up(e: React.PointerEvent) {
+    pointers.current.delete(e.pointerId);
+    const ps = [...pointers.current.values()];
+    gesture.current = ps.length ? { crop: crops[cur], d0: 0, cx: ps[0].x, cy: ps[0].y } : null;
+  }
+
+  // Thumbnail strip: tap to pick, drag to reorder (the crop travels with its photo).
+  const thumbDown = useRef<{ k: number; x: number; y: number; moved: boolean } | null>(null);
+  function stripMove(e: React.PointerEvent) {
+    const t = thumbDown.current;
+    if (!t) return;
+    if (!t.moved && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 8) return;
+    t.moved = true;
+    setDragFrom(t.k);
+    const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-thumb]");
+    const to = over ? Number(over.dataset.thumb) : -1;
+    if (to < 0 || to === t.k) return;
+    const from = t.k; // updaters run later, after t.k moves on
+    const mv = <T,>(arr: T[]) => {
+      const a = [...arr];
+      const [x] = a.splice(from, 1);
+      a.splice(to, 0, x);
+      return a;
+    };
+    setPhotos(mv);
+    setCrops(mv);
+    setCur((c) => (c === from ? to : c === to ? from : c));
+    t.k = to;
+  }
+  function stripUp() {
+    const t = thumbDown.current;
+    thumbDown.current = null;
+    setDragFrom(null);
+    if (!t || t.moved) return;
+    if (photos[t.k]) setCur(t.k);
+    else onReplace(t.k);
+  }
+
+  return (
+    <Sheet title={isGrid ? "Edit photos" : "Edit photo"} onClose={onClose}>
+      <div className="stack pe">
+        <div className="pe-stage" ref={stage} style={{ height: fh + 40 }}>
+          {src ? (
+            <div className="pe-frame" style={{ width: fw, height: fh }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+              {g && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="pe-ghost" src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` }} />
+              )}
+              <div className="pe-window">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  draggable={false}
+                  onLoad={(e) => {
+                    const r = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight;
+                    setArs((m) => (path && !m[path] ? { ...m, [path]: r } : m));
+                  }}
+                  style={g ? { width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` } : { opacity: 0 }}
+                />
+              </div>
+            </div>
+          ) : (
+            <button className="pe-empty" style={{ width: fw, height: fh }} onClick={() => onReplace(cur)}>
+              ＋ add a photo
+            </button>
+          )}
+        </div>
+        <div className="row" style={{ gap: 10 }}>
+          <span className="small faint">zoom</span>
+          <input className="grow" type="range" min={1} max={4} step={0.02} value={crop.s} onChange={(e) => setCrop({ ...crop, s: Number(e.target.value) })} aria-label="Zoom" />
+          <button className="btn btn-sm btn-ghost" onClick={() => setCrop(NO_CROP)}>
+            Reset
+          </button>
+        </div>
+        <span className="small faint">Drag the photo to move it in its frame{isGrid ? ". Drag the little ones to reorder" : ""}.</span>
+        {isGrid && (
+          <div className="pe-strip" onPointerMove={stripMove} onPointerUp={stripUp} onPointerCancel={stripUp}>
+            {photos.map((p, k) => (
+              <span
+                key={k}
+                data-thumb={k}
+                className={`pe-thumb${k === cur ? " on" : ""}${dragFrom === k ? " dragging" : ""}`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  thumbDown.current = { k, x: e.clientX, y: e.clientY, moved: false };
+                }}
+              >
+                {p && urls[p] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={urls[p]} alt="" draggable={false} />
+                ) : (
+                  <b>＋</b>
+                )}
+                <i>{k + 1}</i>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="row-between">
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn btn-sm" onClick={() => onReplace(cur)}>
+              Replace
+            </button>
+            {isGrid && path && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setPhotos((ps) => ps.map((x, k) => (k === cur ? "" : x)))}>
+                Remove
+              </button>
+            )}
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={() => onSave(photos, crops)}>
+            Save
+          </button>
+        </div>
+      </div>
+    </Sheet>
   );
 }

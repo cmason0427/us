@@ -1263,7 +1263,6 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 .board-resize, .board-rotate { transform: scale(var(--inv, 1)); }
 .board-hearts { position: absolute; top: -12px; right: -10px; padding: 1px 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 0.72rem; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.15); transform-origin: top right; pointer-events: none; }
 .board-live { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
-.board-frame { position: absolute; inset: 0; border: 3px dashed var(--terracotta); pointer-events: none; box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--terracotta) 5%, transparent); }
 .board-empty { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: min(80%, 300px); text-align: center; color: var(--ink-faint); pointer-events: none; }
 .board-selbar { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
 .board-selbar::-webkit-scrollbar { display: none; }
@@ -1565,3 +1564,30 @@ h2, h3 { font-family: var(--font-display); font-variation-settings: "SOFT" 60, "
 /* While a board is open the page itself never zooms (the board has its own pinch). */
 html.no-page-zoom, html.no-page-zoom body { touch-action: pan-x pan-y; overscroll-behavior: none; }
 html.no-page-zoom .board-view { touch-action: none; }
+
+/* Boards: frames that keep their picture centred, the photo editor, controls off the bottom edge */
+.framed { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.framed img { display: block; pointer-events: none; }
+.board-slot > .board-frame, .board-slot > .board-frame-in { position: absolute; inset: 0; width: auto; height: auto; }
+.board-slot { display: block; }
+.board-slot > .board-slot-add { position: absolute; inset: 0; display: grid; place-items: center; }
+.pe-stage { display: grid; place-items: center; overflow: hidden; border-radius: 16px; background: repeating-conic-gradient(#f1ebe3 0 25%, #fbf7f1 0 50%) 0 0 / 18px 18px; }
+.pe-frame { position: relative; touch-action: none; cursor: grab; }
+.pe-frame:active { cursor: grabbing; }
+.pe-ghost { position: absolute; opacity: 0.28; pointer-events: none; max-width: none; }
+.pe-window { position: absolute; inset: 0; overflow: hidden; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink), 0 8px 24px -10px rgba(0,0,0,.4); border-radius: 4px; }
+.pe-window img { position: absolute; max-width: none; pointer-events: none; }
+.pe-empty { border: 2px dashed var(--line); border-radius: 12px; background: var(--surface); font: inherit; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
+.pe-strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; touch-action: pan-y; }
+.pe-thumb { position: relative; flex: none; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 2px solid var(--line); background: var(--surface-sunk); display: grid; place-items: center; touch-action: none; cursor: grab; user-select: none; }
+.pe-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.pe-thumb.on { border-color: var(--ink); }
+.pe-thumb.dragging { transform: scale(1.08); box-shadow: var(--shadow); z-index: 2; }
+.pe-thumb i { position: absolute; left: 3px; bottom: 2px; font-style: normal; font-size: 0.65rem; font-weight: 800; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.7); }
+.pe-thumb b { color: var(--ink-faint); font-size: 1.2rem; }
+
+.board-page .board-selbar { bottom: calc(var(--safe-b, 0px) + 28px); }
+.board-page .board-subbar { bottom: calc(var(--safe-b, 0px) + 86px); }
+.board-page .board-stickers { bottom: calc(var(--safe-b, 0px) + 28px); }
+.board-page .board-menu.board-ui { position: fixed; left: 10px; right: 64px; bottom: calc(var(--safe-b, 0px) + 28px); z-index: 47; padding: 12px; gap: 8px; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+.board-page .board-menu.board-ui .btn { min-height: 40px; }
