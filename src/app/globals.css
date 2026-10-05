@@ -1718,3 +1718,20 @@ html.no-page-zoom .board-view { touch-action: none; }
 .board-embed { width: 100%; height: 100%; display: flex; }
 .board-embed .app-embed { margin: 0; max-width: none; height: 100%; box-shadow: var(--shadow); }
 .post-text .app-embed, .board-text .app-embed { display: flex; }
+
+/* Boards tab */
+.board-cards { display: grid; gap: 12px; }
+.board-cards.cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.board-cards.big { grid-template-columns: 1fr; }
+.board-cards.archived { margin-top: 10px; opacity: 0.8; }
+.board-card { display: flex; flex-direction: column; border: 1.5px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; text-decoration: none; color: var(--ink); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.05)); }
+.board-card.is-new { border-color: var(--terracotta); }
+.board-cover { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; background: #fbf7f1; overflow: hidden; border-bottom: 1px solid var(--line); }
+.board-cards.big .board-cover { aspect-ratio: 16 / 10; }
+.board-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.board-cover-empty { font-size: 2.6rem; opacity: 0.6; }
+.board-card-new { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--terracotta); color: #fff; font-size: 0.7rem; font-weight: 750; }
+.board-card-foot { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; min-width: 0; }
+.board-card-title { font-weight: 700; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.board-cards.big .board-card-title { font-size: 1.05rem; }
+.board-view.capturing .board-item.sel { outline: none; }

@@ -9,7 +9,7 @@ import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "./AppProvider";
 import { PersonAvatar } from "./PersonAvatar";
 import { useSectionBadges } from "@/lib/badges";
-import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle, IconDumbbell, IconDrop, IconBone } from "./Art";
+import { IconBag, IconPiggy, IconDice, IconLeaf, IconBookmark, IconCalendar, IconFlame, IconFork, IconGear, IconHeart, IconHome, IconKey, IconList, IconPin, IconWallet, IconPaw, IconSparkle, IconDumbbell, IconDrop, IconBone, IconBoard } from "./Art";
 
 /** Every section. Add new ones here; the drawer scrolls, so there's room. */
 type Section = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -35,6 +35,7 @@ export const GROUPS: { id: string; title?: string; items: Section[] }[] = [
     title: "Us",
     items: [
       { href: "/little", label: "Little things", Icon: IconHeart },
+      { href: "/boards", label: "Boards", Icon: IconBoard },
       { href: "/dogs", label: "Dogs", Icon: IconPaw },
       { href: "/pup", label: "Pup parenting", Icon: IconBone },
       { href: "/do", label: "Do something", Icon: IconSparkle },

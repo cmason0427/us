@@ -18,6 +18,10 @@ export interface Thread {
   created_by: string;
   /** Background color for the whole board (null = default paper). */
   bg?: string | null;
+  /** The cover picture in the Boards tab, and whether it keeps itself up to date. */
+  cover_path?: string | null;
+  cover_auto?: boolean;
+  cover_at?: string | null;
 }
 
 /** Every thread, plus when I last looked at each. */
@@ -107,6 +111,9 @@ export function ThreadStrip() {
       ))}
       <button className="thread-chip thread-new" onClick={() => setCreating(true)}>
         ＋ board
+      </button>
+      <button className="thread-chip thread-new" onClick={() => router.push("/boards")}>
+        all boards ›
       </button>
       {active.some(isNew) && <p className="small thread-note">{nameOf(active.find(isNew)!.last_by)} added to {active.filter(isNew).length === 1 ? "a board" : "some boards"} 🗒️</p>}
       {creating && (

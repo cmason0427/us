@@ -26,6 +26,9 @@ export const IconSparkle = (p: P) => (
 export const IconList = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M9.5 7H20M9.5 12H20M9.5 17H20" /><path d="m4 7 1 1 2-2M4 12l1 1 2-2M4 17l1 1 2-2" /></svg>
 );
+export const IconBoard = (p: P) => (
+  <svg viewBox="0 0 24 24" {...stroke} {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><rect x="6.5" y="7.5" width="5" height="4.5" rx="1" /><path d="M14 8h3.5M14 11h3.5M6.5 15.5h11" /></svg>
+);
 export const IconBookmark = (p: P) => (
   <svg viewBox="0 0 24 24" {...stroke} {...p}><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.5-6.5 4.5v-16a1 1 0 0 1 1-1z" /></svg>
 );

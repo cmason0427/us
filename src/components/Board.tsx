@@ -974,6 +974,101 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
 
   /* ── download what's in view ─────────────────────────────────────────── */
   /** Save everything on the board (just the content, however big it is) as a picture. */
+  /** Strip selection outlines and handles while a picture is taken. */
+  const pictureFilter = (n: HTMLElement) => !n.classList?.contains("board-ui") && !n.dataset?.handle && !n.classList?.contains("board-lock");
+  async function withCleanLook<T>(fn: () => Promise<T>) {
+    viewport.current?.classList.add("capturing");
+    try {
+      return await fn();
+    } finally {
+      viewport.current?.classList.remove("capturing");
+    }
+  }
+  /** Everything on the board (just the content, however big it is) as a picture. */
+  async function pictureOfAll(maxPixels = 16e6) {
+    const w = world.current!;
+    const vp = viewport.current!;
+    // Where things really are (tilted, auto-height text and all), in board units.
+    const vr = vp.getBoundingClientRect();
+    const v = vRef.current;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    w.querySelectorAll<HTMLElement>("[data-item]").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      x0 = Math.min(x0, (r.left - vr.left - v.x) / v.z);
+      y0 = Math.min(y0, (r.top - vr.top - v.y) / v.z);
+      x1 = Math.max(x1, (r.right - vr.left - v.x) / v.z);
+      y1 = Math.max(y1, (r.bottom - vr.top - v.y) / v.z);
+    });
+    const pad = 24;
+    const W = Math.ceil(x1 - x0 + pad * 2);
+    const H = Math.ceil(y1 - y0 + pad * 2);
+    // Sharp, but within what phones can draw.
+    const ratio = Math.max(0.3, Math.min(3, Math.sqrt(maxPixels / (W * H))));
+    const { toBlob } = await import("html-to-image");
+    const opts = {
+      width: W,
+      height: H,
+      pixelRatio: ratio,
+      backgroundColor: thread.bg ?? "#fbf7f1",
+      style: { transform: `translate(${pad - x0}px, ${pad - y0}px)`, transformOrigin: "0 0", left: "0", top: "0" },
+      filter: pictureFilter,
+    };
+    return withCleanLook(async () => (await toBlob(w, opts).catch(() => toBlob(w, { ...opts, skipFonts: true })))!);
+  }
+  /** Exactly what's in view right now (no buttons), as a picture. */
+  async function pictureOfView(bg?: string | null) {
+    const v = viewport.current!;
+    const { toBlob } = await import("html-to-image");
+    const opts = { pixelRatio: 2, backgroundColor: bg ?? thread.bg ?? "#fbf7f1", filter: pictureFilter };
+    return withCleanLook(async () => (await toBlob(v, opts).catch(() => toBlob(v, { ...opts, skipFonts: true })))!);
+  }
+
+  /* ── the cover in the Boards tab ───────────────────────────────────── */
+  const coverBusy = useRef(false);
+  /** Save a new cover: the whole board (auto) or what's in view (picked by hand). */
+  async function makeCover(from: "all" | "view", quiet = true) {
+    if (coverBusy.current || !items.length || !viewport.current) return;
+    coverBusy.current = true;
+    try {
+      const pic = from === "all" ? await pictureOfAll(2.2e6) : await pictureOfView(shot ? shotBg : null);
+      const { blob, ext } = await shrinkImage(new File([pic], "cover.png", { type: "image/png" }), 1000);
+      const path = `${meId}/covers/${thread.id}-${crypto.randomUUID().slice(0, 6)}.${ext}`;
+      const up = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+      if (up.error) throw up.error;
+      const old = thread.cover_path;
+      const { error } = await supabase.from("threads").update({ cover_path: path, cover_auto: from === "all", cover_at: new Date().toISOString() }).eq("id", thread.id);
+      if (error) throw error;
+      if (old) await supabase.storage.from("photos").remove([old]); // may be theirs to remove; fine either way
+      refreshAll();
+      if (!quiet) toast(from === "view" ? "That's the cover now 🖼️" : "Cover updated 🖼️");
+    } catch (err) {
+      if (!quiet) toast(`Couldn't make the cover: ${(err as Error).message}`);
+    } finally {
+      coverBusy.current = false;
+    }
+  }
+  // Auto covers keep up: a few seconds after things settle (and on opening, if
+  // it's out of date), the cover becomes the whole board again.
+  const coverSig =
+    (thread.bg ?? "") +
+    items.map((i) => `${i.id}:${i.x},${i.y},${i.w},${i.h},${i.rot},${i.z},${i.ground},${i.color},${(i.text ?? "").length},${i.photo_path},${(i.photos ?? []).join()},${JSON.stringify(i.style ?? {}).length}`).join("|");
+  const coverSeen = useRef<string | null>(null);
+  useEffect(() => {
+    if (thread.cover_auto === false || !items.length || shot) return;
+    const stale = !thread.cover_path || !thread.cover_at || thread.cover_at < thread.last_at;
+    if (coverSeen.current === null) {
+      coverSeen.current = coverSig;
+      if (!stale) return;
+    } else if (coverSeen.current === coverSig) return;
+    coverSeen.current = coverSig;
+    const t = setTimeout(() => makeCover("all"), 3500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverSig, thread.cover_auto, shot]);
+
   async function download() {
     const w = world.current;
     const vp = viewport.current;
@@ -983,35 +1078,7 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
     setEditing(null);
     await new Promise((r) => setTimeout(r, 80));
     try {
-      // Where things really are (tilted, auto-height text and all), in board units.
-      const vr = vp.getBoundingClientRect();
-      const v = vRef.current;
-      let x0 = Infinity;
-      let y0 = Infinity;
-      let x1 = -Infinity;
-      let y1 = -Infinity;
-      w.querySelectorAll<HTMLElement>("[data-item]").forEach((el) => {
-        const r = el.getBoundingClientRect();
-        x0 = Math.min(x0, (r.left - vr.left - v.x) / v.z);
-        y0 = Math.min(y0, (r.top - vr.top - v.y) / v.z);
-        x1 = Math.max(x1, (r.right - vr.left - v.x) / v.z);
-        y1 = Math.max(y1, (r.bottom - vr.top - v.y) / v.z);
-      });
-      const pad = 24;
-      const W = Math.ceil(x1 - x0 + pad * 2);
-      const H = Math.ceil(y1 - y0 + pad * 2);
-      // Sharp, but within what phones can draw (~16M pixels).
-      const ratio = Math.max(0.5, Math.min(3, Math.sqrt(16e6 / (W * H))));
-      const { toBlob } = await import("html-to-image");
-      const opts = {
-        width: W,
-        height: H,
-        pixelRatio: ratio,
-        backgroundColor: thread.bg ?? "#fbf7f1",
-        style: { transform: `translate(${pad - x0}px, ${pad - y0}px)`, transformOrigin: "0 0", left: "0", top: "0" },
-        filter: (n: HTMLElement) => !n.classList?.contains("board-ui"),
-      };
-      const blob = (await toBlob(w, opts).catch(() => toBlob(w, { ...opts, skipFonts: true })))!;
+      const blob = await pictureOfAll();
       const name = `${thread.title.replace(/[^\w\- ]+/g, "").trim() || "board"}.png`;
       const file = new File([blob], name, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] }).catch(() => {});
@@ -1038,13 +1105,10 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
 
   /** Exactly what's in view right now (no buttons), as a picture. */
   async function takeShotPic() {
-    const v = viewport.current;
-    if (!v) return;
+    if (!viewport.current) return;
     setShotBusy(true);
     try {
-      const { toBlob } = await import("html-to-image");
-      const opts = { pixelRatio: 2, backgroundColor: shotBg ?? thread.bg ?? "#fbf7f1", filter: (n: HTMLElement) => !n.classList?.contains("board-ui") };
-      const blob = (await toBlob(v, opts).catch(() => toBlob(v, { ...opts, skipFonts: true })))!;
+      const blob = await pictureOfView(shotBg);
       setShotPic({ blob, url: URL.createObjectURL(blob) });
     } catch (err) {
       toast(`Couldn't make the picture: ${(err as Error).message}`);
@@ -1227,6 +1291,15 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
           <button className="btn btn-sm" onClick={() => (setPanel(null), copyLink(`/threads/${thread.id}`, toast))}>
             🔗 Copy link
           </button>
+          <span className="row wrap" style={{ gap: 4 }} role="group" aria-label="Cover">
+            <span className="small faint">cover</span>
+            <button className="btn btn-sm" onClick={() => (setPanel(null), makeCover("view", false))}>
+              🖼️ What&apos;s in view
+            </button>
+            <button className="btn btn-sm" aria-pressed={thread.cover_auto !== false} onClick={() => (setPanel(null), makeCover("all", false))}>
+              🔄 {thread.cover_auto !== false ? "Auto (the whole board)" : "Back to auto"}
+            </button>
+          </span>
           <span className="row" style={{ gap: 4 }} role="group" aria-label="Board background">
             <span className="small faint">background</span>
             <Swatches
@@ -1474,6 +1547,9 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
             <Swatches colors={BGS} value={shotBg ?? ""} label="Screenshot background" onPick={setShotBg} />
             <button className="btn btn-sm btn-primary" disabled={shotBusy} onClick={takeShotPic}>
               {shotBusy ? "…" : "🌼 Post to feed"}
+            </button>
+            <button className="btn btn-sm" onClick={() => makeCover("view", false)}>
+              🖼️ Make this the cover
             </button>
             <button className="btn btn-sm" onClick={() => setShotBar(false)}>
               Hide

@@ -46,6 +46,7 @@ export const PLACES: Dest[] = [
   { path: "/spicy", label: "Spicy · Pics", emoji: "🌶️" },
   { path: "/spicy?tab=ideas", label: "Spicy · Ideas", emoji: "🌶️" },
   { path: "/spicy?tab=notes", label: "Spicy · Notes", emoji: "🌶️" },
+  { path: "/boards", label: "Boards", emoji: "🗒️" },
   { path: "/saved", label: "Saved", emoji: "🔖" },
   { path: "/occasions", label: "Dates & people", emoji: "🎂" },
   { path: "/places", label: "Places", emoji: "📍" },
