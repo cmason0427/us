@@ -41,6 +41,12 @@ export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs
  * which dog(s) it's about and it lands in the feed and the Dogs tab. Plain
  * updates can be tagged with dogs too.
  */
+export const VEILS = [
+  { key: "surprise", emoji: "🎁", label: "Surprise", ph: "the surprise (they'll tap to open it)" },
+  { key: "spoiler", emoji: "🙈", label: "Spoiler", ph: "the spoiler" },
+  { key: "warning", emoji: "⚠️", label: "Heads-up", ph: "the part they should be ready for" },
+] as const;
+
 export function PostComposer({
   onDone,
   dogNote = false,
@@ -58,6 +64,12 @@ export function PostComposer({
   const [deck, setDeck] = useState<string | null>(deckId && deckId !== "pick" ? deckId : null);
   const deckList = [...useDeckNames().values()];
   const [text, setText] = useState("");
+  // Optional hidden part: a surprise, spoiler or heads-up they tap to open.
+  const [veil, setVeil] = useState<"surprise" | "spoiler" | "warning" | null>(null);
+  const [hidden, setHidden] = useState("");
+  const [ack, setAck] = useState("");
+  const [askAck, setAskAck] = useState(false);
+  const [veilPhotos, setVeilPhotos] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +79,8 @@ export function PostComposer({
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!text.trim() && !files.length) return;
+    if (!text.trim() && !files.length && !(veil && hidden.trim())) return;
+    if (veil && !hidden.trim() && !(veilPhotos && files.length)) return setError("What's the hidden part?");
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
     if (deckId === "pick" && !deck) return setError("Which deck is it about?");
     // Grab this now: React clears currentTarget once we await.
@@ -86,7 +99,14 @@ export function PostComposer({
       }
       const { data: post, error: postErr } = await supabase
         .from("posts")
-        .insert({ author: meId, text: body || null, dogs, as_dog: dogNote, deck_id: deck })
+        .insert({
+          author: meId,
+          text: body || null,
+          dogs,
+          as_dog: dogNote,
+          deck_id: deck,
+          ...(veil ? { veil, hidden_text: hidden.trim() || null, veil_ack: askAck && ack.trim() ? ack.trim() : null, veil_photos: veilPhotos && files.length > 0 } : {}),
+        })
         .select("id")
         .single();
       if (postErr) throw postErr;
@@ -184,6 +204,32 @@ export function PostComposer({
           e.target.value = "";
         }}
       />
+      {!dogNote && !deckId && (
+        <div className="veil-compose">
+          <div className="chips" role="group" aria-label="Add a hidden part">
+            {VEILS.map((v) => (
+              <button key={v.key} type="button" className="chip chip-sm" aria-pressed={veil === v.key} onClick={() => setVeil(veil === v.key ? null : v.key)}>
+                {v.emoji} {v.label}
+              </button>
+            ))}
+          </div>
+          {veil && (
+            <div className="stack-sm">
+              <textarea className="textarea" rows={3} value={hidden} onChange={(e) => setHidden(e.target.value)} placeholder={VEILS.find((v) => v.key === veil)!.ph} aria-label="The hidden part" />
+              {files.length > 0 && (
+                <label className="row small" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={veilPhotos} onChange={(e) => setVeilPhotos(e.target.checked)} /> Hide the photos too
+                </label>
+              )}
+              <label className="row small" style={{ gap: 8 }}>
+                <input type="checkbox" checked={askAck} onChange={(e) => setAskAck(e.target.checked)} /> Make them agree to something first
+              </label>
+              {askAck && <input className="input input-sm" value={ack} onChange={(e) => setAck(e.target.value)} placeholder="e.g. Don't open until you're home / contains spiders" aria-label="What they agree to" />}
+              <span className="small faint">The top part shows in the feed; this part stays covered until they tap it.</span>
+            </div>
+          )}
+        </div>
+      )}
       {!dogNote && (
         <div className="field">
           <span>About the dogs?</span>
@@ -198,7 +244,7 @@ export function PostComposer({
           </button>
           <ImageSources onFiles={(fs) => setFiles((cur) => [...cur, ...fs].slice(0, MAX_PHOTOS))} />
         </span>
-        <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length)}>
+        <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length && !(veil && hidden.trim()))}>
           {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
         </button>
       </div>

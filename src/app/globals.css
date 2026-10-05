@@ -1591,3 +1591,16 @@ html.no-page-zoom .board-view { touch-action: none; }
 .board-page .board-stickers { bottom: calc(var(--safe-b, 0px) + 28px); }
 .board-page .board-menu.board-ui { position: fixed; left: 10px; right: 64px; bottom: calc(var(--safe-b, 0px) + 28px); z-index: 47; padding: 12px; gap: 8px; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
 .board-page .board-menu.board-ui .btn { min-height: 40px; }
+
+/* Hidden part on a post: surprise / spoiler / heads-up */
+.veil-compose { display: flex; flex-direction: column; gap: 8px; }
+.veil { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px 14px; border-radius: 16px; border: 2px dashed var(--line); background: var(--surface-sunk); text-align: left; font: inherit; color: var(--ink); }
+.veil.closed { flex-direction: row; align-items: center; gap: 12px; cursor: pointer; width: 100%; background: repeating-linear-gradient(-45deg, var(--surface-sunk) 0 10px, color-mix(in srgb, var(--surface-sunk) 70%, var(--surface)) 10px 20px); }
+.veil.closed .grow { display: flex; flex-direction: column; }
+.veil-emoji { font-size: 1.8rem; line-height: 1; }
+.veil-surprise { border-color: #e7a1c0; }
+.veil-spoiler { border-color: #a9b8e6; }
+.veil-warning { border-color: #e9c46a; }
+.veil.open { border-style: solid; background: var(--surface); }
+.veil.ask { border-style: solid; }
+.veil-photos { margin-top: 10px; padding: 18px; border-radius: 14px; background: var(--surface-sunk); text-align: center; font-size: 0.85rem; color: var(--ink-faint); }

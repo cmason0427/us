@@ -35,6 +35,9 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   const [menu, setMenu] = useState(false);
   // Which photo of a carousel is showing; 🔖 saves just that one.
   const [slide, setSlide] = useState(0);
+  // The hidden part stays covered until tapped (each time the feed loads).
+  const [opened, setOpened] = useState(false);
+  const covered = !!post.veil && !opened;
   const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
   const n = photos.length;
   const created = new Date(post.created_at);
@@ -133,7 +136,13 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       )}
       {peek === "plan" && post.plan_id && <PlanSheet id={post.plan_id} onClose={() => setPeek(null)} />}
       {peek === "event" && post.event_id && <EventPeek id={post.event_id} onClose={() => setPeek(null)} />}
-      {n === 1 && (
+      {post.veil && <Veil post={post} opened={opened} onOpen={() => setOpened(true)} onClose={() => setOpened(false)} />}
+      {n > 0 && covered && post.veil_photos && (
+        <div className="veil-photos">
+          {n} photo{n === 1 ? "" : "s"} hidden · open it above to see
+        </div>
+      )}
+      {(!covered || !post.veil_photos) && n === 1 && (
         <div className="photos n1">
           <a className="photo" href={urls[photos[0].storage_path]} target="_blank" rel="noreferrer" style={photos[0].width && photos[0].height ? { aspectRatio: `${photos[0].width} / ${photos[0].height}` } : undefined}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,7 +150,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           </a>
         </div>
       )}
-      {n > 1 && <Carousel photos={photos} urls={urls} slide={slide} onSlide={setSlide} />}
+      {(!covered || !post.veil_photos) && n > 1 && <Carousel photos={photos} urls={urls} slide={slide} onSlide={setSlide} />}
       {post.counter !== null && <PostCounter post={post} />}
       {post.dogs.length > 0 && !asDog && (
         <div className="chips post-dogs">
@@ -282,5 +291,60 @@ function DeckTag({ id }: { id: string }) {
     <span className="post-deck">
       🃏 {deck.name} <ManaPips colors={deck.colors ?? []} />
     </span>
+  );
+}
+
+const VEIL_LOOK: Record<NonNullable<Post["veil"]>, { emoji: string; label: string; tap: string }> = {
+  surprise: { emoji: "🎁", label: "Surprise", tap: "Tap to open" },
+  spoiler: { emoji: "🙈", label: "Spoiler", tap: "Tap to reveal" },
+  warning: { emoji: "⚠️", label: "Heads-up", tap: "Tap to see it" },
+};
+
+/** The covered second part of a post; an optional disclaimer to agree to first. */
+function Veil({ post, opened, onOpen, onClose }: { post: Post; opened: boolean; onOpen: () => void; onClose: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const look = VEIL_LOOK[post.veil!];
+  if (opened)
+    return (
+      <div className={`veil open veil-${post.veil}`}>
+        <div className="row-between small">
+          <strong>
+            {look.emoji} {look.label}
+          </strong>
+          <button className="btn-link small faint" onClick={onClose}>
+            hide again
+          </button>
+        </div>
+        {post.hidden_text && <p className="post-text" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{post.hidden_text}</p>}
+      </div>
+    );
+  if (asking && post.veil_ack)
+    return (
+      <div className={`veil ask veil-${post.veil}`}>
+        <strong>
+          {look.emoji} Before you open it
+        </strong>
+        <p style={{ margin: 0 }}>{post.veil_ack}</p>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-sm btn-primary" onClick={onOpen}>
+            I&apos;m ready, open it
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => setAsking(false)}>
+            Not now
+          </button>
+        </div>
+      </div>
+    );
+  return (
+    <button className={`veil closed veil-${post.veil}`} onClick={() => (post.veil_ack ? setAsking(true) : onOpen())}>
+      <span className="veil-emoji" aria-hidden>
+        {look.emoji}
+      </span>
+      <span className="grow">
+        <strong>{look.label}</strong>
+        <span className="small">{post.veil_ack ? `${look.tap} · you'll be asked first` : look.tap}</span>
+      </span>
+      <span aria-hidden>›</span>
+    </button>
   );
 }

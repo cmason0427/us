@@ -87,6 +87,13 @@ export interface Post {
   as_dog: boolean;
   /** Set on the automatic posts for asks (sent, answered, moved). */
   event_id: string | null;
+  /** A hidden second part (surprise / spoiler / heads-up), shown only once tapped. */
+  veil?: "surprise" | "spoiler" | "warning" | null;
+  hidden_text?: string | null;
+  /** Optional disclaimer they agree to before it opens. */
+  veil_ack?: string | null;
+  /** The photos are covered too. */
+  veil_photos?: boolean;
   created_at: string;
   post_photos: PostPhoto[];
 }
