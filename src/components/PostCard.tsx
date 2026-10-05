@@ -23,6 +23,9 @@ import { PlanSheet } from "./Plans";
 import { EventPeek } from "./EventDetail";
 import { ManaPips, useDeckNames } from "./Decks";
 import { useThreads } from "./Threads";
+import { TimeAnswer } from "./TimeAsk";
+import { linkify } from "./Links";
+import { copyLink } from "@/lib/links";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
@@ -80,13 +83,16 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
           </button>
         )}
         {/* Tucked away: rarely needed. */}
-        {post.counter === null && !post.spicy && post.kind === "post" && (
-          <button className="icon-btn post-more" onClick={() => setMenu((m) => !m)} aria-label="More" aria-expanded={menu}>
-            ⋯
-          </button>
-        )}
+        <button className="icon-btn post-more" onClick={() => setMenu((m) => !m)} aria-label="More" aria-expanded={menu}>
+          ⋯
+        </button>
       </div>
-      {menu && post.counter === null && (
+      {menu && (
+        <button className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => (setMenu(false), copyLink(`/posts/${post.id}`, toast))}>
+          🔗 Copy link
+        </button>
+      )}
+      {menu && post.counter === null && !post.spicy && post.kind === "post" && (
         <button
           className="btn btn-sm btn-ghost"
           style={{ alignSelf: "flex-start" }}
@@ -115,8 +121,9 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       )}
       {post.deck_id && <DeckTag id={post.deck_id} />}
       {post.thread_id && <BoardTag id={post.thread_id} />}
+      {post.kind === "time" && post.time_ask_id && <TimeAnswer id={post.time_ask_id} />}
       {post.kind === "eat" && post.eat_check_id && <EatReply checkId={post.eat_check_id} author={post.author} />}
-      {text && post.kind !== "eat" && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : text}</p>}
+      {text && post.kind !== "eat" && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : linkify(text)}</p>}
       {song && !song.short && <SpotifyEmbed r={song} />}
       {song?.short && (
         <a className="btn btn-sm keep-case" href={song.url} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start" }}>
@@ -344,7 +351,7 @@ function Veil({
             hide again
           </button>
         </div>
-        {post.hidden_text && <p className="post-text" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{post.hidden_text}</p>}
+        {post.hidden_text && <p className="post-text" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{linkify(post.hidden_text)}</p>}
         {pics.length > 0 && (
           <div className={`veil-pics${pics.length === 1 ? " n1" : ""}`}>
             {pics.map((ph) => (

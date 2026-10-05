@@ -6,6 +6,7 @@ import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
 import { NewThread, BoardUpdatePick } from "./Threads";
+import { TimeAskForm } from "./TimeAsk";
 import { OneOffForm, SpendForm } from "./Budget";
 import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
@@ -34,6 +35,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { kind: "requests", emoji: "💌", label: "Requests" },
       { kind: "eat-check", emoji: "🚨", label: "Did you eat?" },
+      { kind: "time-ask", emoji: "⏰", label: "What time?" },
       { kind: "post", emoji: "🌼", label: "Update" },
       { kind: "star", emoji: "⭐", label: "Star" },
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
@@ -114,6 +116,7 @@ const TITLES: Record<AddKind, string> = {
   vibe: "Vibe check",
   "deck-update": "Deck update",
   "board-update": "Board update",
+  "time-ask": "⏰ What time were you thinking?",
   thread: "New board",
   oneoff: "Something extra (just you)",
   spend: "I spent money (just you)",
@@ -170,6 +173,7 @@ export function AddSheet() {
       {addOpen === "deck-update" && <PostComposer deckId="pick" onDone={closeAdd} />}
       {addOpen === "thread" && <NewThread bare onDone={closeAdd} />}
       {addOpen === "board-update" && <BoardUpdatePick onDone={closeAdd} />}
+      {addOpen === "time-ask" && <TimeAskForm onDone={closeAdd} />}
       {addOpen === "spend" && <SpendForm onDone={closeAdd} />}
       {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}
       {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}

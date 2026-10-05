@@ -1,5 +1,6 @@
 "use client";
 
+import { useLinkInsert } from "./Links";
 import { findSpotify, lookupSpotify } from "@/lib/spotify";
 import { SpotifyEmbed } from "./Spotify";
 
@@ -64,6 +65,7 @@ export function PostComposer({
   deckId?: string | "pick";
 }) {
   const { meId, toast } = useApp();
+  const links = useLinkInsert();
   const [dogs, setDogs] = useState<string[]>(initialDogs);
   const [deck, setDeck] = useState<string | null>(deckId && deckId !== "pick" ? deckId : null);
   const deckList = [...useDeckNames().values()];
@@ -192,12 +194,14 @@ export function PostComposer({
         placeholder={dogNote ? "Kodo had a runny poop, Wiley didn't eat breakfast…" : deckId ? "Swapped in 3 cards, it won 2 games…" : "What's the little update?"}
         value={text}
         onChange={(e) => setText(e.target.value)}
+        onInput={links.onInput}
         autoFocus
         rows={4}
       />
+      {links.picker}
       {(() => {
         const song = findSpotify(text);
-        if (!song) return <p className="small faint" style={{ margin: 0 }}>🎵 Paste a Spotify link and it becomes a player.</p>;
+        if (!song) return <p className="small faint" style={{ margin: 0 }}>🎵 Paste a Spotify link and it becomes a player. Type \ to link something in the app.</p>;
         return song.short ? <p className="small muted" style={{ margin: 0 }}>🎵 Spotify link: it becomes a player when you post.</p> : <SpotifyEmbed r={song} compact />;
       })()}
       {previews.length > 0 && (
@@ -232,7 +236,7 @@ export function PostComposer({
           </button>
           {hiding && (
             <div className="stack-sm veil-opts">
-              <textarea className="textarea" rows={3} value={hidden} onChange={(e) => setHidden(e.target.value)} placeholder="the hidden part (they open it to see)" aria-label="The hidden part" />
+              <textarea className="textarea" rows={3} value={hidden} onChange={(e) => setHidden(e.target.value)} onInput={links.onInput} placeholder="the hidden part (they open it to see)" aria-label="The hidden part" />
               <input className="input input-sm" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why it's hidden (optional), e.g. spoilers for ep 5" aria-label="Why it's hidden" maxLength={80} />
               <div className="field">
                 <span>How it opens</span>

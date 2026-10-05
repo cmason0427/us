@@ -15,12 +15,14 @@ import { TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/board
 import type { Thread } from "./Threads";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
+import { AppLink, LinkPicker, useLinkInsert } from "./Links";
+import { copyLink } from "@/lib/links";
 
 interface Item {
   id: string;
   thread_id: string;
   author: string;
-  kind: "note" | "sticky" | "photo" | "link" | "ink" | "sticker" | "grid";
+  kind: "note" | "sticky" | "photo" | "link" | "ink" | "sticker" | "grid" | "box";
   text: string | null;
   photo_path: string | null;
   link: string | null;
@@ -36,6 +38,14 @@ interface Item {
   hearts: string[];
   /** Photo grid: a picture per slot (empty string = empty slot). */
   photos: string[];
+  /** 0 = Backdrop, 1 = Middle, 2 = Up front. Things only restack within their ground. */
+  ground?: number;
+  /** Locked: can't be moved, resized or tilted (a drag on it moves the board instead). */
+  locked?: boolean;
+  /** Things grouped together are selected and moved as one. */
+  group_id?: string | null;
+  /** Inside a container (a "box" item): moves, locks and hides with it. */
+  parent_id?: string | null;
   created_at: string;
 }
 /** How text looks: size, bold, font, color, alignment. */
@@ -65,6 +75,8 @@ type Look = {
   /** Heading highlight: a rounded box around it, or a marker tight to the text. */
   hl?: "box" | "tight";
   hlc?: string;
+  /** A container folded down to just its title. */
+  col?: boolean;
 };
 
 const svgMask = (body: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>${body}</svg>`)}")`;
@@ -190,7 +202,34 @@ const SIZES: { label: string; fs: number }[] = [
   { label: "L", fs: 30 },
   { label: "XL", fs: 46 },
 ];
-const SIZE: Record<Item["kind"], [number, number]> = { note: [200, 40], sticky: [150, 150], photo: [170, 170], link: [180, 48], ink: [100, 100], sticker: [110, 110], grid: [260, 260] };
+const SIZE: Record<Item["kind"], [number, number]> = { note: [200, 40], sticky: [150, 150], photo: [170, 170], link: [180, 48], ink: [100, 100], sticker: [110, 110], grid: [260, 260], box: [320, 230] };
+/** Grounds, front first. Things stay in their ground; drag between them in Layers. */
+const GROUNDS = [
+  { k: 2, name: "Up front" },
+  { k: 1, name: "Middle" },
+  { k: 0, name: "Backdrop" },
+];
+const BOX_COLORS = ["#f3ecfb", "#fdeef2", "#eaf6ec", "#e8f0fb", "#fff6d8", "#f1ebe3", "#ffffff"];
+const groundOf = (i: Item) => i.ground ?? 1;
+
+/**
+ * Back-to-front drawing order: by ground, then z; a container's contents sit
+ * right on top of it (so they always show inside it).
+ */
+function stackOrder(items: Item[]): string[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const isChild = (i: Item) => !!i.parent_id && byId.get(i.parent_id)?.kind === "box" && i.kind !== "box";
+  const cmp = (a: Item, b: Item) => a.z - b.z || a.created_at.localeCompare(b.created_at);
+  const top = items.filter((i) => !isChild(i)).sort((a, b) => groundOf(a) - groundOf(b) || cmp(a, b));
+  const kids = new Map<string, Item[]>();
+  for (const i of items) if (isChild(i)) kids.set(i.parent_id!, [...(kids.get(i.parent_id!) ?? []), i]);
+  const out: string[] = [];
+  for (const t of top) {
+    out.push(t.id);
+    for (const c of (kids.get(t.id) ?? []).sort(cmp)) out.push(c.id);
+  }
+  return out;
+}
 const SNAP = 7; // screen pixels
 const MIN_Z = 0.2;
 const MAX_Z = 4;
@@ -205,8 +244,23 @@ const clampZ = (z: number) => Math.min(MAX_Z, Math.max(MIN_Z, z));
 
 // The in-progress gesture; never rendered from.
 type Gesture =
-  | { kind: "pan"; sx: number; sy: number; v: View; moved: boolean; target: HTMLElement }
-  | { kind: "item"; id: string; el: HTMLElement; mode: "move" | "resize" | "rotate"; sx: number; sy: number; box: Box; next: Box; moved: boolean; target: HTMLElement; wasSel: boolean }
+  | { kind: "pan"; sx: number; sy: number; v: View; moved: boolean; target: HTMLElement; tap?: string }
+  | {
+      kind: "item";
+      id: string;
+      el: HTMLElement;
+      mode: "move" | "resize" | "rotate";
+      sx: number;
+      sy: number;
+      box: Box;
+      next: Box;
+      moved: boolean;
+      target: HTMLElement;
+      wasSel: boolean;
+      /** Everything else moving along (its group, the rest of the selection, a container's contents). */
+      others: { id: string; el: HTMLElement; box: Box }[];
+    }
+  | { kind: "marquee"; sx: number; sy: number; moved: boolean }
   | { kind: "pinch"; d0: number; mx: number; my: number; v: View }
   | { kind: "pen"; pts: { x: number; y: number }[] }
   | { kind: "idle" };
@@ -217,7 +271,7 @@ type Gesture =
  * move it. Changes land for the other person quietly; no feed, no push.
  */
 /** `postNow`: opened from "Board update", so start framing a view to post. */
-export function Board({ thread, postNow = false }: { thread: Thread; postNow?: boolean }) {
+export function Board({ thread, postNow = false, focusItem = null }: { thread: Thread; postNow?: boolean; focusItem?: string | null }) {
   const { meId, nameOf, toast } = useApp();
   const router = useRouter();
   const supabase = supabaseBrowser();
@@ -235,6 +289,13 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
   const [pen, setPen] = useState(PENS[0]);
   const [view, setView] = useState<View>({ x: 0, y: 0, z: 1 });
   const [selected, setSelected] = useState<string | null>(null);
+  // Select-several mode: tap things (or drag a box around them) to pick them.
+  const [multi, setMulti] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const marquee = useRef<HTMLDivElement>(null);
+  // Type \ while writing to link something; ＋ an app link as its own card.
+  const links = useLinkInsert();
+  const [appLinking, setAppLinking] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates" | "layers">(null);
   // Screenshot mode: the board fills the screen with no buttons or text on it.
@@ -313,6 +374,24 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
 
   const maxZ = items.reduce((m, i) => Math.max(m, i.z), 0);
   const boxes = new Map(items.map((i, n) => [i.id, local[i.id] ?? boxOf(i, n)]));
+  const byId = new Map(items.map((i) => [i.id, i]));
+  /** The container something sits in (if any). */
+  const boxAround = (i: Item) => {
+    const p = i.parent_id ? byId.get(i.parent_id) : undefined;
+    return p?.kind === "box" && i.kind !== "box" ? p : undefined;
+  };
+  const isLocked = (i: Item) => !!i.locked || !!boxAround(i)?.locked;
+  const isTucked = (i: Item) => !!boxAround(i)?.style?.col;
+  const drawOrder = stackOrder(items);
+  const rank = new Map(drawOrder.map((id, k) => [id, k + 1]));
+  /** A thing plus everything grouped with it. */
+  const groupOf = (id: string) => {
+    const g0 = byId.get(id)?.group_id;
+    return g0 ? items.filter((x) => x.group_id === g0).map((x) => x.id) : [id];
+  };
+  const selIds = [...new Set((multi ? picked : selected ? [selected] : []).flatMap(groupOf))].filter((id) => byId.has(id));
+  /** Contents ride along with their container. */
+  const withContents = (ids: string[]) => [...new Set(ids.flatMap((id) => (byId.get(id)?.kind === "box" ? [id, ...items.filter((c) => c.parent_id === id).map((c) => c.id)] : [id])))];
 
   /* ── the camera ─────────────────────────────────────────────────────── */
   function paintView(v: View) {
@@ -347,6 +426,22 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     if (fitted.current || !viewport.current) return;
     if (!items.length && last) return; // still loading
     fitted.current = true;
+    // Opened from a link to one thing on the board: center on it and pick it.
+    if (focusItem) {
+      const n = items.findIndex((i) => i.id === focusItem);
+      const el = viewport.current;
+      Promise.resolve().then(() => {
+        if (n < 0) {
+          fit();
+          return toast("That's not on the board anymore.");
+        }
+        const b = boxOf(items[n], n);
+        const z = clampZ(Math.min(1.2, (el.clientWidth * 0.7) / b.w, (el.clientHeight * 0.6) / b.h));
+        commitView({ z, x: el.clientWidth / 2 - (b.x + b.w / 2) * z, y: el.clientHeight / 2 - (b.y + b.h / 2) * z });
+        setSelected(focusItem);
+      });
+      return;
+    }
     let saved: View | null = null;
     try {
       saved = JSON.parse(localStorage.getItem(`board-view:${thread.id}`) ?? "null");
@@ -446,6 +541,28 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     refreshAll();
     return !error;
   }
+  /** Several changes at once, undone together. */
+  async function patchMany(ups: { id: string; fields: Partial<Item> }[]) {
+    if (!ups.length) return true;
+    const befores = ups.flatMap(({ id, fields }) => {
+      const it = byId.get(id);
+      return it ? [{ id, before: Object.fromEntries(Object.keys(fields).map((k) => [k, it[k as keyof Item] ?? null])) }] : [];
+    });
+    pushUndo(() => Promise.all(befores.map((b) => supabase.from("thread_items").update(b.before).eq("id", b.id))));
+    const res = await Promise.all(ups.map((u) => supabase.from("thread_items").update(u.fields).eq("id", u.id)));
+    const err = res.find((r) => r.error)?.error;
+    if (err) toast(err.message);
+    refreshAll();
+    return !err;
+  }
+  async function removeMany(ids: string[]) {
+    const gone = items.filter((i) => ids.includes(i.id));
+    pushUndo(() => supabase.from("thread_items").insert(gone));
+    await supabase.from("thread_items").delete().in("id", ids);
+    setSelected(null);
+    setPicked([]);
+    refreshAll();
+  }
   async function remove(id: string) {
     const it = items.find((i) => i.id === id);
     if (it) pushUndo(() => supabase.from("thread_items").insert(it));
@@ -537,6 +654,12 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     for (const r of replaced) delete crops[String(r)];
     await patch(it.id, { photos: next, style: { ...(it.style ?? {}), crops } });
   }
+  /** A tap on a thing: pick it (or, picking several, add / drop it and its group). */
+  function tapPick(id: string) {
+    if (!multi) return setSelected(id);
+    const ids = groupOf(id);
+    setPicked((p) => (p.includes(id) ? p.filter((x) => !ids.includes(x)) : [...new Set([...p, ...ids])]));
+  }
   const heart = (i: Item) => patch(i.id, { hearts: i.hearts.includes(meId) ? i.hearts.filter((x) => x !== meId) : [...i.hearts, meId] });
 
   /* ── gestures ───────────────────────────────────────────────────────── */
@@ -544,7 +667,7 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     el.style.left = `${b.x}px`;
     el.style.top = `${b.y}px`;
     el.style.width = `${b.w}px`;
-    if (kind !== "note") el.style.height = `${b.h}px`;
+    if (kind !== "note" && !el.classList.contains("folded")) el.style.height = `${b.h}px`;
     el.style.transform = `rotate(${b.rot}deg)`;
   }
   /** Line a box up with the edges and centers of the other things, showing a guide. */
@@ -604,7 +727,9 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     if (pointers.current.size === 2) {
       // A second finger: whatever the first was doing becomes a pinch.
       if (cur.kind === "item") paintBox(cur.el, cur.box, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
+      if (cur.kind === "item") for (const o of cur.others) paintBox(o.el, o.box, byId.get(o.id)?.kind ?? "sticky");
       if (cur.kind === "pen" && livePath.current) livePath.current.setAttribute("d", "");
+      if (marquee.current) marquee.current.style.display = "none";
       const [a, b] = [...pointers.current.values()];
       const r = viewport.current!.getBoundingClientRect();
       g.current = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top, v: vRef.current };
@@ -619,10 +744,26 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     const itemEl = shot ? null : (target.closest("[data-item]") as HTMLElement | null);
     const id = itemEl?.dataset.item;
     if (itemEl && id && editing !== id) {
+      const it = byId.get(id)!;
+      // Locked: a drag moves the board, a tap still picks it (to unlock it).
+      if (isLocked(it)) {
+        g.current = { kind: "pan", sx: e.clientX, sy: e.clientY, v: vRef.current, moved: false, target, tap: id };
+        return;
+      }
       const handle = (target.closest("[data-handle]") as HTMLElement | null)?.dataset.handle as "resize" | "rotate" | undefined;
       const box = boxes.get(id)!;
-      g.current = { kind: "item", id, el: itemEl, mode: handle ?? "move", sx: e.clientX, sy: e.clientY, box, next: box, moved: false, target, wasSel: selected === id };
-      if (selected !== id) setSelected(id);
+      // What moves: its group (or, picking several, everything picked) plus any container contents.
+      const movers = handle ? [id] : withContents(multi && selIds.includes(id) ? selIds : groupOf(id)).filter((x) => x === id || !isLocked(byId.get(x)!));
+      const others = movers.flatMap((x) => {
+        const el = x === id ? null : viewport.current?.querySelector<HTMLElement>(`[data-item="${x}"]`);
+        return el ? [{ id: x, el, box: boxes.get(x)! }] : [];
+      });
+      g.current = { kind: "item", id, el: itemEl, mode: handle ?? "move", sx: e.clientX, sy: e.clientY, box, next: box, moved: false, target, wasSel: selIds.includes(id), others };
+      if (!multi && selected !== id) setSelected(id);
+      return;
+    }
+    if (multi && !shot) {
+      g.current = { kind: "marquee", sx: e.clientX, sy: e.clientY, moved: false };
       return;
     }
     g.current = { kind: "pan", sx: e.clientX, sy: e.clientY, v: vRef.current, moved: false, target };
@@ -665,6 +806,18 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
       if (snap && cur.mode !== "rotate") next = snapBox(cur.id, next, cur.mode);
       cur.next = next;
       paintBox(cur.el, next, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
+      if (cur.mode === "move") for (const o of cur.others) paintBox(o.el, { ...o.box, x: o.box.x + next.x - b.x, y: o.box.y + next.y - b.y }, byId.get(o.id)?.kind ?? "sticky");
+    } else if (cur.kind === "marquee") {
+      if (Math.abs(e.clientX - cur.sx) + Math.abs(e.clientY - cur.sy) > 6) cur.moved = true;
+      const m = marquee.current;
+      const r = viewport.current!.getBoundingClientRect();
+      if (m && cur.moved) {
+        m.style.display = "block";
+        m.style.left = `${Math.min(cur.sx, e.clientX) - r.left}px`;
+        m.style.top = `${Math.min(cur.sy, e.clientY) - r.top}px`;
+        m.style.width = `${Math.abs(e.clientX - cur.sx)}px`;
+        m.style.height = `${Math.abs(e.clientY - cur.sy)}px`;
+      }
     } else if (cur.kind === "pen") {
       cur.pts.push(toWorld(e.clientX, e.clientY));
       livePath.current?.setAttribute("d", cur.pts.map((p, n) => `${n ? "L" : "M"}${p.x} ${p.y}`).join(" "));
@@ -687,8 +840,20 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     const now = nowMs();
     const tap = lastTap.current;
     const isDouble = (id: string | null) => now - tap.t < 320 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 24 && tap.id === id;
+    if (cur.kind === "marquee") {
+      if (marquee.current) marquee.current.style.display = "none";
+      if (!cur.moved) return;
+      const a = toWorld(Math.min(cur.sx, e.clientX), Math.min(cur.sy, e.clientY));
+      const z2 = toWorld(Math.max(cur.sx, e.clientX), Math.max(cur.sy, e.clientY));
+      const hit = items.filter((i) => {
+        const bx = boxes.get(i.id)!;
+        return !isTucked(i) && bx.x < z2.x && bx.x + bx.w > a.x && bx.y < z2.y && bx.y + bx.h > a.y;
+      });
+      return setPicked((p) => [...new Set([...p, ...hit.flatMap((i) => groupOf(i.id))])]);
+    }
     if (cur.kind === "pan") {
       if (cur.moved) return commitView(vRef.current);
+      if (cur.tap) return tapPick(cur.tap);
       // Screenshot mode: a tap just shows or hides the little bar.
       if (shot) return setShotBar((b) => !b);
       // A tap on empty space: let go of things; a double tap writes there.
@@ -702,7 +867,15 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
       lastTap.current = { t: now, x: e.clientX, y: e.clientY, id: null };
     } else if (cur.kind === "item") {
       const it = items.find((i) => i.id === cur.id);
-      if (!cur.moved) {
+      if (multi) {
+        if (!cur.moved) return tapPick(cur.id);
+        if (!cur.wasSel) setPicked((p) => [...new Set([...p, ...groupOf(cur.id)])]);
+      } else if (!cur.moved) {
+        // A link chip in the text (or an app-link card): go there.
+        const href = (cur.target.closest("[data-href]") as HTMLElement | null)?.dataset.href;
+        if (href && (cur.wasSel || it?.kind !== "link")) return router.push(href);
+        // The ▾ on a container folds it down to its title (and back).
+        if (it?.kind === "box" && cur.target.closest("[data-fold]")) return setLook(it, { col: !it.style?.col });
         // A tap on a selected photo grid's slot: pick a picture for it (or clear it).
         const slotEl = cur.target.closest("[data-slot]") as HTMLElement | null;
         if (it?.kind === "grid" && slotEl && cur.wasSel) {
@@ -724,13 +897,45 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
         return;
       }
       const n = cur.next;
-      const b = { x: Math.round(n.x), y: Math.round(n.y), w: Math.round(n.w), h: Math.round(n.h), rot: n.rot };
-      // Keep showing it where it was dropped until the saved copy comes back
-      // (clearing it sooner made things snap back, then jump on the next drag).
-      setLocal((l) => ({ ...l, [cur.id]: b }));
-      const ok = await patch(cur.id, { ...b, z: maxZ + 1 });
-      if (!ok) setLocal((l) => dropKey(l, cur.id));
-      else setTimeout(() => setLocal((l) => (l[cur.id] === b ? dropKey(l, cur.id) : l)), 8000);
+      const rnd = (x: Box): Box => ({ x: Math.round(x.x), y: Math.round(x.y), w: Math.round(x.w), h: Math.round(x.h), rot: x.rot });
+      const dx = n.x - cur.box.x;
+      const dy = n.y - cur.box.y;
+      const moved = [
+        { id: cur.id, b: rnd(n) },
+        ...(cur.mode === "move" ? cur.others.map((o) => ({ id: o.id, b: rnd({ ...o.box, x: o.box.x + dx, y: o.box.y + dy }) })) : []),
+      ];
+      const movingIds = new Set(moved.map((m) => m.id));
+      // Dropped things come to the front of their own ground (in the order they were in).
+      const byRank = [...moved].sort((p, q) => (rank.get(p.id) ?? 0) - (rank.get(q.id) ?? 0));
+      const ups = byRank.map(({ id, b }, k) => {
+        const fields: Partial<Item> = { ...b, z: maxZ + 1 + k };
+        const thing = byId.get(id)!;
+        // Dropped onto a container: it goes in. Dragged out: it comes out (into the container's ground).
+        if (cur.mode === "move" && thing.kind !== "box" && !(thing.parent_id && movingIds.has(thing.parent_id))) {
+          const cx = b.x + b.w / 2;
+          const cy = b.y + b.h / 2;
+          const into = [...drawOrder]
+            .reverse()
+            .map((x) => byId.get(x)!)
+            .find((o) => o.kind === "box" && !movingIds.has(o.id) && !o.style?.col && (() => {
+              const ob = boxes.get(o.id)!;
+              return cx > ob.x && cx < ob.x + ob.w && cy > ob.y && cy < ob.y + ob.h;
+            })());
+          const was = boxAround(thing);
+          if ((into?.id ?? null) !== (was?.id ?? null)) {
+            fields.parent_id = into?.id ?? null;
+            fields.ground = into ? groundOf(into) : was ? groundOf(was) : groundOf(thing);
+          }
+        }
+        return { id, fields };
+      });
+      // Keep showing them where they were dropped until the saved copy comes back
+      // (clearing sooner made things snap back, then jump on the next drag).
+      setLocal((l) => ({ ...l, ...Object.fromEntries(moved.map((m) => [m.id, m.b])) }));
+      const ok = await patchMany(ups);
+      const clear = () => setLocal((l) => moved.reduce((acc, m) => (acc[m.id] === m.b ? dropKey(acc, m.id) : acc), l));
+      if (!ok) clear();
+      else setTimeout(clear, 8000);
     } else if (cur.kind === "pen") {
       livePath.current?.setAttribute("d", "");
       const pts = cur.pts;
@@ -756,7 +961,11 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     pointers.current.delete(e.pointerId);
     showGuides(null, null);
     const cur = g.current;
-    if (cur.kind === "item") paintBox(cur.el, cur.box, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
+    if (cur.kind === "item") {
+      paintBox(cur.el, cur.box, items.find((i) => i.id === cur.id)?.kind ?? "sticky");
+      for (const o of cur.others) paintBox(o.el, o.box, byId.get(o.id)?.kind ?? "sticky");
+    }
+    if (cur.kind === "marquee" && marquee.current) marquee.current.style.display = "none";
     if (cur.kind === "pan" || cur.kind === "pinch") commitView(vRef.current);
     if (pointers.current.size === 0) g.current = { kind: "idle" };
   }
@@ -899,26 +1108,46 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
   }, []);
 
   /** Front-to-back order (top layer first). */
-  const layerOrder = [...items].sort((a, b) => b.z - a.z || b.created_at.localeCompare(a.created_at)).map((i) => i.id);
-  /** Re-number z so `order` (front first) is exactly the stacking order. */
-  async function restack(order: string[]) {
+  const layerOrder = [...drawOrder].reverse();
+  /** Re-number z so `order` (front first) is the stacking order; optionally move things to other grounds. */
+  async function restack(order: string[], grounds: Record<string, number> = {}) {
     const n = order.length;
-    await Promise.all(
-      order.map((id, k) => {
-        const it = items.find((i) => i.id === id);
-        const z = n - k;
-        return it && it.z !== z ? patch(id, { z }) : null;
-      }),
-    );
+    const ups = order.flatMap((id, k) => {
+      const it = byId.get(id);
+      if (!it) return [];
+      const fields: Partial<Item> = {};
+      if (it.z !== n - k) fields.z = n - k;
+      if (grounds[id] != null && grounds[id] !== groundOf(it)) fields.ground = grounds[id];
+      return Object.keys(fields).length ? [{ id, fields }] : [];
+    });
+    await patchMany(ups);
   }
-  function nudgeLayer(id: string, dir: 1 | -1) {
-    const order = [...layerOrder];
-    const k = order.indexOf(id);
-    const j = k - dir; // forward = toward the front of the list
-    if (k < 0 || j < 0 || j >= order.length) return;
-    [order[k], order[j]] = [order[j], order[k]];
+  /** The things a thing restacks among: its container's contents, or its own ground. */
+  const lane = (i: Item) => {
+    const box = boxAround(i);
+    return layerOrder.filter((id) => {
+      const o = byId.get(id)!;
+      return box ? boxAround(o)?.id === box.id : !boxAround(o) && groundOf(o) === groundOf(i);
+    });
+  };
+  /** Forward / back one step, or all the way, but never out of its ground. */
+  function nudgeLayer(id: string, how: 1 | -1 | "front" | "back") {
+    const it = byId.get(id);
+    if (!it) return;
+    const sib = lane(it);
+    const k = sib.indexOf(id);
+    const to = how === "front" ? 0 : how === "back" ? sib.length - 1 : k - how;
+    if (k < 0 || to < 0 || to >= sib.length || to === k) return;
+    const other = sib[to];
+    const order = layerOrder.filter((x) => x !== id);
+    const at = order.indexOf(other) + (to > k ? 1 : 0);
+    order.splice(at, 0, id);
     restack(order);
   }
+  const laneEnds = (i: Item) => {
+    const sib = lane(i);
+    return { front: sib[0] === i.id, back: sib[sib.length - 1] === i.id };
+  };
 
   const sel = items.find((i) => i.id === selected);
   // Sub-panels belong to the item they were opened for.
@@ -953,6 +1182,10 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
     patch(i.id, { h: Math.round(((b.w - pad) * img.naturalHeight) / img.naturalWidth + pad), style: { ...(i.style ?? {}), crop: NO_CROP } });
   }
   const setLook = (i: Item, l: Look) => patch(i.id, { style: { ...(i.style ?? {}), ...l } });
+  // Picking several: are they exactly one group, and all locked?
+  const grouped = selIds.length > 1 && !!byId.get(selIds[0])?.group_id && selIds.every((x) => byId.get(x)?.group_id === byId.get(selIds[0])?.group_id) && groupOf(selIds[0]).length === selIds.length;
+  const selEnds = sel ? laneEnds(sel) : { front: true, back: true };
+  const allLocked = selIds.length > 0 && selIds.every((x) => byId.get(x)?.locked);
 
   return (
     <div
@@ -988,6 +1221,9 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
           </button>
           <button className="btn btn-sm" onClick={() => (setPanel(null), rename())}>
             ✏️ Rename
+          </button>
+          <button className="btn btn-sm" onClick={() => (setPanel(null), copyLink(`/threads/${thread.id}`, toast))}>
+            🔗 Copy link
           </button>
           <span className="row" style={{ gap: 4 }} role="group" aria-label="Board background">
             <span className="small faint">background</span>
@@ -1040,8 +1276,10 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
       >
         <div ref={world} className="board-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`, ["--inv" as string]: 1 / view.z }}>
           {items.map((i) => {
+            if (isTucked(i)) return null;
             const b = boxes.get(i.id)!;
-            const isSel = selected === i.id;
+            const isSel = selIds.includes(i.id);
+            const folded = i.kind === "box" && !!i.style?.col;
             const isEdit = editing === i.id;
             let body: React.ReactNode = null;
             if (i.kind === "ink" && i.ink) {
@@ -1101,8 +1339,25 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
                   </div>
                 );
               }
+            } else if (i.kind === "box") {
+              const n = items.filter((c) => c.parent_id === i.id).length;
+              body = (
+                <div className="board-box-title" style={{ color: i.style?.c }}>
+                  <span className="grow">{i.text || "box"}</span>
+                  {folded && n > 0 && <span className="board-box-n">{n}</span>}
+                  <span className="board-box-fold" data-fold="1" aria-label={folded ? "Open the box" : "Fold the box"}>
+                    {folded ? "▸" : "▾"}
+                  </span>
+                </div>
+              );
             } else if (i.kind === "sticker") {
               body = <span className="board-emoji" style={{ fontSize: Math.min(b.w, b.h) * 0.82 }}>{i.text}</span>;
+            } else if (i.kind === "link" && i.link?.startsWith("/")) {
+              body = (
+                <span className="board-link">
+                  <AppLink path={i.link} label={i.text ?? undefined} />
+                </span>
+              );
             } else if (i.kind === "link" && i.link) {
               body = <span className="board-link keep-case">🔗 {i.link.replace(/^https?:\/\/(www\.)?/, "")}</span>;
             } else if (isEdit) {
@@ -1114,7 +1369,9 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
                   defaultValue={i.text ?? ""}
                   autoFocus
                   placeholder={i.kind === "sticky" ? "write on it…" : "type here…"}
+                  onInput={links.onInput}
                   onBlur={(e) => {
+                    if (links.picking.current) return; // picking a link: still writing
                     setEditing(null);
                     const t = e.target.value.replace(/\s+$/, "");
                     if (!t.trim() && i.kind === "note") remove(i.id);
@@ -1132,16 +1389,16 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
               <div
                 key={i.id}
                 data-item={i.id}
-                className={`board-item k-${i.kind}${isSel ? " sel" : ""}${isEdit ? " editing" : ""}${i.kind === "photo" && (i.style?.shape ?? "polaroid") !== "polaroid" ? " shaped" : ""}`}
+                className={`board-item k-${i.kind}${isSel ? " sel" : ""}${isEdit ? " editing" : ""}${i.kind === "photo" && (i.style?.shape ?? "polaroid") !== "polaroid" ? " shaped" : ""}${isLocked(i) ? " locked" : ""}${folded ? " folded" : ""}`}
                 style={{
                   left: b.x,
                   top: b.y,
                   width: b.w,
-                  height: i.kind === "note" ? undefined : b.h,
+                  height: i.kind === "note" ? undefined : folded ? 40 : b.h,
                   minHeight: i.kind === "note" ? 30 : undefined,
                   transform: `rotate(${b.rot}deg)`,
-                  zIndex: isSel ? 9999 : i.z,
-                  background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : (i.kind === "photo" || i.kind === "grid") && i.style?.pbg ? i.style.pbg : undefined,
+                  zIndex: rank.get(i.id),
+                  background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : i.kind === "box" ? (i.color ?? BOX_COLORS[0]) : (i.kind === "photo" || i.kind === "grid") && i.style?.pbg ? i.style.pbg : undefined,
                 }}
               >
                 {body}
@@ -1151,7 +1408,12 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
                     ❤️{i.hearts.length > 1 ? " 2" : ""}
                   </span>
                 )}
-                {isSel && tool === "move" && !isEdit && (
+                {isSel && isLocked(i) && (
+                  <span className="board-lock" style={{ transform: "scale(var(--inv))" }} aria-hidden>
+                    🔒
+                  </span>
+                )}
+                {isSel && tool === "move" && !isEdit && !multi && selIds.length === 1 && !isLocked(i) && (
                   <>
                     <span className="board-resize" data-handle="resize" aria-label="Resize" />
                     <span className="board-rotate" data-handle="rotate" aria-label="Tilt" />
@@ -1166,6 +1428,7 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
             <path ref={livePath} fill="none" stroke={pen} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
+        <div ref={marquee} className="board-marquee board-ui" />
         {!items.length && !shot && (
           <div className="board-empty board-ui">
             <p>Double-tap anywhere to write, or add something below. Pinch to zoom.</p>
@@ -1234,8 +1497,73 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
             Done
           </button>
         </div>
+      ) : tool === "move" && (multi || selIds.length > 1) ? (
+        <div className="board-selbar board-ui">
+          {selIds.length === 0 ? (
+            <span className="small">Tap things, or drag a box around them</span>
+          ) : (
+            <>
+                  <span className="small" style={{ flex: "none" }}>
+                    {grouped ? `group of ${selIds.length}` : `${selIds.length} picked`}
+                  </span>
+                  {selIds.length > 1 &&
+                    (grouped ? (
+                      <button className="fmt" onClick={() => patchMany(selIds.map((id) => ({ id, fields: { group_id: null } })))}>
+                        ⛓️‍💥 Ungroup
+                      </button>
+                    ) : (
+                      <button
+                        className="fmt"
+                        onClick={async () => {
+                          const gid = crypto.randomUUID();
+                          await patchMany(selIds.map((id) => ({ id, fields: { group_id: gid } })));
+                          setMulti(false);
+                          setPicked([]);
+                          setSelected(selIds[0]);
+                        }}
+                      >
+                        🔗 Group
+                      </button>
+                    ))}
+                  <button className="fmt" aria-pressed={allLocked} onClick={() => patchMany(selIds.map((id) => ({ id, fields: { locked: !allLocked } })))}>
+                    {allLocked ? "🔒 Unlock" : "🔓 Lock"}
+                  </button>
+                  <button className="fmt" onClick={() => confirm(`Delete these ${selIds.length}?`) && removeMany(selIds)} aria-label="Delete">
+                    🗑
+                  </button>
+            </>
+          )}
+          {multi && (
+            <button className="btn btn-sm btn-primary" onClick={() => (setMulti(false), setPicked([]))}>
+              Done
+            </button>
+          )}
+        </div>
       ) : sel && tool === "move" ? (
         <div className="board-selbar board-ui">
+          {sel.kind === "box" && (
+            <>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  const t = window.prompt("Name the box", sel.text ?? "")?.trim();
+                  if (t != null) patch(sel.id, { text: t || "box" });
+                }}
+              >
+                ✏️
+              </button>
+              <button
+                className="board-swatch board-swatch-btn"
+                style={{ background: sel.color ?? BOX_COLORS[0] }}
+                aria-pressed={subPanel === "color"}
+                aria-label="Box color"
+                onClick={() => setSubPanel(subPanel === "color" ? null : "color")}
+              />
+              <button className="fmt" onClick={() => setLook(sel, { col: !sel.style?.col })}>
+                {sel.style?.col ? "▸ Open" : "▾ Fold"}
+              </button>
+            </>
+          )}
           {(sel.kind === "sticky" || sel.kind === "note") && (
             <button className="btn btn-sm" onClick={() => setEditing(sel.id)}>
               ✏️
@@ -1301,7 +1629,12 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
               )}
             </>
           )}
-          {sel.kind === "link" && sel.link && (
+          {sel.kind === "link" && sel.link?.startsWith("/") && (
+            <button className="btn btn-sm" onClick={() => router.push(sel.link!)}>
+              Open ↗
+            </button>
+          )}
+          {sel.kind === "link" && sel.link && !sel.link.startsWith("/") && (
             <a className="btn btn-sm" href={sel.link} target="_blank" rel="noreferrer">
               Open ↗
             </a>
@@ -1345,20 +1678,28 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
           <button className="fmt" onClick={() => duplicate(sel)} aria-label="Duplicate">
             ⧉
           </button>
-          <span className="board-layerbtns" role="group" aria-label="Layer">
-            <button className="fmt" onClick={() => nudgeLayer(sel.id, 1)} disabled={layerOrder[0] === sel.id} aria-label="Bring forward">
-              ↑
-            </button>
-            <button className="fmt" onClick={() => nudgeLayer(sel.id, -1)} disabled={layerOrder[layerOrder.length - 1] === sel.id} aria-label="Send backward">
-              ↓
-            </button>
-            <button className="fmt" onClick={() => restack([sel.id, ...layerOrder.filter((x) => x !== sel.id)])} disabled={layerOrder[0] === sel.id} aria-label="Bring to front">
-              ⤒
-            </button>
-            <button className="fmt" onClick={() => restack([...layerOrder.filter((x) => x !== sel.id), sel.id])} disabled={layerOrder[layerOrder.length - 1] === sel.id} aria-label="Send to back">
-              ⤓
-            </button>
-          </span>
+          <button className="fmt" onClick={() => copyLink(`/threads/${thread.id}?item=${sel.id}`, toast)} aria-label="Copy a link to this">
+            🔗
+          </button>
+          {(
+              <span className="board-layerbtns" role="group" aria-label={`Layer (within ${GROUNDS.find((x) => x.k === groundOf(boxAround(sel) ?? sel))?.name})`}>
+                <button className="fmt" onClick={() => nudgeLayer(sel.id, 1)} disabled={selEnds.front} aria-label="Bring forward">
+                  ↑
+                </button>
+                <button className="fmt" onClick={() => nudgeLayer(sel.id, -1)} disabled={selEnds.back} aria-label="Send backward">
+                  ↓
+                </button>
+                <button className="fmt" onClick={() => nudgeLayer(sel.id, "front")} disabled={selEnds.front} aria-label="Bring to front">
+                  ⤒
+                </button>
+                <button className="fmt" onClick={() => nudgeLayer(sel.id, "back")} disabled={selEnds.back} aria-label="Send to back">
+                  ⤓
+                </button>
+              </span>
+          )}
+          <button className="fmt" aria-pressed={!!sel.locked} onClick={() => patch(sel.id, { locked: !sel.locked })} aria-label={sel.locked ? "Unlock" : "Lock"}>
+            {sel.locked ? "🔒" : "🔓"}
+          </button>
           <button className="fmt" onClick={() => remove(sel.id)} aria-label="Delete">
             🗑
           </button>
@@ -1475,7 +1816,8 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
       )}
       {sel && tool === "move" && !editItem && !shot && subPanel === "color" && (
         <div className="board-subbar board-ui wrap">
-          <span className="small faint">{sel.kind === "note" ? "text color" : sel.kind === "sticky" ? "sticky color" : "ink color"}</span>
+          <span className="small faint">{sel.kind === "note" ? "text color" : sel.kind === "sticky" ? "sticky color" : sel.kind === "box" ? "box color" : "ink color"}</span>
+          {sel.kind === "box" && <Swatches colors={BOX_COLORS} value={sel.color ?? BOX_COLORS[0]} label="Box color" onPick={(color) => patch(sel.id, { color })} />}
           {sel.kind === "note" && <Swatches colors={PENS} value={sel.style?.c ?? PENS[0]} label="Text color" onPick={(c) => setLook(sel, { c })} />}
           {sel.kind === "sticky" && <Swatches colors={STICKY} value={sel.color ?? STICKY[0]} label="Sticky color" onPick={(color) => patch(sel.id, { color })} />}
           {sel.kind === "ink" && <Swatches colors={PENS} value={sel.color ?? PENS[0]} label="Ink color" onPick={(color) => patch(sel.id, { color })} />}
@@ -1486,9 +1828,10 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
           order={layerOrder}
           items={items}
           urls={urls}
-          selected={selected}
-          onSelect={(id) => (setTool("move"), setSelected(id))}
+          selected={selIds}
+          onSelect={(id) => (setTool("move"), multi ? tapPick(id) : setSelected(id))}
           onReorder={restack}
+          onLock={(id) => patch(id, { locked: !byId.get(id)?.locked })}
           onClose={() => setPanel(null)}
         />
       )}
@@ -1510,13 +1853,27 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
             const v = (new FormData(e.currentTarget).get("link") as string).trim();
             if (!v) return;
             setPanel(null);
-            add("link", { link: /^https?:\/\//.test(v) ? v : `https://${v}` });
+            const inApp = v.startsWith(window.location.origin) ? v.slice(window.location.origin.length) || "/" : null;
+            add("link", { link: inApp ?? (/^https?:\/\//.test(v) ? v : `https://${v}`) });
           }}
         >
           <input name="link" className="input input-sm grow keep-case" placeholder="paste a link" autoFocus />
           <button className="btn btn-sm btn-primary">Add</button>
+          <button type="button" className="btn btn-sm" onClick={() => (setPanel(null), setAppLinking(true))}>
+            📍 In the app
+          </button>
         </form>
       )}
+      {appLinking && (
+        <LinkPicker
+          onClose={() => setAppLinking(false)}
+          onPick={(label, path) => {
+            setAppLinking(false);
+            add("link", { link: path, text: label, w: Math.min(260, 60 + label.length * 8) });
+          }}
+        />
+      )}
+      {links.picker}
       {panel === "stickers" && (
         <StickerTray
           onPick={(s) => {
@@ -1581,6 +1938,27 @@ export function Board({ thread, postNow = false }: { thread: Thread; postNow?: b
             </button>
             <button aria-pressed={panel === "link"} onClick={() => setPanel(panel === "link" ? null : "link")} aria-label="Link">
               🔗
+            </button>
+            <button
+              onClick={() => {
+                const minZ = items.reduce((m, i) => Math.min(m, i.z), 0);
+                add("box", { text: "box", color: BOX_COLORS[0], z: minZ - 1 });
+              }}
+              aria-label="Box (a container)"
+            >
+              ▭
+            </button>
+            <button
+              aria-pressed={multi}
+              onClick={() => {
+                setPicked(!multi && selected ? groupOf(selected) : []);
+                setMulti(!multi);
+                setSelected(null);
+                setEditing(null);
+              }}
+              aria-label="Pick several"
+            >
+              ⬚
             </button>
           </>
         )}
@@ -1665,7 +2043,11 @@ function LayersIcon() {
   );
 }
 
-/** Procreate-style layer list: top of the list is the front. Drag ≡ to restack, tap to select. */
+/**
+ * Procreate-style layer list, split into grounds (Up front / Middle / Backdrop).
+ * Top of the list is the front. Drag ≡ to restack, or into another ground;
+ * a container's contents are listed (and stay) under it.
+ */
 function Layers({
   order,
   items,
@@ -1673,28 +2055,41 @@ function Layers({
   selected,
   onSelect,
   onReorder,
+  onLock,
   onClose,
 }: {
   order: string[];
   items: Item[];
   urls: Record<string, string>;
-  selected: string | null;
+  selected: string[];
   onSelect: (id: string) => void;
-  onReorder: (order: string[]) => void;
+  onReorder: (order: string[], grounds: Record<string, number>) => void;
+  onLock: (id: string) => void;
   onClose: () => void;
 }) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const inBox = (i: Item) => !!i.parent_id && byId.get(i.parent_id)?.kind === "box" && i.kind !== "box";
+  // The list as tokens: a header per ground ("g:2"), then that ground's top-level things.
+  const tokens = GROUNDS.flatMap((g) => [`g:${g.k}`, ...order.filter((id) => !inBox(byId.get(id)!) && groundOf(byId.get(id)!) === g.k)]);
   const [draft, setDraft] = useState<string[] | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  const list = draft ?? order;
-  const byId = new Map(items.map((i) => [i.id, i]));
+  const list = draft ?? tokens;
+  const kids = (id: string) => order.filter((x) => byId.get(x)?.parent_id === id && inBox(byId.get(x)!));
   const name = (i: Item) => {
-    const t = (i.text ?? "").replace(/^#+\s*/gm, "").replace(/\[( |x|X)\]\s?/g, "").trim().split("\n")[0];
+    const t = (i.text ?? "")
+      .replace(/^#+\s*/gm, "")
+      .replace(/\[( |x|X)\]\s?/g, "")
+      .replace(/\[([^\]\n]+)\]\(\/[^)\s]*\)/g, "$1")
+      .trim()
+      .split("\n")[0];
     if (i.kind === "note") return t || "Text";
     if (i.kind === "sticky") return t ? `Sticky · ${t}` : "Sticky";
     if (i.kind === "photo") return "Photo";
     if (i.kind === "grid") return `Photo layout · ${slotCount(i)}`;
     if (i.kind === "sticker") return i.photo_path ? "Sticker" : `Sticker ${i.text ?? ""}`;
     if (i.kind === "ink") return "Drawing";
+    if (i.kind === "link" && i.link?.startsWith("/")) return `Link · ${i.text ?? i.link}`;
+    if (i.kind === "box") return `Box · ${i.text || "box"}`;
     if (i.kind === "link") return (i.link ?? "Link").replace(/^https?:\/\/(www\.)?/, "");
     return i.kind;
   };
@@ -1704,6 +2099,7 @@ function Layers({
       // eslint-disable-next-line @next/next/no-img-element
       return <img src={urls[path]} alt="" />;
     if (i.kind === "sticky") return <span style={{ background: i.color ?? STICKY[0] }} />;
+    if (i.kind === "box") return <span style={{ background: i.color ?? BOX_COLORS[0], border: "1.5px solid var(--line)" }} />;
     if (i.kind === "sticker") return <b>{i.text}</b>;
     if (i.kind === "ink") return <b style={{ color: i.color ?? PENS[0] }}>〰</b>;
     if (i.kind === "link") return <b>🔗</b>;
@@ -1711,21 +2107,60 @@ function Layers({
   };
   function onMove(e: React.PointerEvent) {
     if (!dragging) return;
-    const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-layer]");
-    const id = over?.dataset.layer;
-    if (!id || id === dragging) return;
-    const cur = draft ?? order;
-    const next = cur.filter((x) => x !== dragging);
+    const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-tok]");
+    const tok = over?.dataset.tok;
+    if (!tok || tok === dragging) return;
+    const next = list.filter((x) => x !== dragging);
     const r = over!.getBoundingClientRect();
-    const at = next.indexOf(id) + (e.clientY > r.top + r.height / 2 ? 1 : 0);
-    next.splice(at, 0, dragging);
+    // Over a ground's header: to the top of that ground.
+    const at = tok.startsWith("g:") ? next.indexOf(tok) + 1 : next.indexOf(tok) + (e.clientY > r.top + r.height / 2 ? 1 : 0);
+    next.splice(Math.max(1, at), 0, dragging);
     setDraft(next);
   }
   function onUp() {
-    if (dragging && draft) onReorder(draft);
+    if (dragging && draft) {
+      const grounds: Record<string, number> = {};
+      let gk = 2;
+      const tops: string[] = [];
+      for (const t of draft) {
+        if (t.startsWith("g:")) gk = Number(t.slice(2));
+        else {
+          grounds[t] = gk;
+          tops.push(t);
+        }
+      }
+      onReorder(tops.flatMap((id) => [...kids(id), id]), grounds);
+    }
     setDragging(null);
     setTimeout(() => setDraft(null), 600);
   }
+  const row = (id: string, child = false) => {
+    const i = byId.get(id);
+    if (!i) return null;
+    return (
+      <li key={id} data-tok={child ? undefined : id} className={`layer-row${selected.includes(id) ? " sel" : ""}${dragging === id ? " dragging" : ""}${child ? " child" : ""}`}>
+        <button className="layer-pick" onClick={() => onSelect(id)}>
+          <span className="layer-thumb">{thumb(i)}</span>
+          <span className="grow layer-name">{name(i)}</span>
+        </button>
+        <button className="layer-lock" onClick={() => onLock(id)} aria-label={i.locked ? `Unlock ${name(i)}` : `Lock ${name(i)}`} aria-pressed={!!i.locked}>
+          {i.locked ? "🔒" : "🔓"}
+        </button>
+        {!child && (
+          <span
+            className="layer-handle"
+            aria-label={`Drag ${name(i)} up or down`}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setDragging(id);
+            }}
+          >
+            ≡
+          </span>
+        )}
+      </li>
+    );
+  };
   return (
     <div className="board-stickers board-layers board-ui" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
       <div className="row-between">
@@ -1734,31 +2169,24 @@ function Layers({
           ×
         </button>
       </div>
-      {list.length === 0 && <span className="small faint">Nothing on the board yet.</span>}
       <ul className="layer-list">
-        {list.map((id) => {
-          const i = byId.get(id);
-          if (!i) return null;
-          return (
-            <li key={id} data-layer={id} className={`layer-row${selected === id ? " sel" : ""}${dragging === id ? " dragging" : ""}`}>
-              <button className="layer-pick" onClick={() => onSelect(id)}>
-                <span className="layer-thumb">{thumb(i)}</span>
-                <span className="grow layer-name">{name(i)}</span>
-              </button>
-              <span
-                className="layer-handle"
-                aria-label={`Drag ${name(i)} up or down`}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  setDragging(id);
-                }}
-              >
-                ≡
-              </span>
-            </li>
-          );
+        {list.map((t, k) => {
+          if (t.startsWith("g:")) {
+            const gk = Number(t.slice(2));
+            const empty = !list[k + 1] || list[k + 1].startsWith("g:");
+            return (
+              <li key={t} data-tok={t} className="layer-ground">
+                <span>{GROUNDS.find((g) => g.k === gk)?.name}</span>
+                {empty && <span className="faint">{dragging ? "drop here" : "nothing here"}</span>}
+              </li>
+            );
+          }
+          return [row(t), ...kids(t).map((c) => row(c, true))];
         })}
       </ul>
+      <p className="small faint" style={{ margin: 0 }}>
+        Things only come forward within their own ground. Drag ≡ into another ground to move them there.
+      </p>
     </div>
   );
 }

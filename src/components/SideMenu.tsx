@@ -1,5 +1,6 @@
 "use client";
 
+import { copyLink } from "@/lib/links";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from "react";
@@ -159,6 +160,10 @@ export function SideMenu() {
           <Link href="/settings" className="icon-btn" aria-label="Settings" aria-current={isHere(path, "/settings") ? "page" : undefined}>
             <IconGear />
           </Link>
+          {/* Link to whatever page (and tab) is open right now. */}
+          <button className="icon-btn" aria-label="Copy a link to this page" onClick={() => copyLink(window.location.pathname + window.location.search, toast)}>
+            🔗
+          </button>
         </div>
         {editing ? (
           <ArrangeMenu

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/lib/links";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -79,7 +80,7 @@ function rangeFor(view: View, cursor: Date, agenda: AgendaRange): [Date, Date] {
 /* ─── page ──────────────────────────────────────────────────────────────── */
 
 export default function CalendarPage() {
-  const [view, setView] = useState<View>("agenda");
+  const [view, setView] = useUrlTab<View>(["day", "week", "month", "agenda"], "agenda", "view");
   const [agenda, setAgenda] = useState<AgendaRange>("week");
   const [cursor, setCursor] = useState(() => new Date());
   // Deep link from a push notification: /calendar?event=<id>

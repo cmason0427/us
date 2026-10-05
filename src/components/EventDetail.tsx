@@ -1,5 +1,6 @@
 "use client";
 
+import { copyLink } from "@/lib/links";
 import { useState } from "react";
 import { addDays, format, isSameDay } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -217,7 +218,7 @@ export function EventBadges({ e }: { e: CalEvent }) {
 }
 
 export function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () => void; onEdit: () => void }) {
-  const { meId, nameOf } = useApp();
+  const { meId, nameOf, toast } = useApp();
   const t = effectiveType(e);
   const reminder = e.reminder_lead_minutes;
   return (
@@ -268,6 +269,11 @@ export function EventDetail({ e, onClose, onEdit }: { e: CalEvent; onClose: () =
         ) : (
           <button className="btn btn-block" onClick={onEdit}>
             Edit
+          </button>
+        )}
+        {e.response_status !== "declined" && (
+          <button className="btn btn-sm btn-ghost" style={{ alignSelf: "center" }} onClick={() => copyLink(`/calendar?event=${e.id}`, toast)}>
+            🔗 Copy link
           </button>
         )}
       </div>

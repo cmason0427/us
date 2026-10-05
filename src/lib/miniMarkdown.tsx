@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { linkify } from "@/components/Links";
 
 // A tiny, safe formatter for sticky notes (no HTML is ever injected):
 //   # Heading          ## Smaller heading
 //   - bullet           [ ] to do / [x] done (tap to tick)
-//   **bold**  *italic*
+//   **bold**  *italic*      [label](/path) = a link to something in the app
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -12,12 +13,12 @@ function inline(text: string, key: string): ReactNode[] {
   let m: RegExpExecArray | null;
   let n = 0;
   while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m.index > last) out.push(...linkify(text.slice(last, m.index), `${key}-a${n}`));
     const t = m[0];
     out.push(t.startsWith("**") ? <strong key={`${key}-${n++}`}>{t.slice(2, -2)}</strong> : <em key={`${key}-${n++}`}>{t.slice(1, -1)}</em>);
     last = m.index + t.length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(...linkify(text.slice(last), `${key}-z`));
   return out;
 }
 

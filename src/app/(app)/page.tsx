@@ -1,5 +1,6 @@
 "use client";
 
+import { TimeAskCards } from "@/components/TimeAsk";
 import { useState } from "react";
 import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -77,6 +78,9 @@ export default function HomePage() {
           <button className="btn btn-sm btn-ghost" onClick={() => openAdd("star")} aria-label="Send a star">
             ⭐
           </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => openAdd("time-ask")} aria-label="Ask what time they were thinking">
+            ⏰
+          </button>
           <button className="btn btn-sm" onClick={() => openAdd("post")}>
             Share something
           </button>
@@ -105,6 +109,7 @@ export default function HomePage() {
         </div>
       )}
       {!searching && <ThreadStrip />}
+      {!searching && <TimeAskCards />}
 
       {posts && posts.length === 0 && (
         <div className="empty">

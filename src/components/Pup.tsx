@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/lib/links";
 import { useState } from "react";
 import Link from "next/link";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
@@ -74,8 +75,8 @@ function useTable<T>(table: string, dog: string, order = "created_at") {
 }
 
 export function PupView() {
-  const [dog, setDog] = useState<DogId>("wiley");
-  const [tab, setTab] = useState<"sessions" | "rules" | "collar" | "map" | "notes">("sessions");
+  const [dog, setDog] = useUrlTab<DogId>(DOGS.map((d) => d.id), "wiley", "dog");
+  const [tab, setTab] = useUrlTab(["sessions", "rules", "collar", "map", "notes"] as const, "sessions");
   return (
     <div className="stack">
       <div className="row-between wrap" style={{ gap: 8 }}>

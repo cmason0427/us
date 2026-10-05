@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useUrlTab } from "@/lib/links";
+import type { ReactNode } from "react";
 import { PageHead } from "@/components/PageHead";
 import { Sticker } from "@/components/Sticker";
 import { Wavy } from "@/components/Art";
@@ -26,7 +27,7 @@ const HOBBIES: { key: string; label: string; render: () => ReactNode }[] = [
 ];
 
 export default function NerdPage() {
-  const [key, setKey] = useState(HOBBIES[0].key);
+  const [key, setKey] = useUrlTab(HOBBIES.map((h) => h.key), HOBBIES[0].key);
   const hobby = HOBBIES.find((h) => h.key === key) ?? HOBBIES[0];
   return (
     <main className="page">

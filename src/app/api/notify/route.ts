@@ -24,6 +24,7 @@ type Body =
   | { kind: "deck"; id: string }
   | { kind: "task_ask"; id: string }
   | { kind: "eat"; id: string }
+  | { kind: "time"; id: string }
   | { kind: "item_ask"; id: string }
   | { kind: "test" };
 
@@ -226,6 +227,29 @@ export async function POST(req: Request) {
     const sent = await sendPushToUser(partner.id, asking
       ? { title: "🚨 DID YOU EAT?", body: `${myName} wants to know. Yes, no, or working on it.`, url: "/", tag: `eat-${c.id}` }
       : { title: `🍽️ ${myName}${c.updated_at ? " updated" : ""}: ${label}`, body: c.note ?? "Answered your did-you-eat.", url: "/", tag: `eat-${c.id}` });
+    return NextResponse.json({ sent });
+  }
+
+  if (body.kind === "time") {
+    const { data: a } = await supabase.from("time_asks").select("*").eq("id", body.id).single();
+    if (!a) return NextResponse.json({ error: "no such ask" }, { status: 400 });
+    const asking = a.asked_by === me.id && a.status === "open";
+    const answering = a.to_user === me.id && (a.status === "answered" || a.status === "unsure");
+    if (!asking && !answering) return NextResponse.json({ error: "not yours to send" }, { status: 400 });
+    if (!partner.notify_asks) return NextResponse.json({ sent: 0 });
+    const clock = (t: string | null) => {
+      if (!t) return "";
+      const [h, m] = t.split(":").map(Number);
+      return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "am" : "pm"}`;
+    };
+    const sent = await sendPushToUser(
+      partner.id,
+      asking
+        ? { title: `⏰ ${myName} asks`, body: a.question, url: "/", tag: `time-${a.id}` }
+        : a.status === "unsure"
+          ? { title: `🤷 ${myName} isn't sure yet`, body: a.answer_note ?? a.question, url: "/", tag: `time-${a.id}` }
+          : { title: `⏰ ${myName}: ${[a.answer_day, clock(a.answer_time)].filter(Boolean).join(" · ")}`, body: a.answer_note ?? a.question, url: "/", tag: `time-${a.id}` },
+    );
     return NextResponse.json({ sent });
   }
 

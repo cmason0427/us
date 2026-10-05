@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
 import { useApp } from "@/components/AppProvider";
@@ -55,7 +56,14 @@ const PH: Record<string, string> = { Shirt: "M", Pants: "32x30", Shoes: "10", Ri
 
 export default function LittleThingsPage() {
   const { meId, partner, profiles, toast } = useApp();
-  const [about, setAbout] = useState<"them" | "me" | "us">("them");
+  // ?about= is "us" or a person's id (so a link means the same person for both of you).
+  const wanted = useSearchParams().get("about");
+  const [about, setAboutRaw] = useState<"them" | "me" | "us">(wanted === "us" ? "us" : wanted && wanted === meId ? "me" : "them");
+  const setAbout = (a: "them" | "me" | "us") => {
+    setAboutRaw(a);
+    const who = a === "us" ? "us" : a === "me" ? meId : partner?.id;
+    window.history.replaceState(null, "", who ? `/little?about=${who}` : "/little");
+  };
   const [editing, setEditing] = useState<Editing | null>(null);
   const supabase = supabaseBrowser();
   const { data: things = [] } = useLive<Thing[]>(

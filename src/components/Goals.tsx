@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/lib/links";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -146,7 +147,7 @@ function CheckIn({ g, due }: { g: Goal; due: { date: string; amount: number } })
 export function GoalsView() {
   const { goals, logs } = useGoals();
   const now = useNow();
-  const [tab, setTab] = useState<"mine" | "ours" | "archived">("mine");
+  const [tab, setTab] = useUrlTab(["mine", "ours", "archived"] as const, "mine");
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   if (!now) return null;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/lib/links";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive, refreshAll } from "@/lib/useLive";
@@ -57,7 +58,7 @@ function useItems() {
 }
 
 function Spicy() {
-  const [section, setSection] = useState<Section>("pics");
+  const [section, setSection] = useUrlTab<Section>(["pics", "ideas", "notes"], "pics");
   const [asking, setAsking] = useState(false);
 
   return (
