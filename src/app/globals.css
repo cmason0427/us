@@ -1621,3 +1621,8 @@ html.no-page-zoom .board-view { touch-action: none; }
 .veil-opts { padding: 10px; border-radius: 14px; background: var(--surface-sunk); }
 /* Items never clip their own handles (text clips itself inside). */
 .board-item.k-sticky, .board-item.k-link, .board-item.k-note { overflow: visible; }
+/* Photo editor: inside the frame's rectangle, what the shape cuts away is dimmed */
+.pe-window.shaped { box-shadow: 0 0 0 1.5px rgba(0,0,0,.25); }
+.pe-window img.pe-dim { opacity: 0.32; }
+.pe-shape { position: absolute; inset: 0; }
+.pe-shape img { position: absolute; max-width: none; pointer-events: none; }

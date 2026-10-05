@@ -132,15 +132,21 @@ function FramedImg({ src, crop }: { src: string; crop: Crop }) {
 }
 
 /** Shape + border around anything (a photo, or one slot of a layout). */
-function inFrame(style: Look | null, child: React.ReactNode) {
+/** The CSS that cuts something to a frame's shape (null = a plain rectangle). */
+function shapeCut(style: Look | null): React.CSSProperties | null {
   const key = style?.shape ?? "polaroid";
   const shape = SHAPES.find((x) => x.key === key) ?? SHAPES[0];
   const maskUrl = key === "custom" && style?.mask ? `url("${style.mask}")` : shape.mask;
-  if (!shape.clip && !maskUrl) return <div className="board-frame-in">{child}</div>;
+  if (!shape.clip && !maskUrl) return null;
   // Curvy and custom shapes are masks (they keep their proportions, centred); the rest clip.
-  const cut: React.CSSProperties = maskUrl
+  return maskUrl
     ? { WebkitMaskImage: maskUrl, maskImage: maskUrl, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }
     : { clipPath: shape.clip };
+}
+
+function inFrame(style: Look | null, child: React.ReactNode) {
+  const cut = shapeCut(style);
+  if (!cut) return <div className="board-frame-in">{child}</div>;
   return (
     <div className="board-frame" style={{ ...cut, background: style?.bw ? (style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: style?.bw ?? 0 }}>
       <div className="board-frame-in" style={cut}>
@@ -476,6 +482,18 @@ export function Board({ thread }: { thread: Thread }) {
     setSlotFor(null);
     const it = items.find((i) => i.id === target?.id);
     if (!target || !it || !files[0]) return;
+    // A single photo: swap the picture, keep the frame, size, shape, border, everything.
+    if (it.kind === "photo") {
+      const { blob, ext } = await shrinkImage(files[0]);
+      const path = `${meId}/threads/${thread.id}/${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error } = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+      if (error) return toast(error.message);
+      const old = it.photo_path;
+      await patch(it.id, { photo_path: path, style: { ...(it.style ?? {}), crop: NO_CROP } });
+      if (old && old !== path) supabase.storage.from("photos").remove([old]);
+      return;
+    }
+    const replaced: number[] = [];
     const slots = { length: slotCount(it) };
     const next = Array.from({ length: Math.max(slots.length, it.photos?.length ?? 0) }, (_, k) => it.photos?.[k] ?? "");
     // Several picked at once fill this slot and the empty ones after it.
@@ -491,9 +509,13 @@ export function Board({ thread }: { thread: Thread }) {
         break;
       }
       next[k] = path;
+      replaced.push(k);
       k++;
     }
-    await patch(it.id, { photos: next });
+    // New pictures start centred; the layout, frames and other slots stay as they were.
+    const crops = { ...(it.style?.crops ?? {}) };
+    for (const r of replaced) delete crops[String(r)];
+    await patch(it.id, { photos: next, style: { ...(it.style ?? {}), crops } });
   }
   const heart = (i: Item) => patch(i.id, { hearts: i.hearts.includes(meId) ? i.hearts.filter((x) => x !== meId) : [...i.hearts, meId] });
 
@@ -1186,6 +1208,15 @@ export function Board({ thread }: { thread: Thread }) {
               <button className="fmt" onClick={() => openPhotoEdit(sel, 0)}>
                 ✥ Edit
               </button>
+              <button
+                className="fmt"
+                onClick={() => {
+                  setSlotFor({ id: sel.id, slot: 0 });
+                  slotInput.current?.click();
+                }}
+              >
+                ↺ Replace
+              </button>
               <button className="fmt" aria-pressed={subPanel === "frame"} onClick={() => setSubPanel(subPanel === "frame" ? null : "frame")}>
                 🖼 Frame
               </button>
@@ -1665,6 +1696,7 @@ function PhotoEditor({
   const stage = useRef<HTMLDivElement>(null);
 
   const F = aspects[cur] ?? 1;
+  const cut = shapeCut(item.style);
   const W = Math.min(300, (typeof window !== "undefined" ? window.innerWidth : 360) - 72);
   const fw = F >= 1 ? W : Math.round(W * Math.max(F, 0.45));
   const fh = Math.round(fw / F);
@@ -1747,18 +1779,26 @@ function PhotoEditor({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img className="pe-ghost" src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` }} />
               )}
-              <div className="pe-window">
+              <div className={`pe-window${cut ? " shaped" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
                   alt=""
                   draggable={false}
+                  className={cut ? "pe-dim" : undefined}
                   onLoad={(e) => {
                     const r = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight;
                     setArs((m) => (path && !m[path] ? { ...m, [path]: r } : m));
                   }}
                   style={g ? { width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` } : { opacity: 0 }}
                 />
+                {/* What will actually show: the frame's shape, full strength. */}
+                {cut && g && (
+                  <div className="pe-shape" style={cut}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` }} />
+                  </div>
+                )}
               </div>
             </div>
           ) : (
