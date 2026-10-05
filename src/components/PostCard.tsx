@@ -13,7 +13,8 @@ import { dogName, dogVoice } from "@/lib/dogs";
 import { DogAvatar } from "./DogAvatar";
 import { PersonAvatar } from "./PersonAvatar";
 import type { Post } from "@/lib/types";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { confetti } from "@/lib/celebrate";
 import { useApp } from "./AppProvider";
 import { SaveSheet } from "./SaveSheet";
 import { starColor } from "@/lib/stars";
@@ -294,57 +295,96 @@ function DeckTag({ id }: { id: string }) {
   );
 }
 
-const VEIL_LOOK: Record<NonNullable<Post["veil"]>, { emoji: string; label: string; tap: string }> = {
-  surprise: { emoji: "🎁", label: "Surprise", tap: "Tap to open" },
-  spoiler: { emoji: "🙈", label: "Spoiler", tap: "Tap to reveal" },
-  warning: { emoji: "⚠️", label: "Heads-up", tap: "Tap to see it" },
-};
-
-/** The covered second part of a post; an optional disclaimer to agree to first. */
+/** The covered second part of a post, opened the way its author chose. */
 function Veil({ post, opened, onOpen, onClose }: { post: Post; opened: boolean; onOpen: () => void; onClose: () => void }) {
-  const [asking, setAsking] = useState(false);
-  const look = VEIL_LOOK[post.veil!];
+  const ref = useRef<HTMLDivElement>(null);
+  const [armed, setArmed] = useState(false); // first tap / press done (double, twice)
+  const [declined, setDeclined] = useState(false);
+  const how = ["tap", "double", "agree", "button", "twice"].includes(post.veil ?? "") ? post.veil! : "tap";
+  const open = () => {
+    onOpen();
+    if (post.veil_confetti) setTimeout(() => confetti(ref.current), 30);
+  };
   if (opened)
     return (
-      <div className={`veil open veil-${post.veil}`}>
+      <div ref={ref} className="veil open">
         <div className="row-between small">
-          <strong>
-            {look.emoji} {look.label}
-          </strong>
-          <button className="btn-link small faint" onClick={onClose}>
+          <span className="faint">{post.veil_note ? `🙈 ${post.veil_note}` : "🙈 the hidden part"}</span>
+          <button className="btn-link small faint" onClick={() => (onClose(), setArmed(false), setDeclined(false))}>
             hide again
           </button>
         </div>
         {post.hidden_text && <p className="post-text" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{post.hidden_text}</p>}
       </div>
     );
-  if (asking && post.veil_ack)
+  const note = post.veil_note && <span className="veil-note">{post.veil_note}</span>;
+  if (how === "agree")
     return (
-      <div className={`veil ask veil-${post.veil}`}>
-        <strong>
-          {look.emoji} Before you open it
-        </strong>
-        <p style={{ margin: 0 }}>{post.veil_ack}</p>
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn btn-sm btn-primary" onClick={onOpen}>
-            I&apos;m ready, open it
-          </button>
-          <button className="btn btn-sm btn-ghost" onClick={() => setAsking(false)}>
-            Not now
-          </button>
-        </div>
+      <div ref={ref} className="veil closed ask">
+        <span className="veil-emoji" aria-hidden>🙈</span>
+        <span className="grow stack-sm">
+          {note}
+          <strong>{post.veil_ack || "Open it?"}</strong>
+          {declined ? (
+            <span className="small faint">
+              Okay, it&apos;ll be here.{" "}
+              <button className="btn-link small" onClick={() => setDeclined(false)}>
+                ask again
+              </button>
+            </span>
+          ) : (
+            <span className="row" style={{ gap: 8 }}>
+              <button className="btn btn-sm btn-primary" onClick={open}>
+                Yes
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setDeclined(true)}>
+                No
+              </button>
+            </span>
+          )}
+        </span>
+      </div>
+    );
+  if (how === "button" || how === "twice")
+    return (
+      <div ref={ref} className="veil closed ask">
+        <span className="veil-emoji" aria-hidden>🙈</span>
+        <span className="grow stack-sm">
+          {note || <strong>Something&apos;s hidden</strong>}
+          <span>
+            <button
+              className={`btn btn-sm ${armed ? "btn-primary" : ""}`}
+              onClick={() => {
+                if (how === "twice" && !armed) return setArmed(true);
+                open();
+              }}
+            >
+              {how === "twice" && armed ? "Press again to open" : post.veil_ack || "Open it"}
+            </button>
+          </span>
+        </span>
       </div>
     );
   return (
-    <button className={`veil closed veil-${post.veil}`} onClick={() => (post.veil_ack ? setAsking(true) : onOpen())}>
-      <span className="veil-emoji" aria-hidden>
-        {look.emoji}
-      </span>
+    <div
+      ref={ref}
+      role="button"
+      tabIndex={0}
+      className="veil closed"
+      onClick={() => {
+        if (how !== "double") return open();
+        if (armed) return open();
+        setArmed(true);
+        setTimeout(() => setArmed(false), 700);
+      }}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && open()}
+    >
+      <span className="veil-emoji" aria-hidden>🙈</span>
       <span className="grow">
-        <strong>{look.label}</strong>
-        <span className="small">{post.veil_ack ? `${look.tap} · you'll be asked first` : look.tap}</span>
+        {note || <strong>Something&apos;s hidden</strong>}
+        <span className="small">{how === "double" ? (armed ? "once more!" : "Double-tap to open") : "Tap to open"}</span>
       </span>
       <span aria-hidden>›</span>
-    </button>
+    </div>
   );
 }

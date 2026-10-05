@@ -87,10 +87,18 @@ export interface Post {
   as_dog: boolean;
   /** Set on the automatic posts for asks (sent, answered, moved). */
   event_id: string | null;
-  /** A hidden second part (surprise / spoiler / heads-up), shown only once tapped. */
-  veil?: "surprise" | "spoiler" | "warning" | null;
+  /**
+   * A hidden second part, and how it opens: "tap", "double" (double-tap), "agree"
+   * (a yes/no question), "button" (a custom button) or "twice" (press it twice).
+   * Older posts say "surprise" / "spoiler" / "warning" and open with a tap.
+   */
+  veil?: string | null;
+  /** Small note on the cover: why it's hidden. */
+  veil_note?: string | null;
+  /** Confetti when it opens. */
+  veil_confetti?: boolean;
   hidden_text?: string | null;
-  /** Optional disclaimer they agree to before it opens. */
+  /** The yes/no question, or the custom button's label. */
   veil_ack?: string | null;
   /** The photos are covered too. */
   veil_photos?: boolean;

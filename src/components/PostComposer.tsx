@@ -41,11 +41,15 @@ export function DogChips({ value, onChange }: { value: string[]; onChange: (dogs
  * which dog(s) it's about and it lands in the feed and the Dogs tab. Plain
  * updates can be tagged with dogs too.
  */
-export const VEILS = [
-  { key: "surprise", emoji: "🎁", label: "Surprise", ph: "the surprise (they'll tap to open it)" },
-  { key: "spoiler", emoji: "🙈", label: "Spoiler", ph: "the spoiler" },
-  { key: "warning", emoji: "⚠️", label: "Heads-up", ph: "the part they should be ready for" },
+/** How a hidden part opens. */
+export const UNLOCKS = [
+  { key: "tap", label: "Tap" },
+  { key: "double", label: "Double-tap" },
+  { key: "agree", label: "Yes / no question" },
+  { key: "button", label: "Custom button" },
+  { key: "twice", label: "Press twice" },
 ] as const;
+type Unlock = (typeof UNLOCKS)[number]["key"];
 
 export function PostComposer({
   onDone,
@@ -65,11 +69,14 @@ export function PostComposer({
   const deckList = [...useDeckNames().values()];
   const [text, setText] = useState("");
   // Optional hidden part: a surprise, spoiler or heads-up they tap to open.
-  const [veil, setVeil] = useState<"surprise" | "spoiler" | "warning" | null>(null);
+  const [hiding, setHiding] = useState(false);
+  const [unlock, setUnlock] = useState<Unlock>("tap");
   const [hidden, setHidden] = useState("");
   const [ack, setAck] = useState("");
-  const [askAck, setAskAck] = useState(false);
+  const [why, setWhy] = useState("");
+  const [boom, setBoom] = useState(false);
   const [veilPhotos, setVeilPhotos] = useState(false);
+  const veil = hiding ? unlock : null;
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +112,16 @@ export function PostComposer({
           dogs,
           as_dog: dogNote,
           deck_id: deck,
-          ...(veil ? { veil, hidden_text: hidden.trim() || null, veil_ack: askAck && ack.trim() ? ack.trim() : null, veil_photos: veilPhotos && files.length > 0 } : {}),
+          ...(veil
+            ? {
+                veil,
+                hidden_text: hidden.trim() || null,
+                veil_ack: veil === "agree" || veil === "button" || veil === "twice" ? ack.trim() || null : null,
+                veil_note: why.trim() || null,
+                veil_confetti: boom,
+                veil_photos: veilPhotos && files.length > 0,
+              }
+            : {}),
         })
         .select("id")
         .single();
@@ -206,26 +222,33 @@ export function PostComposer({
       />
       {!dogNote && !deckId && (
         <div className="veil-compose">
-          <div className="chips" role="group" aria-label="Add a hidden part">
-            {VEILS.map((v) => (
-              <button key={v.key} type="button" className="chip chip-sm" aria-pressed={veil === v.key} onClick={() => setVeil(veil === v.key ? null : v.key)}>
-                {v.emoji} {v.label}
-              </button>
-            ))}
-          </div>
-          {veil && (
-            <div className="stack-sm">
-              <textarea className="textarea" rows={3} value={hidden} onChange={(e) => setHidden(e.target.value)} placeholder={VEILS.find((v) => v.key === veil)!.ph} aria-label="The hidden part" />
+          <button type="button" className="chip chip-sm" aria-pressed={hiding} onClick={() => setHiding((h) => !h)} style={{ alignSelf: "flex-start" }}>
+            🙈 {hiding ? "Hidden part on" : "Add a hidden part"}
+          </button>
+          {hiding && (
+            <div className="stack-sm veil-opts">
+              <textarea className="textarea" rows={3} value={hidden} onChange={(e) => setHidden(e.target.value)} placeholder="the hidden part (they open it to see)" aria-label="The hidden part" />
+              <input className="input input-sm" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why it's hidden (optional), e.g. spoilers for ep 5" aria-label="Why it's hidden" maxLength={80} />
+              <div className="field">
+                <span>How it opens</span>
+                <div className="chips">
+                  {UNLOCKS.map((u) => (
+                    <button key={u.key} type="button" className="chip chip-sm" aria-pressed={unlock === u.key} onClick={() => setUnlock(u.key)}>
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {unlock === "agree" && <input className="input input-sm" value={ack} onChange={(e) => setAck(e.target.value)} placeholder="the question, e.g. Are you home yet?" aria-label="Yes/no question" maxLength={120} />}
+              {(unlock === "button" || unlock === "twice") && <input className="input input-sm" value={ack} onChange={(e) => setAck(e.target.value)} placeholder="button words, e.g. I'm ready" aria-label="Button words" maxLength={40} />}
+              <label className="row small" style={{ gap: 8 }}>
+                <input type="checkbox" checked={boom} onChange={(e) => setBoom(e.target.checked)} /> 🎉 Confetti when it opens
+              </label>
               {files.length > 0 && (
                 <label className="row small" style={{ gap: 8 }}>
                   <input type="checkbox" checked={veilPhotos} onChange={(e) => setVeilPhotos(e.target.checked)} /> Hide the photos too
                 </label>
               )}
-              <label className="row small" style={{ gap: 8 }}>
-                <input type="checkbox" checked={askAck} onChange={(e) => setAskAck(e.target.checked)} /> Make them agree to something first
-              </label>
-              {askAck && <input className="input input-sm" value={ack} onChange={(e) => setAck(e.target.value)} placeholder="e.g. Don't open until you're home / contains spiders" aria-label="What they agree to" />}
-              <span className="small faint">The top part shows in the feed; this part stays covered until they tap it.</span>
             </div>
           )}
         </div>

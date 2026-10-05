@@ -1614,3 +1614,10 @@ html.no-page-zoom .board-view { touch-action: none; }
 .shape-save { padding: 8px; border-radius: 12px; background: var(--surface-sunk); }
 .board-subbar.wrap { width: min(560px, calc(100vw - 72px)); justify-content: flex-start; max-height: 46vh; overflow-y: auto; }
 .board-slot:has(> .board-frame) { background: transparent; }
+/* Bigger, finger-sized grab areas for resize and tilt (the dot stays small). */
+.board-resize::before, .board-rotate::before { content: ""; position: absolute; inset: -14px; border-radius: 50%; }
+.veil.closed { border-color: #d9a7c7; }
+.veil-note { display: block; font-weight: 700; }
+.veil-opts { padding: 10px; border-radius: 14px; background: var(--surface-sunk); }
+/* Items never clip their own handles (text clips itself inside). */
+.board-item.k-sticky, .board-item.k-link, .board-item.k-note { overflow: visible; }

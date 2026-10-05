@@ -548,6 +548,12 @@ export function Board({ thread }: { thread: Thread }) {
   function onDown(e: React.PointerEvent) {
     const target = e.target as HTMLElement;
     if (target.closest("textarea, input, .board-ui")) return;
+    // A new first finger means every earlier touch has ended, even if the browser
+    // never told us (that's how a one-finger drag used to turn into a "pinch").
+    if (e.isPrimary && pointers.current.size) {
+      pointers.current.clear();
+      g.current = { kind: "idle" };
+    }
     try {
       viewport.current!.setPointerCapture(e.pointerId);
     } catch {}
@@ -923,6 +929,7 @@ export function Board({ thread }: { thread: Thread }) {
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
+        onLostPointerCapture={(e) => pointers.current.has(e.pointerId) && onCancel(e)}
         onPointerCancel={onCancel}
         onContextMenu={(e) => e.preventDefault()}
         style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${22 * view.z}px ${22 * view.z}px`, backgroundColor: (shot && shotBg) || thread.bg || undefined }}
