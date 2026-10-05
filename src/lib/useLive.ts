@@ -38,9 +38,14 @@ export function useLive<T>(key: string, fetcher: () => Promise<T>, tables: strin
     fetcherRef.current = fetcher;
   });
 
+  // Only the newest request may publish: a slow older one landing late would
+  // otherwise put stale data back (things "snapping back" after a save).
+  const seq = useRef(0);
   const refresh = useCallback(async () => {
+    const n = ++seq.current;
     try {
-      publish(key, await fetcherRef.current());
+      const v = await fetcherRef.current();
+      if (n === seq.current) publish(key, v);
     } catch (err) {
       console.error(`useLive(${key})`, err);
     }

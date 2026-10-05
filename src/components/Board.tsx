@@ -238,6 +238,15 @@ export function Board({ thread }: { thread: Thread }) {
   const [saving, setSaving] = useState(false);
   // Live boxes held after a drag until the save comes back, so nothing snaps.
   const [local, setLocal] = useState<Record<string, Box>>({});
+  // Drop each "just moved" override once the saved position has come back.
+  useEffect(() => {
+    const done = Object.keys(local).filter((id) => {
+      const it = items.find((i) => i.id === id);
+      const b = local[id];
+      return !it || (it.x === b.x && it.y === b.y && it.w === b.w && it.h === b.h && (it.rot ?? 0) === b.rot);
+    });
+    if (done.length) Promise.resolve().then(() => setLocal((l) => done.reduce((acc, id) => (acc[id] === l[id] ? dropKey(acc, id) : acc), l)));
+  }, [items, local]);
   const viewport = useRef<HTMLDivElement>(null);
   const world = useRef<HTMLDivElement>(null);
   const livePath = useRef<SVGPathElement>(null);
@@ -381,7 +390,7 @@ export function Board({ thread }: { thread: Thread }) {
     const c = el ? toWorld(el.getBoundingClientRect().left + el.clientWidth / 2, el.getBoundingClientRect().top + el.clientHeight / 2) : { x: 200, y: 200 };
     // Spread new things out a little so they don't pile up in one spot.
     const n = items.length % 6;
-    return { x: c.x - w / 2 + ((n % 3) - 1) * 40 + (Math.random() * 20 - 10), y: c.y - h / 2 + (Math.floor(n / 3) - 0.5) * 50 + (Math.random() * 20 - 10) };
+    return { x: c.x - w / 2 + ((n % 3) - 1) * 40 + jitter(), y: c.y - h / 2 + (Math.floor(n / 3) - 0.5) * 50 + jitter() };
   }
 
   /* ── data ───────────────────────────────────────────────────────────── */
@@ -425,6 +434,7 @@ export function Board({ thread }: { thread: Thread }) {
     const { error } = await supabase.from("thread_items").update(fields).eq("id", id);
     if (error) toast(error.message);
     refreshAll();
+    return !error;
   }
   async function remove(id: string) {
     const it = items.find((i) => i.id === id);
@@ -664,7 +674,7 @@ export function Board({ thread }: { thread: Thread }) {
     if (pointers.current.size > 0) return;
     g.current = { kind: "idle" };
     showGuides(null, null);
-    const now = Date.now();
+    const now = nowMs();
     const tap = lastTap.current;
     const isDouble = (id: string | null) => now - tap.t < 320 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 24 && tap.id === id;
     if (cur.kind === "pan") {
@@ -703,14 +713,14 @@ export function Board({ thread }: { thread: Thread }) {
         lastTap.current = { t: now, x: e.clientX, y: e.clientY, id: cur.id };
         return;
       }
-      const b = cur.next;
+      const n = cur.next;
+      const b = { x: Math.round(n.x), y: Math.round(n.y), w: Math.round(n.w), h: Math.round(n.h), rot: n.rot };
+      // Keep showing it where it was dropped until the saved copy comes back
+      // (clearing it sooner made things snap back, then jump on the next drag).
       setLocal((l) => ({ ...l, [cur.id]: b }));
-      await patch(cur.id, { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h), rot: b.rot, z: maxZ + 1 });
-      setLocal((l) => {
-        const { [cur.id]: _drop, ...rest } = l;
-        void _drop;
-        return rest;
-      });
+      const ok = await patch(cur.id, { ...b, z: maxZ + 1 });
+      if (!ok) setLocal((l) => dropKey(l, cur.id));
+      else setTimeout(() => setLocal((l) => (l[cur.id] === b ? dropKey(l, cur.id) : l)), 8000);
     } else if (cur.kind === "pen") {
       livePath.current?.setAttribute("d", "");
       const pts = cur.pts;
@@ -1886,3 +1896,13 @@ async function toMask(f: File): Promise<string> {
   if (clear < px.length / 16 / 50) throw new Error("That picture has no transparent background, so it would just be a rectangle");
   return c.toDataURL("image/png");
 }
+
+function dropKey<T>(o: Record<string, T>, k: string): Record<string, T> {
+  const { [k]: _gone, ...rest } = o;
+  void _gone;
+  return rest;
+}
+
+// Event-time helpers (kept outside the component so they're never mistaken for render work).
+const jitter = () => Math.random() * 20 - 10;
+const nowMs = () => Date.now();
