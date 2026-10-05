@@ -25,8 +25,8 @@ export function renderMini(text: string): ReactNode {
   const lines = text.split("\n");
   return lines.map((line, i) => {
     const k = `l${i}`;
-    if (/^#\s/.test(line)) return <div key={k} className="md-h1">{inline(line.slice(2), k)}</div>;
-    if (/^##\s/.test(line)) return <div key={k} className="md-h2">{inline(line.slice(3), k)}</div>;
+    if (/^#\s/.test(line)) return <div key={k} className="md-h1"><span className="md-hl">{inline(line.slice(2), k)}</span></div>;
+    if (/^##\s/.test(line)) return <div key={k} className="md-h2"><span className="md-hl">{inline(line.slice(3), k)}</span></div>;
     const box = /^\[( |x|X)\]\s?(.*)$/.exec(line);
     if (box)
       return (
@@ -39,7 +39,11 @@ export function renderMini(text: string): ReactNode {
       );
     if (/^[-•]\s/.test(line)) return <div key={k} className="md-li">{inline(line.slice(2), k)}</div>;
     if (!line.trim()) return <div key={k} className="md-gap" />;
-    return <div key={k}>{inline(line, k)}</div>;
+    return (
+      <div key={k}>
+        <span className="md-hl">{inline(line, k)}</span>
+      </div>
+    );
   });
 }
 

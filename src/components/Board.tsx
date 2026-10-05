@@ -10,7 +10,7 @@ import { applyFormat, renderMini, toggleCheck } from "@/lib/miniMarkdown";
 import { useApp } from "./AppProvider";
 import { ImageSources, filesFromPaste } from "./ImageSources";
 import { StickerTray, saveSticker } from "./BoardStickers";
-import { GRID_LAYOUTS, TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/boardTemplates";
+import { TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/boardTemplates";
 import type { Thread } from "./Threads";
 
 interface Item {
@@ -36,7 +36,62 @@ interface Item {
   created_at: string;
 }
 /** How text looks: size, bold, font, color, alignment. */
-type Look = { fs?: number; b?: boolean; font?: "sans" | "serif"; c?: string; al?: "left" | "center"; layout?: string };
+type Crop = { x: number; y: number; s: number };
+type Shape = "polaroid" | "plain" | "rounded" | "circle" | "arch" | "star" | "hex" | "diamond";
+type Look = {
+  fs?: number;
+  b?: boolean;
+  font?: "sans" | "serif";
+  c?: string;
+  al?: "left" | "center" | "right";
+  /** Old fixed photo-grid layouts (templates); `n` replaces it with an auto layout. */
+  layout?: string;
+  /** Auto photo layout: this many photos, arranged to suit the frame's shape. */
+  n?: number;
+  /** Where a single photo sits in its frame, and per-slot for layouts. */
+  crop?: Crop;
+  crops?: Record<string, Crop>;
+  /** Photo frame shape and border. */
+  shape?: Shape;
+  bw?: number;
+  bc?: string;
+  /** Heading highlight: a rounded box around it, or a marker tight to the text. */
+  hl?: "box" | "tight";
+  hlc?: string;
+};
+
+const SHAPES: { key: Shape; label: string; clip?: string }[] = [
+  { key: "polaroid", label: "▢ classic" },
+  { key: "plain", label: "■ plain", clip: "inset(0)" },
+  { key: "rounded", label: "▢ rounded", clip: "inset(0 round 16%)" },
+  { key: "circle", label: "● circle", clip: "ellipse(50% 50% at 50% 50%)" },
+  { key: "arch", label: "◠ arch", clip: "inset(0 round 50% 50% 0 0)" },
+  { key: "star", label: "★ star", clip: "polygon(50% 0%, 61.8% 35%, 98% 35.4%, 68.9% 57.3%, 79.4% 91.6%, 50% 70.8%, 20.6% 91.6%, 31.1% 57.3%, 2% 35.4%, 38.2% 35%)" },
+  { key: "hex", label: "⬢ hex", clip: "polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%)" },
+  { key: "diamond", label: "◆ diamond", clip: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" },
+];
+const BORDERS = [0, 3, 7, 12];
+const FRAME_COLORS = ["#ffffff", "#3b2a2a", "#f4c6d4", "#f2d27a", "#b9dcc0", "#bcd3f2", "#d9c3f0", "#e7a58a"];
+const HIGHLIGHTS = ["#ffe066", "#ffb3c7", "#b8ecc4", "#b9d7ff", "#e2c9ff", "#ffc9a3"];
+const NO_CROP: Crop = { x: 50, y: 50, s: 1 };
+const cropCss = (c: Crop): React.CSSProperties => ({ objectPosition: `${c.x}% ${c.y}%`, transform: c.s > 1 ? `scale(${c.s})` : undefined, transformOrigin: `${c.x}% ${c.y}%` });
+
+/** Rows of photos that best fill a w×h frame: 4 in a tall frame stacks, in a square goes 2×2. */
+function autoRows(n: number, w: number, h: number): number[] {
+  let best = { cols: 1, score: Infinity };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cell = w / cols / (h / rows);
+    const score = Math.abs(Math.log(cell)) + (cols * rows - n) * 0.25;
+    if (score < best.score) best = { cols, score };
+  }
+  const rows = Math.ceil(n / best.cols);
+  // Spread evenly: e.g. 5 in 2 rows → 3 + 2.
+  return Array.from({ length: rows }, (_, r) => Math.floor(n / rows) + (r < n % rows ? 1 : 0)).sort((a, b) => b - a);
+}
+const slotCount = (i: { style: Look | null }) => i.style?.n ?? gridLayout(i.style?.layout).slots.length;
+const isHeadingish = (i: { kind: string; text: string | null; style: Look | null }) =>
+  /^#{1,2}\s/m.test(i.text ?? "") || (i.kind === "note" && (!!i.style?.b || (i.style?.fs ?? 20) >= 30));
 type Box = { x: number; y: number; w: number; h: number; rot: number };
 type View = { x: number; y: number; z: number };
 
@@ -121,6 +176,10 @@ export function Board({ thread }: { thread: Thread }) {
   const guideH = useRef<HTMLDivElement>(null);
   const slotInput = useRef<HTMLInputElement>(null);
   const [slotFor, setSlotFor] = useState<{ id: string; slot: number } | null>(null);
+  // Adjusting how picture(s) sit in a frame: which item, which slot ("one" = a single photo).
+  const [cropping, setCropping] = useState<{ id: string; slot: string } | null>(null);
+  const [cropLive, setCropLive] = useState<Record<string, Crop>>({});
+  const [subRaw, setSubRaw] = useState<{ id: string; k: "frame" | "hl" } | null>(null);
   useEffect(() => {
     try {
       if (localStorage.getItem("board-snap") === "1") Promise.resolve().then(() => setSnap(true));
@@ -323,7 +382,7 @@ export function Board({ thread }: { thread: Thread }) {
     setSlotFor(null);
     const it = items.find((i) => i.id === target?.id);
     if (!target || !it || !files[0]) return;
-    const { slots } = gridLayout(it.style?.layout);
+    const slots = { length: slotCount(it) };
     const next = Array.from({ length: Math.max(slots.length, it.photos?.length ?? 0) }, (_, k) => it.photos?.[k] ?? "");
     // Several picked at once fill this slot and the empty ones after it.
     let k = target.slot;
@@ -616,6 +675,9 @@ export function Board({ thread }: { thread: Thread }) {
   }
 
   const sel = items.find((i) => i.id === selected);
+  // Sub-panels belong to the item they were opened for.
+  const subPanel = subRaw && subRaw.id === selected ? subRaw.k : null;
+  const setSubPanel = (k: "frame" | "hl" | null) => setSubRaw(k && selected ? { id: selected, k } : null);
   const editItem = items.find((i) => i.id === editing);
   const look = (i: Item): React.CSSProperties => ({
     fontSize: i.style?.fs ?? (i.kind === "note" ? 20 : 14),
@@ -623,7 +685,60 @@ export function Board({ thread }: { thread: Thread }) {
     fontFamily: i.style?.font === "serif" ? "var(--font-display)" : undefined,
     color: i.style?.c,
     textAlign: i.style?.al,
+    ["--hlc" as string]: i.style?.hlc ?? HIGHLIGHTS[0],
   });
+  const cropOf = (i: Item, slot: string): Crop => cropLive[`${i.id}:${slot}`] ?? (slot === "one" ? i.style?.crop : i.style?.crops?.[slot]) ?? NO_CROP;
+  /** Drag inside a frame to move the picture; the slider zooms it. */
+  const cropHandlers = (i: Item, slot: string) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setCropping({ id: i.id, slot });
+      const r = e.currentTarget.getBoundingClientRect();
+      const start = cropOf(i, slot);
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const el = e.currentTarget;
+      let last = start;
+      const move = (ev: PointerEvent) => {
+        const k = 140 / Math.max(1, start.s);
+        last = { ...start, x: Math.max(0, Math.min(100, start.x - ((ev.clientX - sx) / r.width) * k)), y: Math.max(0, Math.min(100, start.y - ((ev.clientY - sy) / r.height) * k)) };
+        setCropLive((c) => ({ ...c, [`${i.id}:${slot}`]: last }));
+      };
+      const up = () => {
+        el.removeEventListener("pointermove", move);
+        el.removeEventListener("pointerup", up);
+        el.removeEventListener("pointercancel", up);
+        saveCrop(i, slot, last);
+      };
+      el.addEventListener("pointermove", move);
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+    },
+  });
+  function saveCrop(i: Item, slot: string, c: Crop) {
+    const st = i.style ?? {};
+    const style = slot === "one" ? { ...st, crop: c } : { ...st, crops: { ...(st.crops ?? {}), [slot]: c } };
+    patch(i.id, { style }).then(() =>
+      setCropLive((l) => {
+        const { [`${i.id}:${slot}`]: _d, ...rest } = l;
+        void _d;
+        return rest;
+      }),
+    );
+  }
+  /** Size the frame to the photo's own proportions (keeps the width). */
+  async function fitToPhoto(i: Item) {
+    const url = i.photo_path ? urls[i.photo_path] : null;
+    if (!url) return;
+    const img = new Image();
+    img.src = url;
+    await img.decode().catch(() => {});
+    if (!img.naturalWidth) return;
+    const b = boxes.get(i.id)!;
+    const pad = (i.style?.shape ?? "polaroid") === "polaroid" ? 12 : 0;
+    patch(i.id, { h: Math.round(((b.w - pad) * img.naturalHeight) / img.naturalWidth + pad), style: { ...(i.style ?? {}), crop: NO_CROP } });
+  }
   const setLook = (i: Item, l: Look) => patch(i.id, { style: { ...(i.style ?? {}), ...l } });
 
   return (
@@ -723,33 +838,84 @@ export function Board({ thread }: { thread: Thread }) {
                   <path d={ink.d} fill="none" stroke={i.color ?? PENS[0]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                 </svg>
               );
-            } else if ((i.kind === "photo" || i.kind === "sticker") && i.photo_path) {
+            } else if (i.kind === "photo" && i.photo_path) {
+              const shape = SHAPES.find((x) => x.key === (i.style?.shape ?? "polaroid"))!;
+              const img = urls[i.photo_path] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={urls[i.photo_path]} alt="" draggable={false} crossOrigin="anonymous" style={cropCss(cropOf(i, "one"))} />
+              ) : (
+                <span className="board-wait" />
+              );
+              body = shape.clip ? (
+                <div className="board-frame" style={{ clipPath: shape.clip, background: i.style?.bw ? (i.style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: i.style?.bw ?? 0 }}>
+                  <div className="board-frame-in" style={{ clipPath: shape.clip }}>
+                    {img}
+                  </div>
+                </div>
+              ) : (
+                <div className="board-frame-in">{img}</div>
+              );
+              if (isSel && cropping?.id === i.id) body = (
+                <>
+                  {body}
+                  <span className="board-crop board-ui" {...cropHandlers(i, "one")} aria-label="Drag to move the photo in its frame" />
+                </>
+              );
+            } else if (i.kind === "sticker" && i.photo_path) {
               // eslint-disable-next-line @next/next/no-img-element
               body = urls[i.photo_path] ? <img src={urls[i.photo_path]} alt="" draggable={false} crossOrigin="anonymous" /> : <span className="board-wait" />;
             } else if (i.kind === "grid") {
-              const L = gridLayout(i.style?.layout);
-              body = (
-                <div className="board-grid" style={{ gridTemplateAreas: L.areas, gridTemplateColumns: L.cols, gridTemplateRows: L.rows }}>
-                  {L.slots.map((area, k) => {
-                    const path = i.photos?.[k];
-                    return (
-                      <div key={area} className="board-slot" data-slot={k} style={{ gridArea: area }}>
-                        {path && urls[path] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={urls[path]} alt="" draggable={false} crossOrigin="anonymous" />
-                        ) : (
-                          <span className="board-slot-add">{isSel ? "＋" : ""}</span>
-                        )}
-                        {path && isSel && (
-                          <span className="board-slot-x board-ui" data-clear="1" aria-label="Clear this photo">
-                            ×
-                          </span>
-                        )}
+              const slotBody = (k: number) => {
+                const path = i.photos?.[k];
+                const adjusting = isSel && cropping?.id === i.id;
+                return (
+                  <>
+                    {path && urls[path] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={urls[path]} alt="" draggable={false} crossOrigin="anonymous" style={cropCss(cropOf(i, String(k)))} />
+                    ) : (
+                      <span className="board-slot-add">{isSel ? "＋" : ""}</span>
+                    )}
+                    {path && isSel && !adjusting && (
+                      <span className="board-slot-x board-ui" data-clear="1" aria-label="Clear this photo">
+                        ×
+                      </span>
+                    )}
+                    {adjusting && path && <span className={`board-crop board-ui${cropping?.slot === String(k) ? " on" : ""}`} {...cropHandlers(i, String(k))} />}
+                  </>
+                );
+              };
+              if (i.style?.n) {
+                const rows = autoRows(i.style.n, b.w, b.h);
+                let k = 0;
+                body = (
+                  <div className="board-grid auto">
+                    {rows.map((count, r) => (
+                      <div key={r} className="board-grid-row">
+                        {Array.from({ length: count }, () => {
+                          const n = k++;
+                          return (
+                            <div key={n} className="board-slot" data-slot={n}>
+                              {slotBody(n)}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              );
+                    ))}
+                  </div>
+                );
+              } else {
+                const L = gridLayout(i.style?.layout);
+                body = (
+                  <div className="board-grid" style={{ gridTemplateAreas: L.areas, gridTemplateColumns: L.cols, gridTemplateRows: L.rows }}>
+                    {L.slots.map((area, k) => (
+                      <div key={area} className="board-slot" data-slot={k} style={{ gridArea: area }}>
+                        {slotBody(k)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
             } else if (i.kind === "sticker") {
               body = <span className="board-emoji" style={{ fontSize: Math.min(b.w, b.h) * 0.82 }}>{i.text}</span>;
             } else if (i.kind === "link" && i.link) {
@@ -773,7 +939,7 @@ export function Board({ thread }: { thread: Thread }) {
               );
             } else
               body = (
-                <div className="board-text" style={look(i)}>
+                <div className={`board-text${i.style?.hl ? ` hl-${i.style.hl}${/^#{1,2}\s/m.test(i.text ?? "") ? "" : " hl-all"}` : ""}`} style={look(i)}>
                   {i.text ? renderMini(i.text) : i.kind === "sticky" ? "" : "…"}
                 </div>
               );
@@ -781,7 +947,7 @@ export function Board({ thread }: { thread: Thread }) {
               <div
                 key={i.id}
                 data-item={i.id}
-                className={`board-item k-${i.kind}${isSel ? " sel" : ""}${isEdit ? " editing" : ""}`}
+                className={`board-item k-${i.kind}${isSel ? " sel" : ""}${isEdit ? " editing" : ""}${i.kind === "photo" && (i.style?.shape ?? "polaroid") !== "polaroid" ? " shaped" : ""}`}
                 style={{
                   left: b.x,
                   top: b.y,
@@ -877,6 +1043,20 @@ export function Board({ thread }: { thread: Thread }) {
               ✏️
             </button>
           )}
+          {(sel.kind === "sticky" || sel.kind === "note") && (
+            <button
+              className="fmt"
+              aria-label={`Align ${sel.style?.al ?? "left"}`}
+              onClick={() => setLook(sel, { al: ({ left: "center", center: "right", right: "left" } as const)[sel.style?.al ?? "left"] })}
+            >
+              <AlignIcon al={sel.style?.al ?? "left"} />
+            </button>
+          )}
+          {(sel.kind === "sticky" || sel.kind === "note") && isHeadingish(sel) && (
+            <button className="fmt" aria-pressed={!!sel.style?.hl} aria-label="Heading highlight" onClick={() => setSubPanel(subPanel === "hl" ? null : "hl")}>
+              🖍
+            </button>
+          )}
           {(sel.kind === "sticky" || sel.kind === "note") &&
             SIZES.map((s) => (
               <button key={s.label} className="fmt" aria-pressed={(sel.style?.fs ?? (sel.kind === "note" ? 20 : 14)) === s.fs} onClick={() => setLook(sel, { fs: s.fs })}>
@@ -901,19 +1081,37 @@ export function Board({ thread }: { thread: Thread }) {
           {sel.kind === "grid" && (
             <>
               <span className="small faint" style={{ flex: "none" }}>
-                tap a slot ·
+                photos
               </span>
-              {GRID_LAYOUTS.map((l) => (
-                <button key={l.key} className="fmt" aria-pressed={(sel.style?.layout ?? "2x2") === l.key} onClick={() => setLook(sel, { layout: l.key })}>
-                  {l.label}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                <button key={n} className="fmt" aria-pressed={slotCount(sel) === n} onClick={() => setLook(sel, { n, layout: undefined })}>
+                  {n}
                 </button>
               ))}
+              {sel.photos?.some(Boolean) && (
+                <button className="fmt" aria-pressed={cropping?.id === sel.id} onClick={() => setCropping(cropping?.id === sel.id ? null : { id: sel.id, slot: "0" })}>
+                  ✥ Adjust
+                </button>
+              )}
             </>
           )}
           {sel.kind === "link" && sel.link && (
             <a className="btn btn-sm" href={sel.link} target="_blank" rel="noreferrer">
               Open ↗
             </a>
+          )}
+          {sel.kind === "photo" && sel.photo_path && (
+            <>
+              <button className="fmt" aria-pressed={cropping?.id === sel.id} onClick={() => setCropping(cropping?.id === sel.id ? null : { id: sel.id, slot: "one" })}>
+                ✥ Adjust
+              </button>
+              <button className="fmt" aria-pressed={subPanel === "frame"} onClick={() => setSubPanel(subPanel === "frame" ? null : "frame")}>
+                🖼 Frame
+              </button>
+              <button className="fmt" onClick={() => fitToPhoto(sel)} aria-label="Fit frame to photo">
+                ⤢ Fit
+              </button>
+            </>
           )}
           {sel.kind === "photo" && sel.photo_path && (
             <button
@@ -943,6 +1141,72 @@ export function Board({ thread }: { thread: Thread }) {
           </button>
         </div>
       ) : null}
+
+      {sel && tool === "move" && !editItem && !shot && cropping?.id === sel.id && (
+        <div className="board-subbar board-ui">
+          <span className="small">{sel.kind === "grid" ? "drag a photo to move it · zoom" : "drag to move · zoom"}</span>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={cropOf(sel, cropping.slot).s}
+            aria-label="Zoom the photo"
+            onChange={(e) => setCropLive((c) => ({ ...c, [`${sel.id}:${cropping.slot}`]: { ...cropOf(sel, cropping.slot), s: Number(e.target.value) } }))}
+            onPointerUp={() => saveCrop(sel, cropping.slot, cropOf(sel, cropping.slot))}
+            onKeyUp={() => saveCrop(sel, cropping.slot, cropOf(sel, cropping.slot))}
+          />
+          <button className="btn btn-sm btn-ghost" onClick={() => saveCrop(sel, cropping.slot, NO_CROP)}>
+            Reset
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={() => setCropping(null)}>
+            Done
+          </button>
+        </div>
+      )}
+      {sel && tool === "move" && !editItem && !shot && !cropping && subPanel === "frame" && sel.kind === "photo" && (
+        <div className="board-subbar board-ui wrap">
+          <div className="chips">
+            {SHAPES.map((x) => (
+              <button key={x.key} className="chip chip-sm" aria-pressed={(sel.style?.shape ?? "polaroid") === x.key} onClick={() => setLook(sel, { shape: x.key })}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+          {(sel.style?.shape ?? "polaroid") !== "polaroid" && (
+            <div className="row wrap" style={{ gap: 6 }}>
+              <span className="small faint">border</span>
+              {BORDERS.map((w) => (
+                <button key={w} className="fmt" aria-pressed={(sel.style?.bw ?? 0) === w} onClick={() => setLook(sel, { bw: w })}>
+                  {w === 0 ? "none" : w === 3 ? "thin" : w === 7 ? "mid" : "thick"}
+                </button>
+              ))}
+              {(sel.style?.bw ?? 0) > 0 &&
+                FRAME_COLORS.map((c) => (
+                  <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={(sel.style?.bc ?? FRAME_COLORS[0]) === c} aria-label={`Border ${c}`} onClick={() => setLook(sel, { bc: c })} />
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+      {sel && tool === "move" && !editItem && !shot && subPanel === "hl" && (sel.kind === "note" || sel.kind === "sticky") && (
+        <div className="board-subbar board-ui wrap">
+          <span className="small faint">heading highlight</span>
+          <button className="fmt" aria-pressed={!sel.style?.hl} onClick={() => setLook(sel, { hl: undefined })}>
+            off
+          </button>
+          <button className="fmt" aria-pressed={sel.style?.hl === "box"} onClick={() => setLook(sel, { hl: "box" })}>
+            ▢ box
+          </button>
+          <button className="fmt" aria-pressed={sel.style?.hl === "tight"} onClick={() => setLook(sel, { hl: "tight" })}>
+            ▬ marker
+          </button>
+          {sel.style?.hl &&
+            HIGHLIGHTS.map((c) => (
+              <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={(sel.style?.hlc ?? HIGHLIGHTS[0]) === c} aria-label={`Highlight ${c}`} onClick={() => setLook(sel, { hlc: c })} />
+            ))}
+        </div>
+      )}
 
       {panel === "photo" && (
         <div className="board-menu board-ui">
@@ -1025,7 +1289,7 @@ export function Board({ thread }: { thread: Thread }) {
             <button aria-pressed={panel === "photo"} onClick={() => setPanel(panel === "photo" ? null : "photo")} aria-label="Picture">
               🖼️
             </button>
-            <button onClick={() => add("grid", { style: { layout: "2x2" }, photos: [] })} aria-label="Photo grid">
+            <button onClick={() => add("grid", { style: { n: 4 }, photos: [] })} aria-label="Photo grid">
               ▦
             </button>
             <button aria-pressed={panel === "stickers"} onClick={() => setPanel(panel === "stickers" ? null : "stickers")} aria-label="Stickers">
@@ -1059,5 +1323,16 @@ export function Board({ thread }: { thread: Thread }) {
         </button>
       </nav>
     </div>
+  );
+}
+
+function AlignIcon({ al }: { al: "left" | "center" | "right" }) {
+  const ws = [14, 10, 16];
+  return (
+    <svg viewBox="0 0 22 16" width="20" height="15" aria-hidden fill="currentColor">
+      {[2, 7, 12].map((y, k) => (
+        <rect key={y} x={al === "left" ? 3 : al === "right" ? 19 - ws[(k + 1) % 3] : 11 - ws[(k + 1) % 3] / 2} y={y} width={ws[(k + 1) % 3]} height={2} rx={1} />
+      ))}
+    </svg>
   );
 }
