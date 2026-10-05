@@ -22,6 +22,7 @@ import { IconTrash } from "./Art";
 import { PlanSheet } from "./Plans";
 import { EventPeek } from "./EventDetail";
 import { ManaPips, useDeckNames } from "./Decks";
+import { useThreads } from "./Threads";
 
 /** One update in the feed (or a dog note in the Dogs tab). */
 export function PostCard({ post, urls }: { post: Post; urls: Record<string, string> }) {
@@ -39,7 +40,10 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   // The hidden part stays covered until tapped (each time the feed loads).
   const [opened, setOpened] = useState(false);
   const covered = !!post.veil && !opened;
-  const photos = [...post.post_photos].sort((a, b) => a.position - b.position);
+  const sorted = [...post.post_photos].sort((a, b) => a.position - b.position);
+  // Surprise pics live in the hidden part; the rest show as usual.
+  const secret = sorted.filter((p) => p.hidden);
+  const photos = sorted.filter((p) => !p.hidden);
   const n = photos.length;
   const created = new Date(post.created_at);
   const when = isToday(created) ? ago(post.created_at) : isYesterday(created) ? `Yesterday ${format(created, "h:mm a")}` : format(created, "EEE, MMM d · h:mm a");
@@ -47,7 +51,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
   async function remove() {
     if (!confirm("Delete this update?")) return;
     const supabase = supabaseBrowser();
-    if (photos.length) await supabase.storage.from("photos").remove(photos.map((p) => p.storage_path));
+    if (sorted.length) await supabase.storage.from("photos").remove(sorted.map((p) => p.storage_path));
     await supabase.from("posts").delete().eq("id", post.id);
     refreshAll();
     toast("Deleted");
@@ -110,6 +114,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
         </div>
       )}
       {post.deck_id && <DeckTag id={post.deck_id} />}
+      {post.thread_id && <BoardTag id={post.thread_id} />}
       {post.kind === "eat" && post.eat_check_id && <EatReply checkId={post.eat_check_id} author={post.author} />}
       {text && post.kind !== "eat" && <p className="post-text" style={{ whiteSpace: "pre-wrap" }}>{post.kind === "star" ? `“${text}”` : text}</p>}
       {song && !song.short && <SpotifyEmbed r={song} />}
@@ -137,7 +142,7 @@ export function PostCard({ post, urls }: { post: Post; urls: Record<string, stri
       )}
       {peek === "plan" && post.plan_id && <PlanSheet id={post.plan_id} onClose={() => setPeek(null)} />}
       {peek === "event" && post.event_id && <EventPeek id={post.event_id} onClose={() => setPeek(null)} />}
-      {post.veil && <Veil post={post} opened={opened} onOpen={() => setOpened(true)} onClose={() => setOpened(false)} />}
+      {post.veil && <Veil post={post} pics={secret} urls={urls} opened={opened} onOpen={() => setOpened(true)} onClose={() => setOpened(false)} />}
       {n > 0 && covered && post.veil_photos && (
         <div className="veil-photos">
           {n} photo{n === 1 ? "" : "s"} hidden · open it above to see
@@ -284,6 +289,17 @@ function PostCounter({ post }: { post: Post }) {
   );
 }
 
+/** "🖼️ from Halloween" above a board update; tap to open the board. */
+function BoardTag({ id }: { id: string }) {
+  const t = useThreads().threads.find((x) => x.id === id);
+  if (!t) return null;
+  return (
+    <Link className="post-board" href={`/threads/${t.id}`}>
+      🖼️ from {t.emoji ?? "🗒️"} {t.title}
+    </Link>
+  );
+}
+
 /** "🃏 nekusar ⚫🔵🔴" above a deck update. */
 function DeckTag({ id }: { id: string }) {
   const deck = useDeckNames().get(id);
@@ -296,7 +312,21 @@ function DeckTag({ id }: { id: string }) {
 }
 
 /** The covered second part of a post, opened the way its author chose. */
-function Veil({ post, opened, onOpen, onClose }: { post: Post; opened: boolean; onOpen: () => void; onClose: () => void }) {
+function Veil({
+  post,
+  pics,
+  urls,
+  opened,
+  onOpen,
+  onClose,
+}: {
+  post: Post;
+  pics: Post["post_photos"];
+  urls: Record<string, string>;
+  opened: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [armed, setArmed] = useState(false); // first tap / press done (double, twice)
   const [declined, setDeclined] = useState(false);
@@ -315,6 +345,16 @@ function Veil({ post, opened, onOpen, onClose }: { post: Post; opened: boolean; 
           </button>
         </div>
         {post.hidden_text && <p className="post-text" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{post.hidden_text}</p>}
+        {pics.length > 0 && (
+          <div className={`veil-pics${pics.length === 1 ? " n1" : ""}`}>
+            {pics.map((ph) => (
+              <a key={ph.id} href={urls[ph.storage_path]} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {urls[ph.storage_path] && <img src={urls[ph.storage_path]} alt="" loading="lazy" />}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   const note = post.veil_note && <span className="veil-note">{post.veil_note}</span>;

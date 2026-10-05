@@ -48,6 +48,35 @@ export function useThreads() {
   return { threads, isNew };
 }
 
+/** "Board update": pick a board, then frame the bit to post (on the board itself). */
+export function BoardUpdatePick({ onDone }: { onDone: () => void }) {
+  const { threads } = useThreads();
+  const router = useRouter();
+  const active = threads.filter((t) => !t.archived_at);
+  if (!active.length) return <p className="muted">No boards yet. Start one with 🗒️ Board.</p>;
+  return (
+    <div className="stack">
+      <p className="small faint" style={{ margin: 0 }}>
+        Pick a board, then pan and zoom until the part you want is in view.
+      </p>
+      <div className="chips">
+        {active.map((t) => (
+          <button
+            key={t.id}
+            className="chip"
+            onClick={() => {
+              onDone();
+              router.push(`/threads/${t.id}?post=1`);
+            }}
+          >
+            {t.emoji ?? "🗒️"} {t.title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const EMOJI = ["🗒️", "🎃", "🎄", "✈️", "🏠", "🎁", "🍽️", "🐶", "💡", "🛋️"];
 
 /**

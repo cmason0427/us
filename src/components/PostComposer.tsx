@@ -75,7 +75,9 @@ export function PostComposer({
   const [ack, setAck] = useState("");
   const [why, setWhy] = useState("");
   const [boom, setBoom] = useState(false);
-  const [veilPhotos, setVeilPhotos] = useState(false);
+  // Pics that only show once the hidden part is opened.
+  const [secret, setSecret] = useState<File[]>([]);
+  const secretRef = useRef<HTMLInputElement>(null);
   const veil = hiding ? unlock : null;
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -83,11 +85,15 @@ export function PostComposer({
   const fileRef = useRef<HTMLInputElement>(null);
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+  const secretPreviews = useMemo(() => secret.map((f) => URL.createObjectURL(f)), [secret]);
+  useEffect(() => () => secretPreviews.forEach((u) => URL.revokeObjectURL(u)), [secretPreviews]);
+  const hiddenPics = veil ? secret : [];
+  const hasHidden = !!(hidden.trim() || hiddenPics.length);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!text.trim() && !files.length && !(veil && hidden.trim())) return;
-    if (veil && !hidden.trim() && !(veilPhotos && files.length)) return setError("What's the hidden part?");
+    if (!text.trim() && !files.length && !(veil && hasHidden)) return;
+    if (veil && !hasHidden) return setError("What's the hidden part? Write something or add pics.");
     if (dogNote && !dogs.length) return setError("Which dog is this about?");
     if (deckId === "pick" && !deck) return setError("Which deck is it about?");
     // Grab this now: React clears currentTarget once we await.
@@ -119,7 +125,6 @@ export function PostComposer({
                 veil_ack: veil === "agree" || veil === "button" || veil === "twice" ? ack.trim() || null : null,
                 veil_note: why.trim() || null,
                 veil_confetti: boom,
-                veil_photos: veilPhotos && files.length > 0,
               }
             : {}),
         })
@@ -129,7 +134,7 @@ export function PostComposer({
       postId = post.id;
 
       const rows = await Promise.all(
-        files.map(async (f, i) => {
+        [...files.map((f) => ({ f, hidden: false })), ...hiddenPics.map((f) => ({ f, hidden: true }))].map(async ({ f, hidden }, i) => {
           const { blob, width, height, ext } = await shrinkImage(f);
           const path = `${meId}/${post.id}/${i}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
           const { error: upErr } = await supabase.storage.from("photos").upload(path, blob, {
@@ -137,7 +142,7 @@ export function PostComposer({
             cacheControl: "31536000",
           });
           if (upErr) throw upErr;
-          return { post_id: post.id, storage_path: path, width, height, position: i };
+          return { post_id: post.id, storage_path: path, width, height, position: i, ...(hidden ? { hidden } : {}) };
         }),
       );
       if (rows.length) {
@@ -244,11 +249,32 @@ export function PostComposer({
               <label className="row small" style={{ gap: 8 }}>
                 <input type="checkbox" checked={boom} onChange={(e) => setBoom(e.target.checked)} /> 🎉 Confetti when it opens
               </label>
-              {files.length > 0 && (
-                <label className="row small" style={{ gap: 8 }}>
-                  <input type="checkbox" checked={veilPhotos} onChange={(e) => setVeilPhotos(e.target.checked)} /> Hide the photos too
-                </label>
-              )}
+              <div className="photo-picks">
+                {secretPreviews.map((src, i) => (
+                  <div className="photo-pick" key={src}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" />
+                    <button type="button" aria-label="Remove photo" onClick={() => setSecret((fs) => fs.filter((_, j) => j !== i))}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => secretRef.current?.click()} disabled={files.length + secret.length >= MAX_PHOTOS}>
+                🖼️ {secret.length ? "More pics in the surprise" : "Add pics to the surprise"}
+              </button>
+              <input
+                ref={secretRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []);
+                  setSecret((fs) => [...fs, ...picked].slice(0, Math.max(0, MAX_PHOTOS - files.length)));
+                  e.target.value = "";
+                }}
+              />
             </div>
           )}
         </div>
@@ -262,12 +288,12 @@ export function PostComposer({
       {error && <p className="error">{error}</p>}
       <div className="row-between">
         <span className="row wrap" style={{ gap: 2 }}>
-          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_PHOTOS}>
+          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={files.length + secret.length >= MAX_PHOTOS}>
             <IconCamera width={22} height={22} /> Photo
           </button>
           <ImageSources onFiles={(fs) => setFiles((cur) => [...cur, ...fs].slice(0, MAX_PHOTOS))} />
         </span>
-        <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length && !(veil && hidden.trim()))}>
+        <button type="submit" className="btn btn-primary" disabled={busy || (!text.trim() && !files.length && !(veil && hasHidden))}>
           {busy ? "Posting…" : dogNote ? "Save note" : "Share it"}
         </button>
       </div>

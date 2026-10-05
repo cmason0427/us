@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useApp, type AddKind } from "./AppProvider";
 import { Sheet } from "./Sheet";
 import { PostComposer } from "./PostComposer";
-import { NewThread } from "./Threads";
+import { NewThread, BoardUpdatePick } from "./Threads";
 import { OneOffForm, SpendForm } from "./Budget";
 import { EventForm, EventPresetForm } from "./EventForm";
 import { ActivityForm, TaskForm } from "./QuickForms";
@@ -39,6 +39,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
       { kind: "vibe", emoji: "💭", label: "Vibe check" },
       { kind: "status", emoji: "🚗", label: "On my way" },
       { kind: "thread", emoji: "🗒️", label: "Board" },
+      { kind: "board-update", emoji: "🖼️", label: "Board update" },
       { kind: "deck-update", emoji: "🃏", label: "Deck update" },
     ],
   },
@@ -112,6 +113,7 @@ const TITLES: Record<AddKind, string> = {
   little: "Little things",
   vibe: "Vibe check",
   "deck-update": "Deck update",
+  "board-update": "Board update",
   thread: "New board",
   oneoff: "Something extra (just you)",
   spend: "I spent money (just you)",
@@ -167,6 +169,7 @@ export function AddSheet() {
       {addOpen === "post" && <PostComposer onDone={closeAdd} />}
       {addOpen === "deck-update" && <PostComposer deckId="pick" onDone={closeAdd} />}
       {addOpen === "thread" && <NewThread bare onDone={closeAdd} />}
+      {addOpen === "board-update" && <BoardUpdatePick onDone={closeAdd} />}
       {addOpen === "spend" && <SpendForm onDone={closeAdd} />}
       {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}
       {addOpen === "oneoff" && <OneOffForm onDone={closeAdd} />}

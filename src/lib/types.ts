@@ -55,6 +55,8 @@ export interface PostPhoto {
   width: number | null;
   height: number | null;
   position: number;
+  /** Inside the post's hidden part: only shown once it's opened. */
+  hidden?: boolean;
 }
 
 export interface Post {
@@ -71,6 +73,8 @@ export interface Post {
   plan_id: string | null;
   /** A deck update (Nerd dungeon). */
   deck_id?: string | null;
+  /** A board update: a snapshot of this board. */
+  thread_id?: string | null;
   /** Who a star / invite is for. */
   to_user: string | null;
   star_color: string | null;

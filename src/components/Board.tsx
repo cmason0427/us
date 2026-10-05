@@ -13,6 +13,8 @@ import { ImageSources, filesFromPaste } from "./ImageSources";
 import { StickerTray, saveSticker } from "./BoardStickers";
 import { TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/boardTemplates";
 import type { Thread } from "./Threads";
+import { notify } from "@/lib/notify";
+import { celebrate } from "@/lib/celebrate";
 
 interface Item {
   id: string;
@@ -214,7 +216,8 @@ type Gesture =
  * canvas. Pinch to zoom, drag empty space to look around, drag a thing to
  * move it. Changes land for the other person quietly; no feed, no push.
  */
-export function Board({ thread }: { thread: Thread }) {
+/** `postNow`: opened from "Board update", so start framing a view to post. */
+export function Board({ thread, postNow = false }: { thread: Thread; postNow?: boolean }) {
   const { meId, nameOf, toast } = useApp();
   const router = useRouter();
   const supabase = supabaseBrowser();
@@ -235,8 +238,12 @@ export function Board({ thread }: { thread: Thread }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates" | "layers">(null);
   // Screenshot mode: the board fills the screen with no buttons or text on it.
-  const [shot, setShot] = useState(false);
-  const [shotBar, setShotBar] = useState(false);
+  const [shot, setShot] = useState(postNow);
+  const [shotBar, setShotBar] = useState(postNow);
+  // A "board update": what's in view, as a picture, posted to the feed.
+  const [shotPic, setShotPic] = useState<{ blob: Blob; url: string } | null>(null);
+  const [shotBusy, setShotBusy] = useState(false);
+  const [caption, setCaption] = useState("");
   const [shotBg, setShotBg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Live boxes held after a drag until the save comes back, so nothing snaps.
@@ -810,6 +817,65 @@ export function Board({ thread }: { thread: Thread }) {
     setSaving(false);
   }
 
+  async function rename() {
+    const name = window.prompt("Rename the board", thread.title)?.trim();
+    if (!name || name === thread.title) return;
+    const { error } = await supabase.from("threads").update({ title: name }).eq("id", thread.id);
+    if (error) return toast(error.message);
+    refreshAll();
+  }
+
+  /** Exactly what's in view right now (no buttons), as a picture. */
+  async function takeShotPic() {
+    const v = viewport.current;
+    if (!v) return;
+    setShotBusy(true);
+    try {
+      const { toBlob } = await import("html-to-image");
+      const opts = { pixelRatio: 2, backgroundColor: shotBg ?? thread.bg ?? "#fbf7f1", filter: (n: HTMLElement) => !n.classList?.contains("board-ui") };
+      const blob = (await toBlob(v, opts).catch(() => toBlob(v, { ...opts, skipFonts: true })))!;
+      setShotPic({ blob, url: URL.createObjectURL(blob) });
+    } catch (err) {
+      toast(`Couldn't make the picture: ${(err as Error).message}`);
+    }
+    setShotBusy(false);
+  }
+
+  function dropShotPic() {
+    if (shotPic) URL.revokeObjectURL(shotPic.url);
+    setShotPic(null);
+  }
+
+  async function postShotPic(btn: HTMLElement | null) {
+    if (!shotPic) return;
+    setShotBusy(true);
+    let postId: string | null = null;
+    try {
+      const { data: post, error } = await supabase.from("posts").insert({ author: meId, text: caption.trim() || null, thread_id: thread.id }).select("id").single();
+      if (error) throw error;
+      postId = post.id;
+      const { blob, width, height, ext } = await shrinkImage(new File([shotPic.blob], "board.png", { type: "image/png" }));
+      const path = `${meId}/${post.id}/0-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const up = await supabase.storage.from("photos").upload(path, blob, { contentType: blob.type || "image/jpeg", cacheControl: "31536000" });
+      if (up.error) throw up.error;
+      const ph = await supabase.from("post_photos").insert({ post_id: post.id, storage_path: path, width, height, position: 0 });
+      if (ph.error) throw ph.error;
+      notify({ kind: "post", id: post.id });
+      celebrate(btn);
+      refreshAll();
+      toast("Posted to the feed 🌼");
+      dropShotPic();
+      setCaption("");
+      setShot(false);
+      setShotBar(false);
+      setShotBg(null);
+    } catch (err) {
+      if (postId) await supabase.from("posts").delete().eq("id", postId);
+      toast((err as Error).message);
+    }
+    setShotBusy(false);
+  }
+
   // The board does its own pinch-zoom; the page itself never zooms while it's open.
   useEffect(() => {
     const meta = document.querySelector('meta[name="viewport"]');
@@ -902,7 +968,7 @@ export function Board({ thread }: { thread: Thread }) {
         <button className="icon-btn" onClick={() => router.back()} aria-label="Back">
           ←
         </button>
-        <strong className="grow board-title">
+        <strong className="grow board-title" onClick={rename} title="Tap to rename">
           {thread.emoji ?? "🗒️"} {thread.title}
         </strong>
         <button className="icon-btn" onClick={() => (setShot(true), setShotBar(true), setSelected(null), setEditing(null), setPanel(null))} aria-label="Screenshot mode">
@@ -919,6 +985,9 @@ export function Board({ thread }: { thread: Thread }) {
         <div className="board-menu">
           <button className="btn btn-sm" onClick={() => setPanel("templates")}>
             ✨ Add a template
+          </button>
+          <button className="btn btn-sm" onClick={() => (setPanel(null), rename())}>
+            ✏️ Rename
           </button>
           <span className="row" style={{ gap: 4 }} role="group" aria-label="Board background">
             <span className="small faint">background</span>
@@ -1107,6 +1176,24 @@ export function Board({ thread }: { thread: Thread }) {
         )}
       </div>
 
+      {shotPic && (
+        <Sheet title="Board update" onClose={dropShotPic}>
+          <div className="stack">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="snap-preview" src={shotPic.url} alt="What will be posted" />
+            <textarea className="textarea" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="say something about it (optional)" aria-label="Caption" />
+            <div className="row-between">
+              <button className="btn btn-sm btn-ghost" onClick={dropShotPic}>
+                Reframe
+              </button>
+              <button className="btn btn-primary" disabled={shotBusy} onClick={(e) => postShotPic(e.currentTarget)}>
+                {shotBusy ? "Posting…" : "Post it"}
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+
       {/* Bottom: whatever's selected or being written, else the tools. */}
       {shot ? (
         shotBar && (
@@ -1116,7 +1203,10 @@ export function Board({ thread }: { thread: Thread }) {
               ·
             </button>
             <Swatches colors={BGS} value={shotBg ?? ""} label="Screenshot background" onPick={setShotBg} />
-            <button className="btn btn-sm btn-primary" onClick={() => setShotBar(false)}>
+            <button className="btn btn-sm btn-primary" disabled={shotBusy} onClick={takeShotPic}>
+              {shotBusy ? "…" : "🌼 Post to feed"}
+            </button>
+            <button className="btn btn-sm" onClick={() => setShotBar(false)}>
               Hide
             </button>
             <button className="btn btn-sm btn-ghost" onClick={() => (setShot(false), setShotBar(false), setShotBg(null))}>
