@@ -91,18 +91,21 @@ const NO_CROP: Crop = { x: 50, y: 50, s: 1 };
 
 /**
  * Where a picture sits in a frame of aspect F (w/h): `c.x`/`c.y` is the point of
- * the image (in %) kept at the frame's centre, `c.s` zooms past "just covers".
- * Clamped so the frame is always full: no blank edges, whatever its shape.
+ * the image (in %) kept at the frame's centre, `c.s` is the zoom where 1 = "just
+ * covers". Below 1 (down to `minZoom`) the whole picture fits inside the frame and
+ * the spare space shows the frame's background; it can still slide along it.
  */
 function fitGeom(F: number, A: number, c: Crop) {
   let w = A >= F ? (A / F) * 100 : 100;
   let h = A >= F ? 100 : (F / A) * 100;
   w *= c.s;
   h *= c.s;
-  const left = Math.min(0, Math.max(100 - w, 50 - (c.x / 100) * w));
-  const top = Math.min(0, Math.max(100 - h, 50 - (c.y / 100) * h));
-  return { w, h, left, top };
+  const fit = (size: number, v: number) => Math.min(Math.max(0, 100 - size), Math.max(Math.min(0, 100 - size), 50 - (v / 100) * size));
+  return { w, h, left: fit(w, c.x), top: fit(h, c.y) };
 }
+
+/** Zoom at which the whole picture just fits inside the frame (edge to edge on one side). */
+const minZoom = (F: number, A: number) => Math.min(A / F, F / A);
 
 /** A picture filling its box, positioned by `crop`, measuring itself so it stays right at any size. */
 function FramedImg({ src, crop }: { src: string; crop: Crop }) {
@@ -1732,13 +1735,17 @@ function PhotoEditor({
     const mid = ps.reduce((a, p) => ({ x: a.x + p.x / ps.length, y: a.y + p.y / ps.length }), { x: 0, y: 0 });
     const g0 = gesture.current;
     let s2 = g0.crop.s;
-    if (ps.length > 1 && g0.d0 > 0) s2 = Math.max(1, Math.min(4, g0.crop.s * (Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) / g0.d0)));
+    if (ps.length > 1 && g0.d0 > 0) s2 = Math.max(minZoom(F, A), Math.min(4, g0.crop.s * (Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) / g0.d0)));
     const geo = fitGeom(F, A, { ...g0.crop, s: s2 });
     // Dragging right shows more of the left of the picture.
     const x = g0.crop.x - ((mid.x - g0.cx) / ((fw * geo.w) / 100)) * 100;
     const y = g0.crop.y - ((mid.y - g0.cy) / ((fh * geo.h) / 100)) * 100;
     // Keep the stored centre inside what the clamp allows, so it never "sticks".
-    const half = (v: number, size: number) => Math.max((50 / size) * 100, Math.min(100 - (50 / size) * 100, v));
+    // (When the picture is smaller than the frame, that range flips, hence min/max.)
+    const half = (v: number, size: number) => {
+      const a = (50 / size) * 100;
+      return Math.max(Math.min(a, 100 - a), Math.min(Math.max(a, 100 - a), v));
+    };
     setCrop({ x: half(x, geo.w), y: half(y, geo.h), s: s2 });
   }
   function up(e: React.PointerEvent) {
@@ -1819,7 +1826,7 @@ function PhotoEditor({
         </div>
         <div className="row" style={{ gap: 10 }}>
           <span className="small faint">zoom</span>
-          <input className="grow" type="range" min={1} max={4} step={0.02} value={crop.s} onChange={(e) => setCrop({ ...crop, s: Number(e.target.value) })} aria-label="Zoom" />
+          <input className="grow" type="range" min={A ? Math.floor(minZoom(F, A) * 100) / 100 : 1} max={4} step={0.02} value={crop.s} onChange={(e) => setCrop({ ...crop, s: Number(e.target.value) })} aria-label="Zoom" />
           <button className="btn btn-sm btn-ghost" onClick={() => setCrop(NO_CROP)}>
             Reset
           </button>
