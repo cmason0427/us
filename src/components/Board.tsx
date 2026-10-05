@@ -15,7 +15,7 @@ import { TEMPLATES, gridLayout, insertTemplate, templateSize } from "@/lib/board
 import type { Thread } from "./Threads";
 import { notify } from "@/lib/notify";
 import { celebrate } from "@/lib/celebrate";
-import { AppLink, LinkPicker, useLinkInsert } from "./Links";
+import { AppEmbed, AppLink, LinkPicker, useLinkInsert } from "./Links";
 import { copyLink } from "@/lib/links";
 
 interface Item {
@@ -77,6 +77,8 @@ type Look = {
   hlc?: string;
   /** A container folded down to just its title. */
   col?: boolean;
+  /** An app-link card shown as a preview (embed) instead of a chip. */
+  embed?: boolean;
 };
 
 const svgMask = (body: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>${body}</svg>`)}")`;
@@ -1353,7 +1355,11 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
             } else if (i.kind === "sticker") {
               body = <span className="board-emoji" style={{ fontSize: Math.min(b.w, b.h) * 0.82 }}>{i.text}</span>;
             } else if (i.kind === "link" && i.link?.startsWith("/")) {
-              body = (
+              body = i.style?.embed ? (
+                <div className="board-embed">
+                  <AppEmbed path={i.link} label={i.text ?? undefined} />
+                </div>
+              ) : (
                 <span className="board-link">
                   <AppLink path={i.link} label={i.text ?? undefined} />
                 </span>
@@ -1630,9 +1636,21 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
             </>
           )}
           {sel.kind === "link" && sel.link?.startsWith("/") && (
-            <button className="btn btn-sm" onClick={() => router.push(sel.link!)}>
-              Open ↗
-            </button>
+            <>
+              <button className="btn btn-sm" onClick={() => router.push(sel.link!)}>
+                Open ↗
+              </button>
+              <button
+                className="fmt"
+                onClick={() => {
+                  const b = boxes.get(sel.id)!;
+                  const on = !sel.style?.embed;
+                  patch(sel.id, { style: { ...(sel.style ?? {}), embed: on }, w: on ? Math.max(b.w, 250) : Math.min(260, 60 + (sel.text ?? "").length * 8), h: on ? Math.max(b.h, 170) : 48 });
+                }}
+              >
+                {sel.style?.embed ? "🔗 As a link" : "🪟 Embed"}
+              </button>
+            </>
           )}
           {sel.kind === "link" && sel.link && !sel.link.startsWith("/") && (
             <a className="btn btn-sm" href={sel.link} target="_blank" rel="noreferrer">
@@ -1867,9 +1885,9 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
       {appLinking && (
         <LinkPicker
           onClose={() => setAppLinking(false)}
-          onPick={(label, path) => {
+          onPick={(label, path, embed) => {
             setAppLinking(false);
-            add("link", { link: path, text: label, w: Math.min(260, 60 + label.length * 8) });
+            add("link", embed ? { link: path, text: label, w: 250, h: 170, style: { embed: true } } : { link: path, text: label, w: Math.min(260, 60 + label.length * 8) });
           }}
         />
       )}
@@ -2079,7 +2097,7 @@ function Layers({
     const t = (i.text ?? "")
       .replace(/^#+\s*/gm, "")
       .replace(/\[( |x|X)\]\s?/g, "")
-      .replace(/\[([^\]\n]+)\]\(\/[^)\s]*\)/g, "$1")
+      .replace(/!?\[([^\]\n]+)\]\(\/[^)\s]*\)/g, "$1")
       .trim()
       .split("\n")[0];
     if (i.kind === "note") return t || "Text";

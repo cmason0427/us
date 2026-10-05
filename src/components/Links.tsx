@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useLive } from "@/lib/useLive";
+import { usePhotoUrls } from "@/lib/photos";
 import { PLACES, TOKEN, appPath, targetOf, token, type Dest } from "@/lib/links";
 import { useApp } from "./AppProvider";
 import { Sheet } from "./Sheet";
@@ -46,7 +47,7 @@ function useLinkables(on: boolean) {
     },
     ["events"],
   );
-  const firstLine = (t: string | null) => (t ?? "").replace(/^#+\s*/gm, "").replace(/\[( |x|X)\]\s?/g, "").replace(TOKEN, "$1").trim().split("\n")[0].slice(0, 60);
+  const firstLine = (t: string | null) => (t ?? "").replace(/^#+\s*/gm, "").replace(/\[( |x|X)\]\s?/g, "").replace(TOKEN, "$2").trim().split("\n")[0].slice(0, 60);
   const out: { title: string; rows: Pick[] }[] = [
     {
       title: "Pages & tabs",
@@ -79,22 +80,48 @@ function useLinkables(on: boolean) {
   return out;
 }
 
-/** Search everything linkable and pick one. */
-export function LinkPicker({ onPick, onClose }: { onPick: (label: string, path: string) => void; onClose: () => void }) {
+/**
+ * Search everything linkable and pick one, as a link (a chip that takes them
+ * there) or an embed (a little preview of it, right where it's put). The
+ * choice is remembered on this phone.
+ */
+export function LinkPicker({ onPick, onClose, embeddable = true }: { onPick: (label: string, path: string, embed: boolean) => void; onClose: () => void; embeddable?: boolean }) {
   const [q, setQ] = useState("");
+  const [embed, setEmbed] = useState(false);
+  useEffect(() => {
+    try {
+      if (embeddable && localStorage.getItem("link-embed") === "1") Promise.resolve().then(() => setEmbed(true));
+    } catch {}
+  }, [embeddable]);
+  const pickMode = (on: boolean) => {
+    setEmbed(on);
+    try {
+      localStorage.setItem("link-embed", on ? "1" : "0");
+    } catch {}
+  };
   const groups = useLinkables(true);
   const needle = q.trim().toLowerCase();
   const shown = groups.map((g) => ({ ...g, rows: g.rows.filter((r) => !needle || `${r.label} ${r.hint ?? ""}`.toLowerCase().includes(needle)).slice(0, needle ? 30 : g.title === "Pages & tabs" ? 8 : 6) })).filter((g) => g.rows.length);
   return (
     <Sheet title="🔗 Link something" onClose={onClose}>
       <div className="stack">
+        {embeddable && (
+          <div className="seg seg-sm" role="group" aria-label="How it shows">
+            <button aria-pressed={!embed} onClick={() => pickMode(false)}>
+              🔗 Take them there
+            </button>
+            <button aria-pressed={embed} onClick={() => pickMode(true)}>
+              🪟 Embed it
+            </button>
+          </div>
+        )}
         <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="search pages, boards, updates, plans…" autoFocus aria-label="Search" />
         <div className="link-pick-list">
           {shown.map((g) => (
             <section key={g.title}>
               <h3 className="link-pick-title">{g.title}</h3>
               {g.rows.map((r) => (
-                <button key={r.path} className="link-pick-row" onClick={() => onPick(r.label, r.path)}>
+                <button key={r.path} className="link-pick-row" onClick={() => onPick(r.label, r.path, embed)}>
                   <span aria-hidden>{r.emoji}</span>
                   <span className="grow">{r.label}</span>
                   {r.hint && <span className="small faint">{r.hint}</span>}
@@ -132,10 +159,10 @@ export function useLinkInsert() {
     setAt(null);
     if (a) setTimeout(() => a.el.focus(), 30);
   };
-  const insert = (label: string, path: string) => {
+  const insert = (label: string, path: string, embed: boolean) => {
     if (!at) return;
     const { el, i } = at;
-    const t = token(label, path);
+    const t = token(label, path, embed);
     const v = el.value;
     // Replace the \ that opened the picker (if it's still there), else insert at the cursor.
     const next = v[i] === "\\" ? v.slice(0, i) + t + v.slice(i + 1) : v.slice(0, i) + t + v.slice(i);
@@ -217,10 +244,10 @@ export function linkify(text: string, key = "t"): ReactNode[] {
   let m: RegExpExecArray | null;
   let n = 0;
   while ((m = re.exec(text))) {
-    const path = m[2] ?? appPath(m[0]);
+    const path = m[3] ?? appPath(m[0]);
     if (!path) continue; // an outside link: leave it as text
     if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(<AppLink key={`${key}-${n++}`} path={path} label={m[1]} />);
+    out.push(m[1] === "!" ? <AppEmbed key={`${key}-${n++}`} path={path} label={m[2]} /> : <AppLink key={`${key}-${n++}`} path={path} label={m[2]} />);
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));
@@ -232,5 +259,91 @@ export function LinkedText({ text, className, style }: { text: string; className
     <p className={className} style={style}>
       {linkify(text)}
     </p>
+  );
+}
+
+type Peek = { title: string; sub?: string; text?: string; photo?: string; kind: string } | false;
+
+/** An embed: a little preview card of the linked thing, right where it's put. Tap to open it. */
+export function AppEmbed({ path, label }: { path: string; label?: string }) {
+  const { nameOf } = useApp();
+  const { threads } = useThreads();
+  const t = targetOf(path);
+  const { data: peek } = useLive<Peek | null>(
+    `embed:${path}`,
+    async () => {
+      const db = supabaseBrowser();
+      if (t.kind === "post") {
+        const { data } = await db.from("posts").select("id, author, text, kind, created_at, reply, post_photos(*)").eq("id", t.id).maybeSingle();
+        if (!data || data.reply === "no") return false;
+        // Surprise pics stay hidden here too.
+        const ph = ((data.post_photos ?? []) as { storage_path: string; position: number; hidden?: boolean }[]).filter((p) => !p.hidden).sort((a, b) => a.position - b.position)[0];
+        return { kind: "post", title: data.author as string, sub: format(new Date(data.created_at), "EEE, MMM d"), text: (data.text ?? "").replace(TOKEN, "$2").slice(0, 220), photo: ph?.storage_path };
+      }
+      if (t.kind === "board" && t.item) {
+        const { data } = await db.from("thread_items").select("id, kind, text, photo_path, photos, thread_id").eq("id", t.item).maybeSingle();
+        if (!data) return false;
+        const text = (data.text ?? "").replace(/^#+\s*/gm, "").replace(TOKEN, "$2").slice(0, 220);
+        return { kind: "item", title: "", text, photo: data.photo_path ?? (data.photos ?? []).find(Boolean) };
+      }
+      if (t.kind === "event") {
+        const { data } = await db.from("events").select("title, start_time, all_day, location, response_status").eq("id", t.id).maybeSingle();
+        if (!data || data.response_status === "declined") return false;
+        const when = format(new Date(data.start_time), data.all_day ? "EEE, MMM d" : "EEE, MMM d · h:mm a");
+        return { kind: "event", title: data.title, sub: [when, data.location].filter(Boolean).join(" · ") };
+      }
+      return null;
+    },
+    t.kind === "post" ? ["posts", "post_photos"] : t.kind === "board" ? ["thread_items"] : t.kind === "event" ? ["events"] : [],
+  );
+  const photoUrls = usePhotoUrls(peek && peek.photo ? [peek.photo] : []);
+  const board = t.kind === "board" ? threads.find((x) => x.id === t.id) : undefined;
+  if (peek === false || (t.kind === "board" && threads.length > 0 && !board))
+    return (
+      <span className="app-link gone" title="Not here anymore">
+        {label || "that"} · not here anymore
+      </span>
+    );
+  let head = "";
+  let title = label ?? "";
+  let sub: string | undefined;
+  if (t.kind === "place") {
+    head = `${t.dest?.emoji ?? "↗"} page`;
+    title = t.dest?.label ?? label ?? "a page";
+    sub = "open it ›";
+  } else if (t.kind === "board") {
+    head = `${board?.emoji ?? "🗒️"} ${t.item ? `on ${board?.title ?? "a board"}` : "board"}`;
+    if (!t.item) {
+      title = board?.title ?? label ?? "a board";
+      sub = "open the board ›";
+    }
+  } else if (t.kind === "post") {
+    head = "🌼 update";
+    if (peek) {
+      title = nameOf(peek.title);
+      sub = peek.sub;
+    }
+  } else if (t.kind === "event") {
+    head = "📅 plan";
+    if (peek) {
+      title = peek.title;
+      sub = peek.sub;
+    }
+  }
+  const text = peek ? peek.text : undefined;
+  const img = peek && peek.photo ? photoUrls[peek.photo] : undefined;
+  return (
+    <Link className="app-embed" href={path} data-href={path} onClick={(e) => e.stopPropagation()}>
+      {img && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={img} alt="" className="app-embed-img" />
+      )}
+      <span className="app-embed-body">
+        <span className="app-embed-head">{head}</span>
+        {title && <strong>{title}</strong>}
+        {text && <span className="app-embed-text">{text}</span>}
+        {sub && <span className="app-embed-sub">{sub}</span>}
+      </span>
+    </Link>
   );
 }

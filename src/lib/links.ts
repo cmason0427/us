@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// Links to things in the app. In text they're written as `[label](/path)`
-// (type \ in a text box to pick one); a copied link is the full URL, which is
-// recognised too. Only things that are there for both of you are linkable:
+// Links to things in the app. In text they're written as `[label](/path)`, a
+// chip that takes you there, or `![label](/path)`, an embed that shows the
+// thing right there (type \ in a text box to pick one); a copied link is the
+// full URL, which is recognised too. Only things that are there for both of you are linkable:
 // pages and their tabs, updates in the feed, boards and what's on them, and
 // calendar plans. Gone (deleted, declined, unshared) things show as "not here".
 
@@ -52,9 +53,9 @@ export const PLACES: Dest[] = [
   { path: "/settings", label: "Settings", emoji: "⚙️" },
 ];
 
-/** `[label](/path)` in text. */
-export const TOKEN = /\[([^\]\n]{1,80})\]\((\/[^)\s]*)\)/g;
-export const token = (label: string, path: string) => `[${label.replace(/[[\]]/g, "")}](${path})`;
+/** `[label](/path)` (or `![label](/path)` to embed) in text. */
+export const TOKEN = /(!?)\[([^\]\n]{1,80})\]\((\/[^)\s]*)\)/g;
+export const token = (label: string, path: string, embed = false) => `${embed ? "!" : ""}[${label.replace(/[[\]]/g, "")}](${path})`;
 
 /** A full copied link to this app, as an in-app path (or null). */
 export function appPath(url: string): string | null {

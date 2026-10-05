@@ -75,6 +75,36 @@ export function StickerTray({ onPick, onClose }: { onPick: (s: StickerPick) => v
     refreshAll();
   }
 
+  const emojis = stickers.filter((s) => s.emoji);
+  const pics = stickers.filter((s) => s.path);
+  /** Stick any emoji typed in; it's remembered in "yours" for next time. */
+  async function stickTyped() {
+    const e = custom.trim();
+    if (!e) return;
+    onPick({ emoji: e });
+    setCustom("");
+    if (!emojis.some((s) => s.emoji === e)) await saveSticker({ emoji: e }, meId);
+  }
+  const cell = (s: Sticker) => (
+    <button key={s.id} className="sticker-cell" onClick={() => (editing ? remove(s) : onPick({ emoji: s.emoji ?? undefined, path: s.path ?? undefined, ratio: s.path ? ratios[s.id] : undefined }))} aria-label={editing ? "Remove sticker" : "Add sticker"}>
+      {s.emoji ? (
+        <span className="sticker-emoji">{s.emoji}</span>
+      ) : s.path && urls[s.path] ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={urls[s.path]}
+          alt=""
+          onLoad={(e) => {
+            // Read the size now; the event is gone by the time state updates run.
+            const ratio = e.currentTarget.naturalHeight / Math.max(1, e.currentTarget.naturalWidth);
+            setRatios((r) => ({ ...r, [s.id]: ratio }));
+          }}
+        />
+      ) : null}
+      {editing && <span className="sticker-x">×</span>}
+    </button>
+  );
+
   return (
     <div
       className="board-stickers board-ui"
@@ -98,40 +128,16 @@ export function StickerTray({ onPick, onClose }: { onPick: (s: StickerPick) => v
           </button>
         </span>
       </div>
-      {stickers.length > 0 && (
-        <div className="sticker-grid">
-          {stickers.map((s) => (
-            <button key={s.id} className="sticker-cell" onClick={() => (editing ? remove(s) : onPick({ emoji: s.emoji ?? undefined, path: s.path ?? undefined, ratio: s.path ? ratios[s.id] : undefined }))} aria-label={editing ? "Remove sticker" : "Add sticker"}>
-              {s.emoji ? (
-                <span className="sticker-emoji">{s.emoji}</span>
-              ) : s.path && urls[s.path] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={urls[s.path]} alt="" onLoad={(e) => {
-                    // Read the size now; the event is gone by the time state updates run.
-                    const ratio = e.currentTarget.naturalHeight / Math.max(1, e.currentTarget.naturalWidth);
-                    setRatios((r) => ({ ...r, [s.id]: ratio }));
-                  }} />
-              ) : null}
-              {editing && <span className="sticker-x">×</span>}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="sticker-quick">
-        {QUICK.map((e) => (
-          <button key={e} className="sticker-cell small-cell" onClick={() => onPick({ emoji: e })} aria-label={`Add ${e}`}>
-            <span className="sticker-emoji">{e}</span>
-          </button>
-        ))}
-      </div>
-      <div className="row wrap" style={{ gap: 8 }}>
-        <label className="btn btn-sm">
-          {busy ? "Saving…" : "＋ Upload a sticker"}
-          <input type="file" accept="image/*" multiple hidden onChange={(e) => (upload(Array.from(e.target.files ?? [])), (e.target.value = ""))} />
-        </label>
+      <form
+        className="row"
+        style={{ gap: 6 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          stickTyped();
+        }}
+      >
         <input
-          className="input input-sm"
-          style={{ width: 170 }}
+          className="input sticker-type grow"
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           onPaste={(e) => {
@@ -140,20 +146,42 @@ export function StickerTray({ onPick, onClose }: { onPick: (s: StickerPick) => v
             e.preventDefault();
             upload(fs);
           }}
-          placeholder="an emoji, or paste a cut-out"
-          aria-label="An emoji, or paste a cut-out picture"
+          placeholder="type any emoji 😊"
+          aria-label="Type any emoji, or paste a cut-out picture"
+          maxLength={16}
         />
-        {custom.trim() && (
-          <>
-            <button className="btn btn-sm" onClick={() => (onPick({ emoji: custom.trim() }), setCustom(""))}>
-              Stick it
-            </button>
-            <button className="btn btn-sm btn-ghost" onClick={async () => (toast((await saveSticker({ emoji: custom.trim() }, meId)) ?? "Saved"), setCustom(""))}>
-              Save
-            </button>
-          </>
-        )}
-      </div>
+        <button className="btn btn-sm btn-primary" disabled={!custom.trim()}>
+          Stick it
+        </button>
+      </form>
+      {emojis.length > 0 && (
+        <>
+          <span className="small faint">your emojis</span>
+          <div className="sticker-quick">{emojis.map(cell)}</div>
+        </>
+      )}
+      {pics.length > 0 && (
+        <>
+          <span className="small faint">your stickers</span>
+          <div className="sticker-grid">{pics.map(cell)}</div>
+        </>
+      )}
+      {!emojis.length && (
+        <>
+          <span className="small faint">ideas (anything you type gets saved here instead)</span>
+          <div className="sticker-quick">
+            {QUICK.map((e) => (
+              <button key={e} className="sticker-cell small-cell" onClick={() => onPick({ emoji: e })} aria-label={`Add ${e}`}>
+                <span className="sticker-emoji">{e}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <label className="btn btn-sm" style={{ alignSelf: "flex-start" }}>
+        {busy ? "Saving…" : "＋ Upload a picture sticker"}
+        <input type="file" accept="image/*" multiple hidden onChange={(e) => (upload(Array.from(e.target.files ?? [])), (e.target.value = ""))} />
+      </label>
       <p className="small faint" style={{ margin: 0 }}>Tip: in Photos, long-press the subject to lift it out, tap Copy, then paste it in the box above for a cut-out sticker.</p>
     </div>
   );

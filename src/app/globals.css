@@ -1672,3 +1672,49 @@ html.no-page-zoom .board-view { touch-action: none; }
 .link-pick-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 10px; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .link-pick-row:hover, .link-pick-row:focus-visible { background: var(--surface-sunk); }
 .link-pick-row .small { flex: none; }
+
+/* Fuel & move: picking days, week & month look-back, editable rows */
+.fit-date { position: relative; display: inline-flex; align-items: baseline; gap: 2px; cursor: pointer; padding: 4px 8px; border-radius: 10px; }
+.fit-date:hover { background: var(--surface-sunk); }
+.fit-date-input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
+.fit-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.fit-strip-day { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 0 5px; border: 1.5px solid transparent; border-radius: 12px; background: var(--surface); font: inherit; color: var(--ink); cursor: pointer; }
+.fit-strip-day strong { font-size: 0.95rem; }
+.fit-strip-day.today strong { color: var(--terracotta); }
+.fit-strip-day.sel { border-color: var(--ink); }
+.fit-strip-day:disabled { opacity: 0.35; cursor: default; }
+.fit-marks { display: flex; gap: 2px; height: 6px; }
+.fit-marks i, .fit-legend i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.m-eat { background: #e69b1a; }
+.m-walk { background: #2f9a55; }
+.m-lift { background: #3f86d4; }
+.fit-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.fit-row:disabled { cursor: default; opacity: 0.5; }
+.fit-row.sel .fit-weekday b { color: var(--terracotta); }
+.fit-weekday { display: flex; flex-direction: column; width: 56px; flex: none; }
+.fit-weeklist li { padding: 6px 0; }
+.fit-walk-add { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.fit-totals { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.82rem; color: var(--ink-soft); }
+.fit-totals span { display: flex; align-items: baseline; gap: 4px; }
+.fit-totals b { font-size: 1.15rem; color: var(--ink); font-family: var(--font-display); }
+.fit-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.fit-month-head { text-align: center; font-size: 0.66rem; font-weight: 800; color: var(--ink-faint); }
+.fit-month-day { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 4px; border: 1.5px solid transparent; border-radius: 10px; background: var(--surface-sunk); font: inherit; font-size: 0.82rem; font-weight: 650; color: var(--ink); cursor: pointer; }
+.fit-month-day.out { visibility: hidden; }
+.fit-month-day:disabled:not(.out) { opacity: 0.4; cursor: default; }
+.fit-month-day.today { border-color: var(--terracotta); }
+.fit-month-day.met { box-shadow: inset 0 0 0 2px #2f9a55; }
+.fit-point.on { fill: var(--ink); }
+.fit-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sticker-type { font-size: 1.15rem; }
+
+/* Embeds: a preview card of a linked thing */
+.app-embed { display: flex; gap: 10px; align-items: stretch; width: 100%; max-width: 420px; margin: 4px 0; padding: 8px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); text-decoration: none; overflow: hidden; vertical-align: top; white-space: normal; text-align: left; }
+.app-embed-img { width: 72px; height: 72px; flex: none; object-fit: cover; border-radius: 10px; }
+.app-embed-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 0.9rem; }
+.app-embed-head { font-size: 0.68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+.app-embed-text { color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.app-embed-sub { font-size: 0.78rem; color: var(--ink-faint); }
+.board-embed { width: 100%; height: 100%; display: flex; }
+.board-embed .app-embed { margin: 0; max-width: none; height: 100%; box-shadow: var(--shadow); }
+.post-text .app-embed, .board-text .app-embed { display: flex; }
