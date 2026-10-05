@@ -150,7 +150,7 @@ export function Board({ thread }: { thread: Thread }) {
   const [view, setView] = useState<View>({ x: 0, y: 0, z: 1 });
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates">(null);
+  const [panel, setPanel] = useState<null | "photo" | "link" | "stickers" | "menu" | "templates" | "layers">(null);
   // Screenshot mode: the board fills the screen with no buttons or text on it.
   const [shot, setShot] = useState(false);
   const [shotBar, setShotBar] = useState(false);
@@ -179,7 +179,7 @@ export function Board({ thread }: { thread: Thread }) {
   // Adjusting how picture(s) sit in a frame: which item, which slot ("one" = a single photo).
   const [cropping, setCropping] = useState<{ id: string; slot: string } | null>(null);
   const [cropLive, setCropLive] = useState<Record<string, Crop>>({});
-  const [subRaw, setSubRaw] = useState<{ id: string; k: "frame" | "hl" } | null>(null);
+  const [subRaw, setSubRaw] = useState<{ id: string; k: "frame" | "hl" | "color" } | null>(null);
   useEffect(() => {
     try {
       if (localStorage.getItem("board-snap") === "1") Promise.resolve().then(() => setSnap(true));
@@ -674,10 +674,54 @@ export function Board({ thread }: { thread: Thread }) {
     setSaving(false);
   }
 
+  // The board does its own pinch-zoom; the page itself never zooms while it's open.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]');
+    const before = meta?.getAttribute("content") ?? null;
+    meta?.setAttribute("content", `${(before ?? "width=device-width, initial-scale=1").replace(/,\s*(maximum-scale|user-scalable)=[^,]*/g, "")}, maximum-scale=1, user-scalable=no`);
+    const stop = (e: Event) => e.preventDefault();
+    const wheel = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
+    };
+    document.addEventListener("gesturestart", stop);
+    document.addEventListener("gesturechange", stop);
+    document.addEventListener("wheel", wheel, { passive: false });
+    document.documentElement.classList.add("no-page-zoom");
+    return () => {
+      if (meta && before != null) meta.setAttribute("content", before);
+      document.removeEventListener("gesturestart", stop);
+      document.removeEventListener("gesturechange", stop);
+      document.removeEventListener("wheel", wheel);
+      document.documentElement.classList.remove("no-page-zoom");
+    };
+  }, []);
+
+  /** Front-to-back order (top layer first). */
+  const layerOrder = [...items].sort((a, b) => b.z - a.z || b.created_at.localeCompare(a.created_at)).map((i) => i.id);
+  /** Re-number z so `order` (front first) is exactly the stacking order. */
+  async function restack(order: string[]) {
+    const n = order.length;
+    await Promise.all(
+      order.map((id, k) => {
+        const it = items.find((i) => i.id === id);
+        const z = n - k;
+        return it && it.z !== z ? patch(id, { z }) : null;
+      }),
+    );
+  }
+  function nudgeLayer(id: string, dir: 1 | -1) {
+    const order = [...layerOrder];
+    const k = order.indexOf(id);
+    const j = k - dir; // forward = toward the front of the list
+    if (k < 0 || j < 0 || j >= order.length) return;
+    [order[k], order[j]] = [order[j], order[k]];
+    restack(order);
+  }
+
   const sel = items.find((i) => i.id === selected);
   // Sub-panels belong to the item they were opened for.
   const subPanel = subRaw && subRaw.id === selected ? subRaw.k : null;
-  const setSubPanel = (k: "frame" | "hl" | null) => setSubRaw(k && selected ? { id: selected, k } : null);
+  const setSubPanel = (k: "frame" | "hl" | "color" | null) => setSubRaw(k && selected ? { id: selected, k } : null);
   const editItem = items.find((i) => i.id === editing);
   const look = (i: Item): React.CSSProperties => ({
     fontSize: i.style?.fs ?? (i.kind === "note" ? 20 : 14),
@@ -775,20 +819,16 @@ export function Board({ thread }: { thread: Thread }) {
           </button>
           <span className="row" style={{ gap: 4 }} role="group" aria-label="Board background">
             <span className="small faint">background</span>
-            {BGS.map((c) => (
-              <button
-                key={c}
-                className="board-swatch"
-                style={{ background: c }}
-                aria-pressed={(thread.bg ?? BGS[0]) === c}
-                aria-label={`Background ${c}`}
-                onClick={async () => {
-                  const { error } = await supabase.from("threads").update({ bg: c === BGS[0] ? null : c }).eq("id", thread.id);
-                  if (error) return toast(error.message);
-                  refreshAll();
-                }}
-              />
-            ))}
+            <Swatches
+              colors={BGS}
+              value={thread.bg ?? BGS[0]}
+              label="Background"
+              onPick={async (c) => {
+                const { error } = await supabase.from("threads").update({ bg: c === BGS[0] ? null : c }).eq("id", thread.id);
+                if (error) return toast(error.message);
+                refreshAll();
+              }}
+            />
           </span>
           <button
             className="btn btn-sm"
@@ -1071,13 +1111,18 @@ export function Board({ thread }: { thread: Thread }) {
               <button className="fmt" aria-pressed={sel.style?.font === "serif"} onClick={() => setLook(sel, { font: sel.style?.font === "serif" ? "sans" : "serif" })} aria-label="Serif font">
                 Aa
               </button>
-              {PENS.map((c) => (
-                <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={(sel.style?.c ?? PENS[0]) === c} aria-label="Text color" onClick={() => setLook(sel, { c })} />
-              ))}
+              <button className="board-swatch board-swatch-btn" style={{ background: sel.style?.c ?? PENS[0] }} aria-pressed={subPanel === "color"} aria-label="Text color" onClick={() => setSubPanel(subPanel === "color" ? null : "color")} />
             </>
           )}
-          {sel.kind === "sticky" && STICKY.map((c) => <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={sel.color === c} aria-label="Color" onClick={() => patch(sel.id, { color: c })} />)}
-          {sel.kind === "ink" && PENS.map((c) => <button key={c} className="board-swatch" style={{ background: c }} aria-label="Color" onClick={() => patch(sel.id, { color: c })} />)}
+          {(sel.kind === "sticky" || sel.kind === "ink") && (
+            <button
+              className="board-swatch board-swatch-btn"
+              style={{ background: sel.color ?? (sel.kind === "sticky" ? STICKY[0] : PENS[0]) }}
+              aria-pressed={subPanel === "color"}
+              aria-label={sel.kind === "sticky" ? "Sticky color" : "Ink color"}
+              onClick={() => setSubPanel(subPanel === "color" ? null : "color")}
+            />
+          )}
           {sel.kind === "grid" && (
             <>
               <span className="small faint" style={{ flex: "none" }}>
@@ -1130,12 +1175,20 @@ export function Board({ thread }: { thread: Thread }) {
           <button className="fmt" onClick={() => duplicate(sel)} aria-label="Duplicate">
             ⧉
           </button>
-          <button className="fmt" onClick={() => patch(sel.id, { z: maxZ + 1 })} aria-label="Bring to front">
-            ⤒
-          </button>
-          <button className="fmt" onClick={() => patch(sel.id, { z: Math.min(...items.map((i) => i.z)) - 1 })} aria-label="Send to back">
-            ⤓
-          </button>
+          <span className="board-layerbtns" role="group" aria-label="Layer">
+            <button className="fmt" onClick={() => nudgeLayer(sel.id, 1)} disabled={layerOrder[0] === sel.id} aria-label="Bring forward">
+              ↑
+            </button>
+            <button className="fmt" onClick={() => nudgeLayer(sel.id, -1)} disabled={layerOrder[layerOrder.length - 1] === sel.id} aria-label="Send backward">
+              ↓
+            </button>
+            <button className="fmt" onClick={() => restack([sel.id, ...layerOrder.filter((x) => x !== sel.id)])} disabled={layerOrder[0] === sel.id} aria-label="Bring to front">
+              ⤒
+            </button>
+            <button className="fmt" onClick={() => restack([...layerOrder.filter((x) => x !== sel.id), sel.id])} disabled={layerOrder[layerOrder.length - 1] === sel.id} aria-label="Send to back">
+              ⤓
+            </button>
+          </span>
           <button className="fmt" onClick={() => remove(sel.id)} aria-label="Delete">
             🗑
           </button>
@@ -1181,10 +1234,7 @@ export function Board({ thread }: { thread: Thread }) {
                   {w === 0 ? "none" : w === 3 ? "thin" : w === 7 ? "mid" : "thick"}
                 </button>
               ))}
-              {(sel.style?.bw ?? 0) > 0 &&
-                FRAME_COLORS.map((c) => (
-                  <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={(sel.style?.bc ?? FRAME_COLORS[0]) === c} aria-label={`Border ${c}`} onClick={() => setLook(sel, { bc: c })} />
-                ))}
+              {(sel.style?.bw ?? 0) > 0 && <Swatches colors={FRAME_COLORS} value={sel.style?.bc ?? FRAME_COLORS[0]} label="Border" onPick={(bc) => setLook(sel, { bc })} />}
             </div>
           )}
         </div>
@@ -1201,11 +1251,28 @@ export function Board({ thread }: { thread: Thread }) {
           <button className="fmt" aria-pressed={sel.style?.hl === "tight"} onClick={() => setLook(sel, { hl: "tight" })}>
             ▬ marker
           </button>
-          {sel.style?.hl &&
-            HIGHLIGHTS.map((c) => (
-              <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={(sel.style?.hlc ?? HIGHLIGHTS[0]) === c} aria-label={`Highlight ${c}`} onClick={() => setLook(sel, { hlc: c })} />
-            ))}
+          {sel.style?.hl && <Swatches colors={HIGHLIGHTS} value={sel.style?.hlc ?? HIGHLIGHTS[0]} label="Highlight" onPick={(hlc) => setLook(sel, { hlc })} />}
         </div>
+      )}
+
+      {sel && tool === "move" && !editItem && !shot && subPanel === "color" && (
+        <div className="board-subbar board-ui wrap">
+          <span className="small faint">{sel.kind === "note" ? "text color" : sel.kind === "sticky" ? "sticky color" : "ink color"}</span>
+          {sel.kind === "note" && <Swatches colors={PENS} value={sel.style?.c ?? PENS[0]} label="Text color" onPick={(c) => setLook(sel, { c })} />}
+          {sel.kind === "sticky" && <Swatches colors={STICKY} value={sel.color ?? STICKY[0]} label="Sticky color" onPick={(color) => patch(sel.id, { color })} />}
+          {sel.kind === "ink" && <Swatches colors={PENS} value={sel.color ?? PENS[0]} label="Ink color" onPick={(color) => patch(sel.id, { color })} />}
+        </div>
+      )}
+      {panel === "layers" && (
+        <Layers
+          order={layerOrder}
+          items={items}
+          urls={urls}
+          selected={selected}
+          onSelect={(id) => (setTool("move"), setSelected(id))}
+          onReorder={restack}
+          onClose={() => setPanel(null)}
+        />
       )}
 
       {panel === "photo" && (
@@ -1276,8 +1343,7 @@ export function Board({ thread }: { thread: Thread }) {
         <button aria-pressed={tool === "pen"} onClick={() => (setTool("pen"), setSelected(null))} aria-label="Draw">
           ✏️
         </button>
-        {tool === "pen" &&
-          PENS.map((c) => <button key={c} className="board-swatch" aria-pressed={pen === c} style={{ background: c }} onClick={() => setPen(c)} aria-label="Pen color" />)}
+        {tool === "pen" && <Swatches colors={PENS} value={pen} label="Pen color" onPick={setPen} />}
         {tool === "move" && (
           <>
             <button onClick={() => add("sticky", { color: STICKY[Math.floor(Math.random() * STICKY.length)] })} aria-label="Sticky note">
@@ -1300,6 +1366,9 @@ export function Board({ thread }: { thread: Thread }) {
             </button>
           </>
         )}
+        <button aria-pressed={panel === "layers"} onClick={() => setPanel(panel === "layers" ? null : "layers")} aria-label="Layers">
+          <LayersIcon />
+        </button>
         <span className="grow" />
         <button onClick={undo} disabled={!undoCount} aria-label="Undo">
           ↶
@@ -1334,5 +1403,144 @@ function AlignIcon({ al }: { al: "left" | "center" | "right" }) {
         <rect key={y} x={al === "left" ? 3 : al === "right" ? 19 - ws[(k + 1) % 3] : 11 - ws[(k + 1) % 3] / 2} y={y} width={ws[(k + 1) % 3]} height={2} rx={1} />
       ))}
     </svg>
+  );
+}
+
+/** Colour buttons that are the colour, plus a custom picker (the last one, rainbow until used). */
+function Swatches({ colors, value, label, onPick }: { colors: string[]; value: string; label: string; onPick: (c: string) => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [live, setLive] = useState<string | null>(null);
+  const custom = live ?? (colors.some((c) => c.toLowerCase() === value.toLowerCase()) ? null : value);
+  return (
+    <>
+      {colors.map((c) => (
+        <button key={c} className="board-swatch" style={{ background: c }} aria-pressed={!custom && value.toLowerCase() === c.toLowerCase()} aria-label={`${label} ${c}`} onClick={() => onPick(c)} />
+      ))}
+      <label className={`board-swatch board-swatch-custom${custom ? " picked" : ""}`} style={custom ? { background: custom } : undefined} aria-pressed={!!custom} title="Pick any colour">
+        <input
+          type="color"
+          aria-label={`Custom ${label.toLowerCase()}`}
+          value={/^#[0-9a-f]{6}$/i.test(custom ?? value) ? (custom ?? value) : "#888888"}
+          onChange={(e) => {
+            const c = e.target.value;
+            setLive(c);
+            clearTimeout(timer.current);
+            // Save once the picker settles, not on every drag step.
+            timer.current = setTimeout(() => {
+              onPick(c);
+              setLive(null);
+            }, 350);
+          }}
+        />
+      </label>
+    </>
+  );
+}
+
+function LayersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3 3 8l9 5 9-5-9-5z" />
+      <path d="m3 12.5 9 5 9-5" />
+      <path d="m3 16.5 9 5 9-5" />
+    </svg>
+  );
+}
+
+/** Procreate-style layer list: top of the list is the front. Drag ≡ to restack, tap to select. */
+function Layers({
+  order,
+  items,
+  urls,
+  selected,
+  onSelect,
+  onReorder,
+  onClose,
+}: {
+  order: string[];
+  items: Item[];
+  urls: Record<string, string>;
+  selected: string | null;
+  onSelect: (id: string) => void;
+  onReorder: (order: string[]) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const list = draft ?? order;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const name = (i: Item) => {
+    const t = (i.text ?? "").replace(/^#+\s*/gm, "").replace(/\[( |x|X)\]\s?/g, "").trim().split("\n")[0];
+    if (i.kind === "note") return t || "Text";
+    if (i.kind === "sticky") return t ? `Sticky · ${t}` : "Sticky";
+    if (i.kind === "photo") return "Photo";
+    if (i.kind === "grid") return `Photo layout · ${slotCount(i)}`;
+    if (i.kind === "sticker") return i.photo_path ? "Sticker" : `Sticker ${i.text ?? ""}`;
+    if (i.kind === "ink") return "Drawing";
+    if (i.kind === "link") return (i.link ?? "Link").replace(/^https?:\/\/(www\.)?/, "");
+    return i.kind;
+  };
+  const thumb = (i: Item) => {
+    const path = i.photo_path ?? i.photos?.find(Boolean);
+    if (path && urls[path])
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img src={urls[path]} alt="" />;
+    if (i.kind === "sticky") return <span style={{ background: i.color ?? STICKY[0] }} />;
+    if (i.kind === "sticker") return <b>{i.text}</b>;
+    if (i.kind === "ink") return <b style={{ color: i.color ?? PENS[0] }}>〰</b>;
+    if (i.kind === "link") return <b>🔗</b>;
+    return <b style={{ color: i.style?.c, fontFamily: i.style?.font === "serif" ? "var(--font-display)" : undefined }}>Aa</b>;
+  };
+  function onMove(e: React.PointerEvent) {
+    if (!dragging) return;
+    const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-layer]");
+    const id = over?.dataset.layer;
+    if (!id || id === dragging) return;
+    const cur = draft ?? order;
+    const next = cur.filter((x) => x !== dragging);
+    const r = over!.getBoundingClientRect();
+    const at = next.indexOf(id) + (e.clientY > r.top + r.height / 2 ? 1 : 0);
+    next.splice(at, 0, dragging);
+    setDraft(next);
+  }
+  function onUp() {
+    if (dragging && draft) onReorder(draft);
+    setDragging(null);
+    setTimeout(() => setDraft(null), 600);
+  }
+  return (
+    <div className="board-stickers board-layers board-ui" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      <div className="row-between">
+        <strong className="small">Layers · front on top</strong>
+        <button className="icon-btn" onClick={onClose} aria-label="Close layers">
+          ×
+        </button>
+      </div>
+      {list.length === 0 && <span className="small faint">Nothing on the board yet.</span>}
+      <ul className="layer-list">
+        {list.map((id) => {
+          const i = byId.get(id);
+          if (!i) return null;
+          return (
+            <li key={id} data-layer={id} className={`layer-row${selected === id ? " sel" : ""}${dragging === id ? " dragging" : ""}`}>
+              <button className="layer-pick" onClick={() => onSelect(id)}>
+                <span className="layer-thumb">{thumb(i)}</span>
+                <span className="grow layer-name">{name(i)}</span>
+              </button>
+              <span
+                className="layer-handle"
+                aria-label={`Drag ${name(i)} up or down`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setDragging(id);
+                }}
+              >
+                ≡
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
