@@ -1604,3 +1604,13 @@ html.no-page-zoom .board-view { touch-action: none; }
 .veil.open { border-style: solid; background: var(--surface); }
 .veil.ask { border-style: solid; }
 .veil-photos { margin-top: 10px; padding: 18px; border-radius: 14px; background: var(--surface-sunk); text-align: center; font-size: 0.85rem; color: var(--ink-faint); }
+
+/* Custom frame shapes */
+.shape-chip { display: inline-flex; align-items: center; gap: 2px; padding-right: 2px; }
+.shape-chip-pick { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; padding: 0; }
+.shape-chip-x { border: 0; background: none; color: var(--ink-faint); font-weight: 800; cursor: pointer; padding: 0 4px; }
+.shape-thumb { display: inline-block; width: 16px; height: 16px; background: var(--ink); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+.shape-thumb.big { width: 34px; height: 34px; }
+.shape-save { padding: 8px; border-radius: 12px; background: var(--surface-sunk); }
+.board-subbar.wrap { width: min(560px, calc(100vw - 72px)); justify-content: flex-start; max-height: 46vh; overflow-y: auto; }
+.board-slot:has(> .board-frame) { background: transparent; }

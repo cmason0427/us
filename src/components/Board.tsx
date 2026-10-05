@@ -38,7 +38,7 @@ interface Item {
 }
 /** How text looks: size, bold, font, color, alignment. */
 type Crop = { x: number; y: number; s: number };
-type Shape = "polaroid" | "plain" | "rounded" | "circle" | "oval" | "arch" | "star" | "hex" | "diamond";
+type Shape = "polaroid" | "plain" | "rounded" | "circle" | "oval" | "heart" | "softstar" | "custom" | "arch" | "star" | "hex" | "diamond";
 type Look = {
   fs?: number;
   b?: boolean;
@@ -56,12 +56,22 @@ type Look = {
   shape?: Shape;
   bw?: number;
   bc?: string;
+  /** A custom frame shape: an image (SVG or transparent PNG) used as a mask. */
+  mask?: string;
+  /** Background of the photo card / layout (behind the photos). */
+  pbg?: string;
   /** Heading highlight: a rounded box around it, or a marker tight to the text. */
   hl?: "box" | "tight";
   hlc?: string;
 };
 
-const SHAPES: { key: Shape; label: string; clip?: string }[] = [
+const svgMask = (body: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>${body}</svg>`)}")`;
+const HEART = svgMask("<path d='M50 93C22 72 3 55 3 32 3 16 15 5 29 5c9 0 16 5 21 12 5-7 12-12 21-12 14 0 26 11 26 27 0 23-19 40-47 61z'/>");
+const SOFT_STAR = svgMask(
+  "<path d='M50 12 60.3 36.3 86.4 38.5 66.6 55.7 72.5 81.4 50 67.7 27.5 81.4 33.4 55.7 13.6 38.5 39.7 36.3Z' stroke='black' stroke-width='16' stroke-linejoin='round'/>",
+);
+
+const SHAPES: { key: Shape; label: string; clip?: string; mask?: string }[] = [
   { key: "polaroid", label: "▢ classic" },
   { key: "plain", label: "■ plain", clip: "inset(0)" },
   { key: "rounded", label: "▢ rounded", clip: "inset(0 round 16%)" },
@@ -69,6 +79,8 @@ const SHAPES: { key: Shape; label: string; clip?: string }[] = [
   { key: "oval", label: "⬭ oval", clip: "ellipse(50% 50% at 50% 50%)" },
   { key: "arch", label: "◠ arch", clip: "inset(0 round 50% 50% 0 0)" },
   { key: "star", label: "★ star", clip: "polygon(50% 0%, 61.8% 35%, 98% 35.4%, 68.9% 57.3%, 79.4% 91.6%, 50% 70.8%, 20.6% 91.6%, 31.1% 57.3%, 2% 35.4%, 38.2% 35%)" },
+  { key: "heart", label: "♥ heart", mask: HEART },
+  { key: "softstar", label: "✪ soft star", mask: SOFT_STAR },
   { key: "hex", label: "⬢ hex", clip: "polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%)" },
   { key: "diamond", label: "◆ diamond", clip: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" },
 ];
@@ -121,11 +133,17 @@ function FramedImg({ src, crop }: { src: string; crop: Crop }) {
 
 /** Shape + border around anything (a photo, or one slot of a layout). */
 function inFrame(style: Look | null, child: React.ReactNode) {
-  const shape = SHAPES.find((x) => x.key === (style?.shape ?? "polaroid"))!;
-  if (!shape.clip) return <div className="board-frame-in">{child}</div>;
+  const key = style?.shape ?? "polaroid";
+  const shape = SHAPES.find((x) => x.key === key) ?? SHAPES[0];
+  const maskUrl = key === "custom" && style?.mask ? `url("${style.mask}")` : shape.mask;
+  if (!shape.clip && !maskUrl) return <div className="board-frame-in">{child}</div>;
+  // Curvy and custom shapes are masks (they keep their proportions, centred); the rest clip.
+  const cut: React.CSSProperties = maskUrl
+    ? { WebkitMaskImage: maskUrl, maskImage: maskUrl, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }
+    : { clipPath: shape.clip };
   return (
-    <div className="board-frame" style={{ clipPath: shape.clip, background: style?.bw ? (style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: style?.bw ?? 0 }}>
-      <div className="board-frame-in" style={{ clipPath: shape.clip }}>
+    <div className="board-frame" style={{ ...cut, background: style?.bw ? (style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: style?.bw ?? 0 }}>
+      <div className="board-frame-in" style={cut}>
         {child}
       </div>
     </div>
@@ -235,6 +253,26 @@ export function Board({ thread }: { thread: Thread }) {
   // Adjusting how picture(s) sit in a frame: which item, which slot ("one" = a single photo).
   // The photo editor (like editing a profile pic): which item, which slot, and each slot's frame shape right now.
   const [photoEdit, setPhotoEdit] = useState<{ id: string; slot: number; aspects: number[] } | null>(null);
+  const [pendingShape, setPendingShape] = useState<{ id: string; mask: string; name: string } | null>(null);
+  const { data: savedShapes = [] } = useLive<{ id: string; name: string; mask: string }[]>(
+    "frame_shapes",
+    async () => {
+      const { data, error } = await supabase.from("frame_shapes").select("id, name, mask").order("created_at");
+      if (error) return []; // table not there yet: just no saved shapes
+      return data;
+    },
+    ["frame_shapes"],
+  );
+  /** Turn an uploaded SVG / transparent PNG into a frame shape (a small mask image) and try it on. */
+  async function uploadShape(it: Item, f: File) {
+    try {
+      const mask = await toMask(f);
+      await setLook(it, { shape: "custom", mask });
+      setPendingShape({ id: it.id, mask, name: f.name.replace(/\.[^.]+$/, "").slice(0, 20) });
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  }
   const [subRaw, setSubRaw] = useState<{ id: string; k: "frame" | "hl" | "color" } | null>(null);
   useEffect(() => {
     try {
@@ -992,7 +1030,7 @@ export function Board({ thread }: { thread: Thread }) {
                   minHeight: i.kind === "note" ? 30 : undefined,
                   transform: `rotate(${b.rot}deg)`,
                   zIndex: isSel ? 9999 : i.z,
-                  background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : undefined,
+                  background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : (i.kind === "photo" || i.kind === "grid") && i.style?.pbg ? i.style.pbg : undefined,
                 }}
               >
                 {body}
@@ -1032,18 +1070,10 @@ export function Board({ thread }: { thread: Thread }) {
         shotBar && (
           <div className="board-shotbar">
             <span className="small">background:</span>
-            {[null, ...BGS].map((c) => (
-              <button
-                key={c ?? "board"}
-                className="board-swatch"
-                style={{ background: c ?? thread.bg ?? BGS[0] }}
-                aria-pressed={shotBg === c}
-                aria-label={c ? `Screenshot background ${c}` : "The board's own background"}
-                onClick={() => setShotBg(c)}
-              >
-                {c ? "" : "·"}
-              </button>
-            ))}
+            <button className="board-swatch" style={{ background: thread.bg ?? BGS[0] }} aria-pressed={shotBg === null} aria-label="The board's own background" onClick={() => setShotBg(null)}>
+              ·
+            </button>
+            <Swatches colors={BGS} value={shotBg ?? ""} label="Screenshot background" onPick={setShotBg} />
             <button className="btn btn-sm btn-primary" onClick={() => setShotBar(false)}>
               Hide
             </button>
@@ -1202,6 +1232,55 @@ export function Board({ thread }: { thread: Thread }) {
                 {x.label}
               </button>
             ))}
+            {savedShapes.map((sh) => (
+              <span key={sh.id} className="chip chip-sm shape-chip" aria-pressed={sel.style?.shape === "custom" && sel.style?.mask === sh.mask}>
+                <button className="shape-chip-pick" onClick={() => setLook(sel, { shape: "custom", mask: sh.mask })} aria-label={`Shape ${sh.name}`}>
+                  <i className="shape-thumb" style={{ WebkitMaskImage: `url("${sh.mask}")`, maskImage: `url("${sh.mask}")` }} />
+                  {sh.name}
+                </button>
+                <button
+                  className="shape-chip-x"
+                  aria-label={`Forget shape ${sh.name}`}
+                  onClick={async () => {
+                    if (!confirm(`Forget the "${sh.name}" shape? Frames already using it keep it.`)) return;
+                    await supabase.from("frame_shapes").delete().eq("id", sh.id);
+                    refreshAll();
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <label className="chip chip-sm" title="Upload an SVG or a transparent PNG">
+              ＋ custom
+              <input type="file" accept="image/svg+xml,image/png,.svg,.png" hidden onChange={(e) => (e.target.files?.[0] && uploadShape(sel, e.target.files[0]), (e.target.value = ""))} />
+            </label>
+          </div>
+          {pendingShape && pendingShape.id === sel.id && (
+            <div className="row wrap shape-save" style={{ gap: 6 }}>
+              <i className="shape-thumb big" style={{ WebkitMaskImage: `url("${pendingShape.mask}")`, maskImage: `url("${pendingShape.mask}")` }} />
+              <span className="small">Keep this shape for later?</span>
+              <input className="input input-sm" style={{ width: 110 }} value={pendingShape.name} onChange={(e) => setPendingShape({ ...pendingShape, name: e.target.value })} aria-label="Shape name" />
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={async () => {
+                  const { error } = await supabase.from("frame_shapes").insert({ name: pendingShape.name.trim() || "shape", mask: pendingShape.mask });
+                  if (error) return toast(error.message);
+                  refreshAll();
+                  setPendingShape(null);
+                  toast("Shape saved ✨");
+                }}
+              >
+                Save
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setPendingShape(null)}>
+                Just this once
+              </button>
+            </div>
+          )}
+          <div className="row wrap" style={{ gap: 6 }}>
+            <span className="small faint">{sel.kind === "grid" ? "layout background" : "card background"}</span>
+            <Swatches colors={["#ffffff", "#fbf7f1", "#3b2a2a", "#f4c6d4", "#f2d27a", "#b9dcc0", "#bcd3f2"]} value={sel.style?.pbg ?? "#ffffff"} label="Card background" onPick={(pbg) => setLook(sel, { pbg })} />
           </div>
           {(sel.style?.shape ?? "polaroid") !== "polaroid" && (
             <div className="row wrap" style={{ gap: 6 }}>
@@ -1730,4 +1809,33 @@ function PhotoEditor({
       </div>
     </Sheet>
   );
+}
+
+/**
+ * An uploaded SVG or PNG → a small PNG data URL whose transparency is the shape.
+ * SVGs are drawn as-is (their filled parts are the shape); PNGs keep their alpha.
+ */
+async function toMask(f: File): Promise<string> {
+  const isSvg = f.type === "image/svg+xml" || /\.svg$/i.test(f.name);
+  if (!isSvg && f.type !== "image/png") throw new Error("Use an SVG or a PNG with a transparent background");
+  const url = isSvg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await f.text())}` : URL.createObjectURL(f);
+  const img = new Image();
+  img.src = url;
+  await img.decode().catch(() => {
+    throw new Error("Couldn't read that image");
+  });
+  const w0 = img.naturalWidth || 300;
+  const h0 = img.naturalHeight || 300;
+  const k = 320 / Math.max(w0, h0);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w0 * k));
+  c.height = Math.max(1, Math.round(h0 * k));
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  if (!isSvg) URL.revokeObjectURL(url);
+  // A PNG with no transparency would just be a rectangle: say so.
+  const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+  let clear = 0;
+  for (let i = 3; i < px.length; i += 16) if (px[i] < 20) clear++;
+  if (clear < px.length / 16 / 50) throw new Error("That picture has no transparent background, so it would just be a rectangle");
+  return c.toDataURL("image/png");
 }
