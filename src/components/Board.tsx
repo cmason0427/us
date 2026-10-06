@@ -49,7 +49,8 @@ interface Item {
   created_at: string;
 }
 /** How text looks: size, bold, font, color, alignment. */
-type Crop = { x: number; y: number; s: number };
+/** How a photo sits in its frame: centre point, zoom, and (optionally) a turn in degrees. */
+type Crop = { x: number; y: number; s: number; r?: number };
 type Shape = "polaroid" | "plain" | "rounded" | "circle" | "oval" | "heart" | "softstar" | "custom" | "arch" | "star" | "hex" | "diamond";
 type Look = {
   fs?: number;
@@ -120,6 +121,29 @@ function fitGeom(F: number, A: number, c: Crop) {
   return { w, h, left: fit(w, c.x), top: fit(h, c.y) };
 }
 
+/**
+ * Turning a photo inside its frame (`r` degrees), about the frame's centre,
+ * zoomed just enough that no corners of the frame go empty.
+ */
+function turned(F: number, g: { w: number; h: number; left: number; top: number }, r = 0): React.CSSProperties {
+  if (!r) return {};
+  const t = (r * Math.PI) / 180;
+  const c = Math.abs(Math.cos(t));
+  const sn = Math.abs(Math.sin(t));
+  const k = Math.max(c + sn / F, F * sn + c);
+  return { transform: `rotate(${r}deg) scale(${k})`, transformOrigin: `${((50 - g.left) / g.w) * 100}% ${((50 - g.top) / g.h) * 100}%` };
+}
+/** Keep a turn in −180…180, settling on straight and quarter turns when within 3°. */
+const snapTurn = (r: number) => {
+  let v = ((((r + 180) % 360) + 360) % 360) - 180;
+  for (const q of [-180, -90, 0, 90, 180]) if (Math.abs(v - q) < 3) v = q;
+  return v === -180 ? 180 : v;
+};
+const turnScale = (F: number, r = 0) => {
+  const t = (r * Math.PI) / 180;
+  return Math.max(Math.abs(Math.cos(t)) + Math.abs(Math.sin(t)) / F, F * Math.abs(Math.sin(t)) + Math.abs(Math.cos(t)));
+};
+
 /** Zoom at which the whole picture just fits inside the frame (edge to edge on one side). */
 const minZoom = (F: number, A: number) => Math.min(A / F, F / A);
 
@@ -144,7 +168,7 @@ function FramedImg({ src, crop }: { src: string; crop: Crop }) {
         draggable={false}
         crossOrigin="anonymous"
         onLoad={(e) => setAr(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
-        style={g ? { position: "absolute", width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, maxWidth: "none" } : { width: "100%", height: "100%", objectFit: "cover" }}
+        style={g ? { position: "absolute", width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, maxWidth: "none", ...turned(box!.w / box!.h, g, crop.r) } : { width: "100%", height: "100%", objectFit: "cover" }}
       />
     </div>
   );
@@ -163,11 +187,44 @@ function shapeCut(style: Look | null): React.CSSProperties | null {
     : { clipPath: shape.clip };
 }
 
+/**
+ * An even outline around any shape, like a sticker's: the cut-out's edge is
+ * softened by half the border width, then cut back sharp a border-width out.
+ * Smooth all the way round, with no spikes on points (they just taper).
+ */
+function OutlineDef({ id, R, color }: { id: string; R: number; color: string }) {
+  return (
+    <svg className="frame-defs" width="0" height="0" aria-hidden focusable="false">
+      <filter id={id} x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+        <feGaussianBlur in="SourceAlpha" stdDeviation={R / 2} result="soft" />
+        <feComponentTransfer in="soft" result="edge">
+          <feFuncA type="linear" slope="60" intercept="-0.4" />
+        </feComponentTransfer>
+        <feFlood floodColor={color} />
+        <feComposite operator="in" in2="edge" result="ring" />
+        <feMerge>
+          <feMergeNode in="ring" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </svg>
+  );
+}
+
+/**
+ * A shaped frame is a cookie-cutter: only the photo, cut to the shape, no card
+ * behind it. A border is traced around the shape itself (the cut-out grown
+ * outward by the border width), so it's even all the way round, even on a heart.
+ */
 function inFrame(style: Look | null, child: React.ReactNode) {
   const cut = shapeCut(style);
   if (!cut) return <div className="board-frame-in">{child}</div>;
+  const bw = style?.bw ?? 0;
+  const bc = style?.bc ?? FRAME_COLORS[0];
+  const id = `outline-${bw}-${bc.replace(/[^\w]/g, "")}`;
   return (
-    <div className="board-frame" style={{ ...cut, background: style?.bw ? (style?.bc ?? FRAME_COLORS[0]) : "transparent", padding: style?.bw ?? 0 }}>
+    <div className="board-frame" style={bw ? { filter: `url(#${id})` } : undefined}>
+      {bw > 0 && <OutlineDef id={id} R={bw} color={bc} />}
       <div className="board-frame-in" style={cut}>
         {child}
       </div>
@@ -1477,7 +1534,14 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
                   minHeight: i.kind === "note" ? 30 : undefined,
                   transform: `rotate(${b.rot}deg)`,
                   zIndex: rank.get(i.id),
-                  background: i.kind === "sticky" ? (i.color ?? STICKY[0]) : i.kind === "box" ? (i.color ?? BOX_COLORS[0]) : (i.kind === "photo" || i.kind === "grid") && i.style?.pbg ? i.style.pbg : undefined,
+                  background:
+                    i.kind === "sticky"
+                      ? (i.color ?? STICKY[0])
+                      : i.kind === "box"
+                        ? (i.color ?? BOX_COLORS[0])
+                        : (i.kind === "grid" || (i.kind === "photo" && !shapeCut(i.style))) && i.style?.pbg
+                          ? i.style.pbg
+                          : undefined,
                 }}
               >
                 {body}
@@ -1854,10 +1918,10 @@ export function Board({ thread, postNow = false, focusItem = null }: { thread: T
               </button>
             </div>
           )}
-          <div className="row wrap" style={{ gap: 6 }}>
+          {(sel.kind === "grid" || !shapeCut(sel.style)) && <div className="row wrap" style={{ gap: 6 }}>
             <span className="small faint">{sel.kind === "grid" ? "layout background" : "card background"}</span>
             <Swatches colors={["#ffffff", "#fbf7f1", "#3b2a2a", "#f4c6d4", "#f2d27a", "#b9dcc0", "#bcd3f2"]} value={sel.style?.pbg ?? "#ffffff"} label="Card background" onPick={(pbg) => setLook(sel, { pbg })} />
-          </div>
+          </div>}
           {(sel.style?.shape ?? "polaroid") !== "polaroid" && (
             <div className="row wrap" style={{ gap: 6 }}>
               <span className="small faint">border</span>
@@ -2317,7 +2381,7 @@ function PhotoEditor({
   const [ars, setArs] = useState<Record<string, number>>({});
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ crop: Crop; d0: number; cx: number; cy: number } | null>(null);
+  const gesture = useRef<{ crop: Crop; d0: number; a0: number; cx: number; cy: number } | null>(null);
   const stage = useRef<HTMLDivElement>(null);
 
   const F = aspects[cur] ?? 1;
@@ -2338,7 +2402,8 @@ function PhotoEditor({
     const ps = [...pointers.current.values()];
     const mid = ps.reduce((a, p) => ({ x: a.x + p.x / ps.length, y: a.y + p.y / ps.length }), { x: 0, y: 0 });
     const d0 = ps.length > 1 ? Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) : 0;
-    gesture.current = { crop, d0, cx: mid.x, cy: mid.y };
+    const a0 = ps.length > 1 ? Math.atan2(ps[1].y - ps[0].y, ps[1].x - ps[0].x) : 0;
+    gesture.current = { crop, d0, a0, cx: mid.x, cy: mid.y };
   }
   function move(e: React.PointerEvent) {
     if (!pointers.current.has(e.pointerId) || !gesture.current || !A) return;
@@ -2347,23 +2412,34 @@ function PhotoEditor({
     const mid = ps.reduce((a, p) => ({ x: a.x + p.x / ps.length, y: a.y + p.y / ps.length }), { x: 0, y: 0 });
     const g0 = gesture.current;
     let s2 = g0.crop.s;
-    if (ps.length > 1 && g0.d0 > 0) s2 = Math.max(minZoom(F, A), Math.min(4, g0.crop.s * (Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) / g0.d0)));
+    let r2 = g0.crop.r ?? 0;
+    if (ps.length > 1 && g0.d0 > 0) {
+      s2 = Math.max(minZoom(F, A), Math.min(4, g0.crop.s * (Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) / g0.d0)));
+      // Two fingers twisting turn the photo (it settles on straight / quarter turns when close).
+      r2 = snapTurn(r2 + ((Math.atan2(ps[1].y - ps[0].y, ps[1].x - ps[0].x) - g0.a0) * 180) / Math.PI);
+    }
     const geo = fitGeom(F, A, { ...g0.crop, s: s2 });
-    // Dragging right shows more of the left of the picture.
-    const x = g0.crop.x - ((mid.x - g0.cx) / ((fw * geo.w) / 100)) * 100;
-    const y = g0.crop.y - ((mid.y - g0.cy) / ((fh * geo.h) / 100)) * 100;
+    // Dragging right shows more of the left of the picture (undoing the turn, so it follows your finger).
+    const t = ((g0.crop.r ?? 0) * Math.PI) / 180;
+    const k = turnScale(F, g0.crop.r);
+    const ddx = mid.x - g0.cx;
+    const ddy = mid.y - g0.cy;
+    const ux = (ddx * Math.cos(t) + ddy * Math.sin(t)) / k;
+    const uy = (-ddx * Math.sin(t) + ddy * Math.cos(t)) / k;
+    const x = g0.crop.x - (ux / ((fw * geo.w) / 100)) * 100;
+    const y = g0.crop.y - (uy / ((fh * geo.h) / 100)) * 100;
     // Keep the stored centre inside what the clamp allows, so it never "sticks".
     // (When the picture is smaller than the frame, that range flips, hence min/max.)
     const half = (v: number, size: number) => {
       const a = (50 / size) * 100;
       return Math.max(Math.min(a, 100 - a), Math.min(Math.max(a, 100 - a), v));
     };
-    setCrop({ x: half(x, geo.w), y: half(y, geo.h), s: s2 });
+    setCrop({ x: half(x, geo.w), y: half(y, geo.h), s: s2, ...(r2 ? { r: r2 } : {}) });
   }
   function up(e: React.PointerEvent) {
     pointers.current.delete(e.pointerId);
     const ps = [...pointers.current.values()];
-    gesture.current = ps.length ? { crop: crops[cur], d0: 0, cx: ps[0].x, cy: ps[0].y } : null;
+    gesture.current = ps.length ? { crop: crops[cur], d0: 0, a0: 0, cx: ps[0].x, cy: ps[0].y } : null;
   }
 
   // Thumbnail strip: tap to pick, drag to reorder (the crop travels with its photo).
@@ -2406,7 +2482,7 @@ function PhotoEditor({
             <div className="pe-frame" style={{ width: fw, height: fh }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
               {g && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="pe-ghost" src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` }} />
+                <img className="pe-ghost" src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, ...turned(F, g, crop.r) }} />
               )}
               <div className={`pe-window${cut ? " shaped" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2419,13 +2495,13 @@ function PhotoEditor({
                     const r = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight;
                     setArs((m) => (path && !m[path] ? { ...m, [path]: r } : m));
                   }}
-                  style={g ? { width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` } : { opacity: 0 }}
+                  style={g ? { width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, ...turned(F, g, crop.r) } : { opacity: 0 }}
                 />
                 {/* What will actually show: the frame's shape, full strength. */}
                 {cut && g && (
                   <div className="pe-shape" style={cut}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%` }} />
+                    <img src={src} alt="" draggable={false} style={{ width: `${g.w}%`, height: `${g.h}%`, left: `${g.left}%`, top: `${g.top}%`, ...turned(F, g, crop.r) }} />
                   </div>
                 )}
               </div>
@@ -2443,7 +2519,18 @@ function PhotoEditor({
             Reset
           </button>
         </div>
-        <span className="small faint">Drag the photo to move it in its frame{isGrid ? ". Drag the little ones to reorder" : ""}.</span>
+        <div className="row" style={{ gap: 8 }}>
+          <span className="small faint">turn</span>
+          <button className="fmt" onClick={() => setCrop({ ...crop, r: snapTurn((crop.r ?? 0) - 90) })} aria-label="Turn left a quarter">
+            ↺
+          </button>
+          <input className="grow" type="range" min={-180} max={180} step={1} value={crop.r ?? 0} onChange={(e) => setCrop({ ...crop, r: snapTurn(Number(e.target.value)) })} aria-label="Turn the photo" />
+          <button className="fmt" onClick={() => setCrop({ ...crop, r: snapTurn((crop.r ?? 0) + 90) })} aria-label="Turn right a quarter">
+            ↻
+          </button>
+          <span className="small" style={{ width: 38, textAlign: "right" }}>{Math.round(crop.r ?? 0)}°</span>
+        </div>
+        <span className="small faint">Drag the photo to move it in its frame; pinch to zoom, twist two fingers to turn it{isGrid ? ". Drag the little ones to reorder" : ""}.</span>
         {isGrid && (
           <div className="pe-strip" onPointerMove={stripMove} onPointerUp={stripUp} onPointerCancel={stripUp}>
             {photos.map((p, k) => (

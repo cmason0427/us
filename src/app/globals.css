@@ -1735,3 +1735,4 @@ html.no-page-zoom .board-view { touch-action: none; }
 .board-card-title { font-weight: 700; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .board-cards.big .board-card-title { font-size: 1.05rem; }
 .board-view.capturing .board-item.sel { outline: none; }
+.frame-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
