@@ -1736,3 +1736,8 @@ html.no-page-zoom .board-view { touch-action: none; }
 .board-cards.big .board-card-title { font-size: 1.05rem; }
 .board-view.capturing .board-item.sel { outline: none; }
 .frame-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+
+/* Home: an idea for the app, typed right in the row */
+.dash-idea { cursor: default; }
+.dash-idea-input { display: block; width: 100%; border: 0; padding: 2px 0; background: none; font: inherit; color: var(--ink); outline: none; }
+.dash-idea-input::placeholder { color: var(--ink-faint); }

@@ -1,5 +1,6 @@
 "use client";
 
+import { AppIdeaRow } from "./AppIdea";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -138,6 +139,8 @@ function Today({ day, meal, mealDay }: { day: string; meal: Meal; mealDay: strin
           {dogTodos} dog to-do{dogTodos === 1 ? "" : "s"}
         </Row>
       )}
+
+      <AppIdeaRow />
 
 
       {open?.kind === "loop" && (

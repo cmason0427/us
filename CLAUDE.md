@@ -48,6 +48,15 @@ build. Charlie already had to move to a paid plan, so:
 - Database migrations are applied directly (Supabase Management API) and don't
   need a deploy on their own.
 
+# App-idea inbox
+
+The 💡 row on Home lets either of them type an idea for the app; it's saved as
+a small file in storage and never listed in the app. To read them:
+`node scripts/ideas.mjs` (needs NEXT_PUBLIC_SUPABASE_URL and
+SUPABASE_SERVICE_ROLE_KEY). When asked to "check the ideas", list them, ask
+Charlie any questions, and clear the ones that are done or dropped with
+`--clear <path>…` (`--clear-all` empties it).
+
 # Side project lives elsewhere
 
 Charlie's side project lives in its own private repo, `cmason0427/game`, not here and not on
